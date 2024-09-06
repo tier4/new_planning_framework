@@ -1,0 +1,2 @@
+new_autoware_planning_msgs/Trajectory[] trajectory
+new_autoware_planning_msgs/TrajectoryGeneratorInfo[] generator_info

@@ -1,0 +1,3 @@
+std_msgs/Header header
+unique_identifier_msgs/UUID generator_id
+new_autoware_planning_msgs/TrajectoryPoint[] points
