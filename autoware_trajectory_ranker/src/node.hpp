@@ -16,6 +16,11 @@
 #define NODE_HPP_
 
 #include "autoware/trajectory_filter_interface/interface.hpp"
+#include "autoware/universe_utils/ros/polling_subscriber.hpp"
+#include "trajectory_ranker_param.hpp"
+
+#include <memory>
+#include <vector>
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
@@ -27,6 +32,18 @@ public:
 
 private:
   auto process(const Trajectories::ConstSharedPtr msg) -> std::optional<Trajectories> override;
+
+  auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories;
+
+  autoware::universe_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
+    this, "~/input/objects"};
+
+  autoware::universe_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
+    this, "~/input/odometry"};
+
+  std::shared_ptr<parameters::ParamListener> parameters_;
+
+  VehicleInfo vehicle_info_;
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker

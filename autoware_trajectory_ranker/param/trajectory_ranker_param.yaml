@@ -1,0 +1,20 @@
+parameters:
+  resample_num:
+    type: int
+    description: sampling number for trajectory evaluation.
+  time_resolution:
+    type: double
+    description: sampling time resolution for trajectory evaluation.
+  weight:
+    w0:
+      type: double
+      description: weight for lateral comfortabiilty.
+    w1:
+      type: double
+      description: weight for longitudinal comfortabiilty.
+    w2:
+      type: double
+      description: weight for efficiency.
+    w3:
+      type: double
+      description: weight for safety.
