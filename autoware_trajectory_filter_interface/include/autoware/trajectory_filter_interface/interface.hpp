@@ -15,16 +15,14 @@
 #ifndef AUTOWARE__TRAJECTORY_FILTER_INTERFACE__INTERFACE_HPP_
 #define AUTOWARE__TRAJECTORY_FILTER_INTERFACE__INTERFACE_HPP_
 
-#include <rclcpp/rclcpp.hpp>
+#include "autoware/trajectory_filter_interface/type_alias.hpp"
 
-#include <new_autoware_planning_msgs/msg/trajectories.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include <string>
 
 namespace autoware::trajectory_selector
 {
-
-using new_autoware_planning_msgs::msg::Trajectories;
 
 class TrajectoryFilterInterface : public rclcpp::Node
 {
