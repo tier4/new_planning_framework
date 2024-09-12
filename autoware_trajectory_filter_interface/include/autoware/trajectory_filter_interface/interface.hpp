@@ -32,26 +32,17 @@ public:
   : Node{name, node_options},
     sub_trajectories_{this->create_subscription<Trajectories>(
       "~/input/trajectories", 1,
-      std::bind(&TrajectoryFilterInterface::on_trajectories, this, std::placeholders::_1))},
+      std::bind(&TrajectoryFilterInterface::process, this, std::placeholders::_1))},
     pub_trajectories_{this->create_publisher<Trajectories>("~/output/trajectories", 1)}
   {
   }
 
 protected:
-  virtual auto process(const Trajectories::ConstSharedPtr msg) -> std::optional<Trajectories> = 0;
+  virtual void process(const Trajectories::ConstSharedPtr msg);
+
+  void publish(const Trajectories::ConstSharedPtr msg) const { pub_trajectories_->publish(*msg); }
 
 private:
-  void on_trajectories(const Trajectories::ConstSharedPtr msg)
-  {
-    const auto output = process(msg);
-
-    if (!output.has_value()) {
-      return;
-    }
-
-    pub_trajectories_->publish(output.value());
-  }
-
   rclcpp::Subscription<Trajectories>::SharedPtr sub_trajectories_;
   rclcpp::Publisher<Trajectories>::SharedPtr pub_trajectories_;
 };

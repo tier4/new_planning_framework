@@ -22,14 +22,9 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
 {
 }
 
-auto FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
-  -> std::optional<Trajectories>
+void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  if (msg == nullptr) {
-    return std::nullopt;
-  }
-
-  return *msg;
+  publish(msg);
 }
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter

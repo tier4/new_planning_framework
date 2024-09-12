@@ -26,7 +26,7 @@ public:
   explicit ValidTrajectoryFilterNode(const rclcpp::NodeOptions & node_options);
 
 private:
-  auto process(const Trajectories::ConstSharedPtr msg) -> std::optional<Trajectories> override;
+  void process(const Trajectories::ConstSharedPtr msg) override;
 };
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
