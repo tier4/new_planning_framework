@@ -38,7 +38,7 @@ public:
   }
 
 protected:
-  virtual void process(const Trajectories::ConstSharedPtr msg);
+  virtual void process(const Trajectories::ConstSharedPtr msg) = 0;
 
   void publish(const Trajectories::ConstSharedPtr msg) const { pub_trajectories_->publish(*msg); }
 
