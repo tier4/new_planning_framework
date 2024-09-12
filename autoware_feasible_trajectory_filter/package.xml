@@ -3,7 +3,7 @@
 <package format="3">
   <name>autoware_feasible_trajectory_filter</name>
   <version>0.1.0</version>
-  <description>The autoware_surround_obstacle_checker package</description>
+  <description>The autoware_feasible_trajectory_filter package</description>
   <maintainer email="satoshi.ota@tier4.jp">Satoshi Ota</maintainer>
   <license>Apache License 2.0</license>
 

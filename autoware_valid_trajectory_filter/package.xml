@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>autoware_vaild_trajectory_filter</name>
+  <name>autoware_valid_trajectory_filter</name>
   <version>0.1.0</version>
-  <description>The autoware_surround_obstacle_checker package</description>
+  <description>The autoware_valid_trajectory_filter package</description>
   <maintainer email="satoshi.ota@tier4.jp">Satoshi Ota</maintainer>
   <license>Apache License 2.0</license>
 

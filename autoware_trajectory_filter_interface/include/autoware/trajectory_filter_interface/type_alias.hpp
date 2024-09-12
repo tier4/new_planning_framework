@@ -17,14 +17,14 @@
 
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 
+#include "autoware_new_planning_msgs/msg/trajectories.hpp"
+#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 #include "autoware_perception_msgs/msg/predicted_objects.hpp"
 #include "autoware_planning_msgs/msg/lanelet_route.hpp"
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
 #include "autoware_vehicle_msgs/msg/steering_report.hpp"
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
-#include "new_autoware_planning_msgs/msg/trajectories.hpp"
-#include "new_autoware_planning_msgs/msg/trajectory.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
@@ -38,13 +38,13 @@ using std::chrono::nanoseconds;
 using std::chrono::seconds;
 
 // autoware
+using autoware_new_planning_msgs::msg::Trajectories;
+using autoware_new_planning_msgs::msg::Trajectory;
 using autoware_perception_msgs::msg::PredictedObjectKinematics;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::TrajectoryPoint;
 using autoware_vehicle_msgs::msg::SteeringReport;
-using new_autoware_planning_msgs::msg::Trajectories;
-using new_autoware_planning_msgs::msg::Trajectory;
 using vehicle_info_utils::VehicleInfo;
 
 using TrajectoryPoints = std::vector<TrajectoryPoint>;

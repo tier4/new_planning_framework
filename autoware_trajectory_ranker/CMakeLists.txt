@@ -22,7 +22,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "autoware::trajectory_selector::feasible_trajectory_filter::TrajectoryRankerNode"
+  PLUGIN "autoware::trajectory_selector::trajectory_ranker::TrajectoryRankerNode"
   EXECUTABLE ${PROJECT_NAME}_node
 )
 

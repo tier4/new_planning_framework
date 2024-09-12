@@ -80,7 +80,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Traj
       param.weight.w1 * longitudinal_comfortability(longitudinal_jerk_values, resample_num) +
       param.weight.w2 * efficiency(travel_distance_values, resample_num) +
       param.weight.w3 * safety(minimum_ttc_values, resample_num);
-    const auto scored_trajectory = new_autoware_planning_msgs::build<Trajectory>()
+    const auto scored_trajectory = autoware_new_planning_msgs::build<Trajectory>()
                                      .header(t.header)
                                      .generator_id(t.generator_id)
                                      .points(t.points)
@@ -88,7 +88,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Traj
     trajectories.push_back(scored_trajectory);
   }
 
-  return new_autoware_planning_msgs::build<Trajectories>()
+  return autoware_new_planning_msgs::build<Trajectories>()
     .trajectories(trajectories)
     .generator_info(msg->generator_info);
 }
