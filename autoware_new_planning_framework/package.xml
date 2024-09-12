@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>new_planning_framework</name>
+  <name>autoware_new_planning_framework</name>
   <version>0.1.0</version>
-  <description>The autoware_surround_obstacle_checker package</description>
+  <description>The autoware_new_planning_framework package</description>
   <maintainer email="satoshi.ota@tier4.jp">Satoshi Ota</maintainer>
   <license>Apache License 2.0</license>
 
@@ -16,6 +16,7 @@
   <depend>autoware_trajectory_filter_interface</depend>
   <depend>autoware_trajectory_ranker</depend>
   <depend>autoware_valid_trajectory_filter</depend>
+  <depend>autoware_new_planning_launch</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>autoware_lint_common</test_depend>
