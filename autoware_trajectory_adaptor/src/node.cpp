@@ -32,15 +32,28 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
     return;
   }
 
-  const auto itr = std::max_element(
+  const auto trajectory_itr = std::max_element(
     msg->trajectories.begin(), msg->trajectories.end(),
     [](const auto & a, const auto & b) { return a.score < b.score; });
-  if (itr == msg->trajectories.end()) {
+  if (trajectory_itr == msg->trajectories.end()) {
     return;
   }
 
-  const auto trajectory =
-    autoware_planning_msgs::build<OutputMsgType>().header(itr->header).points(itr->points);
+  const auto best_generator = [&msg](const auto & uuid) {
+    const auto generator_itr = std::find_if(
+      msg->generator_info.begin(), msg->generator_info.end(),
+      [&uuid](const auto & info) { return info.generator_id == uuid; });
+    return generator_itr == msg->generator_info.end() ? "NOT FOUND"
+                                                      : generator_itr->generator_name.data;
+  };
+
+  RCLCPP_INFO_STREAM(
+    this->get_logger(), "best generator:" << best_generator(trajectory_itr->generator_id)
+                                          << " score:" << trajectory_itr->score);
+
+  const auto trajectory = autoware_planning_msgs::build<OutputMsgType>()
+                            .header(trajectory_itr->header)
+                            .points(trajectory_itr->points);
   pub_trajectory_->publish(trajectory);
 }
 
