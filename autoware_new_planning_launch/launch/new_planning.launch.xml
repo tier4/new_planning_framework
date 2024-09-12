@@ -1,0 +1,42 @@
+<launch>
+  <arg name="use_sim_time" default="false" description="use_sim_time"/>
+  <arg name="vehicle_model" default="sample_vehicle" description="vehicle model name"/>
+  <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/trajectory_ranker.param.yaml"/>
+
+  <group scoped="false">
+    <include file="$(find-pkg-share global_parameter_loader)/launch/global_params.launch.py">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    </include>
+  </group>
+
+  <group>
+    <node_container pkg="rclcpp_components" exec="component_container" name="trajectory_selector_container" namespace="">
+
+      <!-- check trajectory safety -->
+      <composable_node pkg="autoware_feasible_trajectory_filter" plugin="autoware::trajectory_selector::feasible_trajectory_filter::FeasibleTrajectoryFilterNode" name="feasible_trajectory_filter" namespace="">
+        <remap from="~/input/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
+        <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
+      </composable_node>
+
+      <!-- validate trajectory that it obeys traffic rules -->
+      <composable_node pkg="autoware_valid_trajectory_filter" plugin="autoware::trajectory_selector::valid_trajectory_filter::ValidTrajectoryFilterNode" name="valid_trajectory_filter" namespace="">
+        <remap from="~/input/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
+        <remap from="~/output/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
+      </composable_node>
+
+      <!-- evaluate trajectory and calculate score for each trajectories -->
+      <composable_node pkg="autoware_trajectory_ranker" plugin="autoware::trajectory_selector::trajectory_ranker::TrajectoryRankerNode" name="trajectory_ranker" namespace="">
+        <param from="$(var trajectory_ranker_param_path)"/>
+
+        <remap from="~/input/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
+        <remap from="~/output/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
+
+        <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+        <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
+      </composable_node>
+
+      <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
+    </node_container>
+  </group>
+</launch>
