@@ -26,17 +26,13 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 {
 }
 
-auto TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
-  -> std::optional<Trajectories>
+void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  if (msg == nullptr) {
-    return std::nullopt;
-  }
-
-  return score(msg);
+  publish(score(msg));
 }
 
-auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Trajectories
+auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
+  -> Trajectories::ConstSharedPtr
 {
   std::vector<double> lateral_accel_values;
   std::vector<double> minimum_ttc_values;
@@ -47,7 +43,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Traj
 
   const auto odometry_ptr = sub_odometry_.takeData();
   if (odometry_ptr == nullptr) {
-    return *msg;
+    return msg;
   }
 
   const auto objects = [this]() {
@@ -58,6 +54,8 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Traj
   const auto resample_num = static_cast<size_t>(param.resample_num);
 
   std::vector<Trajectory> trajectories;
+  trajectories.reserve(msg->trajectories.size());
+
   for (const auto & t : msg->trajectories) {
     const auto points =
       resampling(t.points, odometry_ptr->pose.pose, param.resample_num, param.time_resolution);
@@ -88,9 +86,11 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg) -> Traj
     trajectories.push_back(scored_trajectory);
   }
 
-  return autoware_new_planning_msgs::build<Trajectories>()
-    .trajectories(trajectories)
-    .generator_info(msg->generator_info);
+  const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
+                                  .trajectories(trajectories)
+                                  .generator_info(msg->generator_info);
+
+  return std::make_shared<Trajectories>(new_trajectories);
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker

@@ -31,9 +31,9 @@ public:
   explicit TrajectoryRankerNode(const rclcpp::NodeOptions & node_options);
 
 private:
-  auto process(const Trajectories::ConstSharedPtr msg) -> std::optional<Trajectories> override;
+  void process(const Trajectories::ConstSharedPtr msg) override;
 
-  auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories;
+  auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
 
   autoware::universe_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};

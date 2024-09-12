@@ -22,14 +22,9 @@ ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions &
 {
 }
 
-auto ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
-  -> std::optional<Trajectories>
+void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  if (msg == nullptr) {
-    return std::nullopt;
-  }
-
-  return *msg;
+  publish(msg);
 }
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
