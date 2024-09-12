@@ -15,8 +15,8 @@
   <depend>autoware_feasible_trajectory_filter</depend>
   <depend>autoware_new_planning_launch</depend>
   <depend>autoware_new_planning_msgs_converter</depend>
-  <depend>autoware_trajectory_filter_interface</depend>
   <depend>autoware_trajectory_adaptor</depend>
+  <depend>autoware_trajectory_filter_interface</depend>
   <depend>autoware_trajectory_ranker</depend>
   <depend>autoware_valid_trajectory_filter</depend>
 

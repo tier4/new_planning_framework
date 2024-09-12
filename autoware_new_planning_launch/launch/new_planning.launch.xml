@@ -54,6 +54,12 @@
         <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
       </composable_node>
 
+      <!-- select best trajectory -->
+      <composable_node pkg="autoware_trajectory_adaptor" plugin="autoware::trajectory_selector::trajectory_adaptor::TrajectoryAdaptorNode" name="trajectory_adaptor_node" namespace="">
+        <remap from="~/input/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
+        <remap from="~/output/trajectory" to="/planning/trajectory_selector/trajectory"/>
+      </composable_node>
+
       <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
     </node_container>
   </group>
