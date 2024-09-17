@@ -34,11 +34,6 @@ void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   -> Trajectories::ConstSharedPtr
 {
-  std::vector<double> lateral_accel_values;
-  std::vector<double> minimum_ttc_values;
-  std::vector<double> longitudinal_jerk_values;
-  std::vector<double> travel_distance_values;
-
   const auto param = parameters_->get_params();
 
   const auto odometry_ptr = sub_odometry_.takeData();
@@ -59,6 +54,12 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   for (const auto & t : msg->trajectories) {
     const auto points =
       resampling(t.points, odometry_ptr->pose.pose, param.resample_num, param.time_resolution);
+
+    std::vector<double> lateral_accel_values;
+    std::vector<double> minimum_ttc_values;
+    std::vector<double> longitudinal_jerk_values;
+    std::vector<double> travel_distance_values;
+
     for (size_t i = 0; i < resample_num - 1; i++) {
       lateral_accel_values.push_back(lateral_accel(vehicle_info_, points, i));
       longitudinal_jerk_values.push_back(longitudinal_jerk(points, i));
