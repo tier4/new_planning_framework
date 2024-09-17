@@ -17,7 +17,8 @@
 
   <group>
     <include file="$(find-pkg-share autoware_new_planning_launch)/launch/selector.launch.xml">
-      <arg name="stand_alone" default="false"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+      <arg name="stand_alone" value="false"/>
     </include>
   </group>
 </launch>
