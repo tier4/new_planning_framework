@@ -1,0 +1,36 @@
+parameters:
+  time_resolution:
+    type: double
+
+  frenet:
+    target_state:
+      lateral_positions:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
+      lateral_velocities:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
+      lateral_accelerations:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
+      longitudinal_positions:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
+      longitudinal_velocities:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
+      longitudinal_accelerations:
+        type: double_array
+        validation:
+          not_empty<>: []
+          unique<>: []
