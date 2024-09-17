@@ -1,0 +1,12 @@
+<launch>
+  <arg name="input"/>
+  <arg name="output"/>
+
+  <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
+
+  <node pkg="autoware_trajectory_ranker" exec="autoware_trajectory_ranker_node" name="trajectory_ranker" output="screen">
+    <param from="$(var dummy_trajectory_publisher_param_path)"/>
+    <remap from="~/input/trajectories" to="$(var input)"/>
+    <remap from="~/output/trajectories" to="$(var output)"/>
+  </node>
+</launch>
