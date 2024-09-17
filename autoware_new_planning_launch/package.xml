@@ -12,9 +12,11 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>autoware_cmake</buildtool_depend>
 
+  <exec_depend>autoware_dummy_trajectory_publisher</exec_depend>
   <exec_depend>autoware_feasible_trajectory_filter</exec_depend>
   <exec_depend>autoware_new_planning_msgs_converter</exec_depend>
   <exec_depend>autoware_trajectory_adaptor</exec_depend>
+  <exec_depend>autoware_trajectory_concatenater</exec_depend>
   <exec_depend>autoware_trajectory_ranker</exec_depend>
   <exec_depend>autoware_valid_trajectory_filter</exec_depend>
   <exec_depend>glog_component</exec_depend>

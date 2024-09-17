@@ -3,10 +3,13 @@
   <arg name="vehicle_model" description="vehicle model name"/>
 
   <!-- option params -->
+  <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
+  <arg name="trajectory_concatenater_param_path" default="$(find-pkg-share autoware_trajectory_concatenater)/config/trajectory_concatenater.param.yaml"/>
   <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/trajectory_ranker.param.yaml"/>
   <arg name="planning_component_output" default="/planning/autoware/trajectory"/>
   <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
   <arg name="stand_alone" default="true"/>
+  <arg name="use_dummy_trajectory" default="true"/>
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
 
   <group if="$(var stand_alone)" scoped="false">
@@ -16,7 +19,8 @@
     </include>
   </group>
 
-  <node_container pkg="rclcpp_components" exec="component_container" name="trajectory_selector_container" namespace="">
+  <node_container pkg="rclcpp_components" exec="component_container" name="trajectory_selector_container" namespace="" output="both">
+    <!-- convert topic type -->
     <composable_node
       pkg="autoware_new_planning_msgs_converter"
       plugin="autoware::trajectory_selector::new_planning_msgs_converter::TrajectoryToTrajectories"
@@ -31,6 +35,15 @@
       <extra_arg name="use_intra_process_comms" value="false"/>
     </composable_node>
 
+    <!-- concatenate multiple topics -->
+    <composable_node pkg="autoware_trajectory_concatenater" plugin="autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode" name="trajectory_concatenater" namespace="">
+      <param from="$(var trajectory_concatenater_param_path)"/>
+
+      <remap from="~/output/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
+      <!-- composable node config -->
+      <extra_arg name="use_intra_process_comms" value="false"/>
+    </composable_node>
+
     <!-- check trajectory safety -->
     <composable_node
       pkg="autoware_feasible_trajectory_filter"
@@ -38,8 +51,8 @@
       name="feasible_trajectory_filter"
       namespace=""
     >
-      <!-- <remap from="~/input/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/> -->
-      <remap from="~/input/trajectories" to="/planning/autoware/trajectories"/>
+      <remap from="~/input/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
+      <!-- <remap from="~/input/trajectories" to="/planning/autoware/trajectories"/> -->
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
     </composable_node>
 
@@ -64,8 +77,30 @@
     <composable_node pkg="autoware_trajectory_adaptor" plugin="autoware::trajectory_selector::trajectory_adaptor::TrajectoryAdaptorNode" name="trajectory_adaptor_node" namespace="">
       <remap from="~/input/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
       <remap from="~/output/trajectory" to="$(var control_component_input)"/>
+      <remap from="~/output/markers" to="/planning/trajectory_selector/markers"/>
     </composable_node>
 
     <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
   </node_container>
+
+  <group if="$(var use_dummy_trajectory)">
+    <load_composable_node target="trajectory_selector_container">
+      <composable_node
+        pkg="autoware_dummy_trajectory_publisher"
+        plugin="autoware::trajectory_selector::dummy_trajectory_publisher::DummyTrajectoryPublisherNode"
+        name="dummy_trajectory_publisher"
+        namespace=""
+      >
+        <param from="$(var dummy_trajectory_publisher_param_path)"/>
+
+        <remap from="~/input/trajectory" to="/planning/autoware/trajectory"/>
+        <remap from="~/output/trajectories" to="/planning/frenet/trajectories"/>
+
+        <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+        <remap from="~/input/acceleration" to="/localization/acceleration"/>
+        <!-- composable node config -->
+        <extra_arg name="use_intra_process_comms" value="false"/>
+      </composable_node>
+    </load_composable_node>
+  </group>
 </launch>
