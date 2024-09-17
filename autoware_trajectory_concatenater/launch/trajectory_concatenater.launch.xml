@@ -1,0 +1,10 @@
+<launch>
+  <arg name="output"/>
+
+  <arg name="trajectory_concatenater_param_path" default="$(find-pkg-share autoware_trajectory_concatenater)/config/trajectory_concatenater.param.yaml"/>
+
+  <node pkg="autoware_trajectory_concatenater" exec="autoware_trajectory_concatenater_node" name="trajectory_concatenater_node" output="screen">
+    <param from="$(var trajectory_concatenater_param_path)"/>
+    <remap from="~/output/trajectories" to="$(var output)"/>
+  </node>
+</launch>
