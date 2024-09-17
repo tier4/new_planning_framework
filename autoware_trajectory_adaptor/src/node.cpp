@@ -14,6 +14,8 @@
 
 #include "node.hpp"
 
+#include <autoware/universe_utils/ros/marker_helper.hpp>
+
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
 
@@ -22,7 +24,8 @@ TrajectoryAdaptorNode::TrajectoryAdaptorNode(const rclcpp::NodeOptions & node_op
   sub_trajectories_{this->create_subscription<InputMsgType>(
     "~/input/trajectories", 1,
     std::bind(&TrajectoryAdaptorNode::process, this, std::placeholders::_1))},
-  pub_trajectory_{this->create_publisher<OutputMsgType>("~/output/trajectory", 1)}
+  pub_trajectory_{this->create_publisher<OutputMsgType>("~/output/trajectory", 1)},
+  pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)}
 {
 }
 
@@ -31,6 +34,8 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
   if (msg->trajectories.empty()) {
     return;
   }
+
+  visualize(msg);
 
   const auto trajectory_itr = std::max_element(
     msg->trajectories.begin(), msg->trajectories.end(),
@@ -55,6 +60,29 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
                             .header(trajectory_itr->header)
                             .points(trajectory_itr->points);
   pub_trajectory_->publish(trajectory);
+}
+
+void TrajectoryAdaptorNode::visualize(const InputMsgType::ConstSharedPtr msg)
+{
+  using autoware::universe_utils::createDefaultMarker;
+  using autoware::universe_utils::createMarkerColor;
+  using autoware::universe_utils::createMarkerScale;
+
+  MarkerArray output;
+
+  size_t i = 0L;
+  for (const auto & trajectory : msg->trajectories) {
+    Marker marker = createDefaultMarker(
+      "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "concatenate", i++, Marker::LINE_STRIP,
+      createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(0.0, 0.0, 1.0, 0.999));
+    for (const auto & point : trajectory.points) {
+      marker.points.push_back(point.pose.position);
+      marker.colors.push_back(createMarkerColor(0.0, 0.0, 1.0, 0.999));
+    }
+    output.markers.push_back(marker);
+  }
+
+  pub_marker_->publish(output);
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_adaptor
