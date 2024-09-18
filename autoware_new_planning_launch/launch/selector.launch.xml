@@ -6,7 +6,6 @@
   <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
   <arg name="trajectory_concatenater_param_path" default="$(find-pkg-share autoware_trajectory_concatenater)/config/trajectory_concatenater.param.yaml"/>
   <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/trajectory_ranker.param.yaml"/>
-  <arg name="planning_component_output" default="/planning/autoware/trajectory"/>
   <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
   <arg name="stand_alone" default="true"/>
   <arg name="use_dummy_trajectory" default="true"/>
@@ -20,21 +19,6 @@
   </group>
 
   <node_container pkg="rclcpp_components" exec="component_container" name="trajectory_selector_container" namespace="" output="both">
-    <!-- convert topic type -->
-    <composable_node
-      pkg="autoware_new_planning_msgs_converter"
-      plugin="autoware::trajectory_selector::new_planning_msgs_converter::TrajectoryToTrajectories"
-      name="trajectory_to_trajectories"
-      namespace=""
-    >
-      <!-- params -->
-      <param name="input_topic" value="/planning/autoware/trajectory"/>
-      <param name="output_topic" value="/planning/autoware/trajectories"/>
-      <param name="generator_name" value="autoware"/>
-      <!-- composable node config -->
-      <extra_arg name="use_intra_process_comms" value="false"/>
-    </composable_node>
-
     <!-- concatenate multiple topics -->
     <composable_node pkg="autoware_trajectory_concatenater" plugin="autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode" name="trajectory_concatenater" namespace="">
       <param from="$(var trajectory_concatenater_param_path)"/>
