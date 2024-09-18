@@ -16,5 +16,13 @@
       <arg name="sensor_model" value="$(var sensor_model)"/>
       <arg name="planning_component_output" value="$(var planning_component_output)"/>
     </include>
+
+    <!-- convert topic type -->
+    <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="">
+      <!-- params -->
+      <param name="input_topic" value="$(var planning_component_output)"/>
+      <param name="output_topic" value="/planning/autoware/trajectories"/>
+      <param name="generator_name" value="autoware"/>
+    </node>
   </group>
 </launch>

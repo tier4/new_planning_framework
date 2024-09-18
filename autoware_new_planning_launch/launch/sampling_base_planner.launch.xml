@@ -1,0 +1,82 @@
+<launch>
+  <!-- essential params -->
+  <arg name="vehicle_model" description="vehicle model name"/>
+
+  <!-- option params -->
+  <arg name="interface_input_topic" default="/planning/scenario_planning/lane_driving/behavior_planning/path"/>
+  <arg name="interface_output_topic" default="/planning/scenario_planning/lane_driving/trajectory"/>
+  <arg name="velocity_smoother_type" default="JerkFiltered"/>
+
+  <arg name="common_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common"/>
+  <arg name="common_param_path" default="$(var common_config_path)/common.param.yaml"/>
+  <arg name="nearest_search_param_path" default="$(var common_config_path)/nearest_search.param.yaml"/>
+  <arg name="motion_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/lane_driving/motion_planning"/>
+  <arg name="path_sampler_param_path" default="$(var motion_config_path)/path_sampler/path_sampler.param.yaml"/>
+  <arg name="vehicle_param_file" default="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
+  <arg name="velocity_smoother_param_path" default="$(var common_config_path)/autoware_velocity_smoother/velocity_smoother.param.yaml"/>
+  <arg name="velocity_smoother_type_param_path" default="$(var common_config_path)/autoware_velocity_smoother/$(var velocity_smoother_type).param.yaml"/>
+
+  <arg name="container_type" default="component_container_mt"/>
+
+  <node_container pkg="rclcpp_components" exec="$(var container_type)" name="external_generator_container" namespace="" args="" output="screen">
+    <!-- convert topic type -->
+    <composable_node pkg="autoware_planning_topic_converter" plugin="autoware::planning_topic_converter::PathToTrajectory" name="path_to_trajectory_converter" namespace="">
+      <!-- params -->
+      <param name="input_topic" value="$(var interface_input_topic)"/>
+      <param name="output_topic" value="path_optimizer/trajectory"/>
+      <!-- composable node config -->
+      <extra_arg name="use_intra_process_comms" value="false"/>
+    </composable_node>
+
+    <!-- generate kinematic-feasible path -->
+    <composable_node pkg="autoware_path_sampler" plugin="autoware::path_sampler::PathSampler" name="path_sampler" namespace="">
+      <!-- topic remap -->
+      <remap from="~/input/path" to="path_smoother/path"/>
+      <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+      <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
+      <remap from="~/output/path" to="path_optimizer/trajectory"/>
+      <!-- params -->
+      <param from="$(var common_param_path)"/>
+      <param from="$(var vehicle_param_file)"/>
+      <param from="$(var nearest_search_param_path)"/>
+      <param from="$(var path_sampler_param_path)"/>
+      <!-- composable node config -->
+      <extra_arg name="use_intra_process_comms" value="false"/>
+    </composable_node>
+
+    <!-- velocity smoother -->
+    <composable_node pkg="autoware_velocity_smoother" plugin="autoware::velocity_smoother::VelocitySmootherNode" name="velocity_smoother" namespace="">
+      <param name="algorithm_type" value="$(var velocity_smoother_type)"/>
+      <param from="$(var common_param_path)"/>
+      <param from="$(var nearest_search_param_path)"/>
+      <param from="$(var velocity_smoother_param_path)"/>
+      <param from="$(var velocity_smoother_type_param_path)"/>
+
+      <param name="publish_debug_trajs" value="false"/>
+      <remap from="~/input/trajectory" to="path_optimizer/trajectory"/>
+      <remap from="~/output/trajectory" to="trajectory"/>
+
+      <remap from="~/input/external_velocity_limit_mps" to="/planning/scenario_planning/max_velocity"/>
+      <remap from="~/input/acceleration" to="/localization/acceleration"/>
+      <remap from="~/input/operation_mode_state" to="/system/operation_mode/state"/>
+      <remap from="~/output/current_velocity_limit_mps" to="/planning/scenario_planning/current_max_velocity"/>
+    </composable_node>
+
+    <!-- convert topic type -->
+    <composable_node
+      pkg="autoware_new_planning_msgs_converter"
+      plugin="autoware::trajectory_selector::new_planning_msgs_converter::TrajectoryToTrajectories"
+      name="trajectory_to_trajectories"
+      namespace=""
+    >
+      <!-- params -->
+      <param name="input_topic" value="trajectory"/>
+      <param name="output_topic" value="trajectories"/>
+      <param name="generator_name" value="sampling_base_planner"/>
+      <!-- composable node config -->
+      <extra_arg name="use_intra_process_comms" value="false"/>
+    </composable_node>
+
+    <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
+  </node_container>
+</launch>
