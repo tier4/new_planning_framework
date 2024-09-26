@@ -15,8 +15,6 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include "trajectory_concatenater_param.hpp"
-
 #include <rclcpp/rclcpp.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
@@ -41,17 +39,15 @@ public:
   explicit TrajectoryConcatenaterNode(const rclcpp::NodeOptions & node_options);
 
 private:
-  void process(const Trajectories::ConstSharedPtr msg, const std::string & topic_name);
+  void on_trajectories(const Trajectories::ConstSharedPtr msg);
 
   void publish();
 
   rclcpp::TimerBase::SharedPtr timer_;
 
+  rclcpp::Subscription<Trajectories>::SharedPtr subs_trajectories_;
+
   rclcpp::Publisher<Trajectories>::SharedPtr pub_trajectores_;
-
-  std::shared_ptr<parameters::ParamListener> parameters_;
-
-  std::map<std::string, rclcpp::Subscription<Trajectories>::SharedPtr> subs_trajectories_;
 
   std::map<std::string, Trajectories::ConstSharedPtr> buffer_;
 

@@ -4,7 +4,7 @@
   <arg name="vehicle_model" description="vehicle model name"/>
   <arg name="sensor_model" description="sensor model name"/>
 
-  <!-- option params -->
+  <!-- option -->
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
 
   <group scoped="false">

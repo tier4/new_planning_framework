@@ -1,7 +1,0 @@
-parameters:
-  topic_names:
-    type: string_array
-    description: concatenate topic name list.
-    validation:
-      not_empty<>: []
-      unique<>: []

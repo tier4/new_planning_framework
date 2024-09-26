@@ -2,11 +2,16 @@
   <!-- essential params -->
   <arg name="vehicle_model" description="vehicle model name"/>
 
-  <!-- option params -->
+  <!-- param path -->
   <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
-  <arg name="trajectory_concatenater_param_path" default="$(find-pkg-share autoware_trajectory_concatenater)/config/trajectory_concatenater.param.yaml"/>
   <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/trajectory_ranker.param.yaml"/>
+
+  <!-- topic name -->
   <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
+  <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
+
+  <!-- option -->
+  <arg name="container_type" default="component_container_mt"/>
   <arg name="stand_alone" default="true"/>
   <arg name="use_dummy_trajectory" default="true"/>
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
@@ -18,11 +23,10 @@
     </include>
   </group>
 
-  <node_container pkg="rclcpp_components" exec="component_container" name="trajectory_selector_container" namespace="" output="both">
+  <node_container pkg="rclcpp_components" exec="$(var container_type)" name="trajectory_selector_container" namespace="" output="both">
     <!-- concatenate multiple topics -->
     <composable_node pkg="autoware_trajectory_concatenater" plugin="autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode" name="trajectory_concatenater" namespace="">
-      <param from="$(var trajectory_concatenater_param_path)"/>
-
+      <remap from="~/input/trajectories" to="$(var selector_component_input)"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
       <!-- composable node config -->
       <extra_arg name="use_intra_process_comms" value="false"/>
@@ -78,7 +82,7 @@
         <param from="$(var dummy_trajectory_publisher_param_path)"/>
 
         <remap from="~/input/trajectory" to="/planning/autoware/trajectory"/>
-        <remap from="~/output/trajectories" to="/planning/frenet/trajectories"/>
+        <remap from="~/output/trajectories" to="/planning/candidate/trajectories"/>
 
         <remap from="~/input/odometry" to="/localization/kinematic_state"/>
         <remap from="~/input/acceleration" to="/localization/acceleration"/>

@@ -4,10 +4,13 @@
   <arg name="vehicle_model" description="vehicle model name"/>
   <arg name="sensor_model" description="sensor model name"/>
 
-  <!-- option params -->
-  <arg name="use_sim_time" default="false" description="use_sim_time"/>
-  <arg name="planning_component_output" default="/planning/autoware/trajectory"/>
+  <!-- topic name -->
   <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
+  <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
+  <arg name="planning_component_output" default="/planning/autoware/trajectory"/>
+
+  <!-- option -->
+  <arg name="use_sim_time" default="false" description="use_sim_time"/>
 
   <group scoped="false">
     <include file="$(find-pkg-share autoware_launch)/launch/planning_simulator.launch.xml">
@@ -21,7 +24,7 @@
     <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="">
       <!-- params -->
       <param name="input_topic" value="$(var planning_component_output)"/>
-      <param name="output_topic" value="/planning/autoware/trajectories"/>
+      <param name="output_topic" value="$(var selector_component_input)"/>
       <param name="generator_name" value="autoware"/>
     </node>
   </group>
