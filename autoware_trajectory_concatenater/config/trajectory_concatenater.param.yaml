@@ -1,4 +1,0 @@
-/**:
-  ros__parameters:
-    topic_names: [/planning/autoware/trajectories,
-                  /planning/external_generator/trajectories]

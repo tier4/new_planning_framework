@@ -14,6 +14,8 @@
 
 #include "node.hpp"
 
+#include <autoware/universe_utils/ros/uuid_helper.hpp>
+
 namespace autoware::trajectory_selector::trajectory_concatenater
 {
 
@@ -21,26 +23,36 @@ TrajectoryConcatenaterNode::TrajectoryConcatenaterNode(const rclcpp::NodeOptions
 : Node{"trajectory_concatenater_node", node_options},
   timer_{rclcpp::create_timer(
     this, get_clock(), 100ms, std::bind(&TrajectoryConcatenaterNode::publish, this))},
-  pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)},
-  parameters_{std::make_shared<parameters::ParamListener>(get_node_parameters_interface())}
+  subs_trajectories_{this->create_subscription<Trajectories>(
+    "~/input/trajectories", 1,
+    std::bind(&TrajectoryConcatenaterNode::on_trajectories, this, std::placeholders::_1))},
+  pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)}
 {
-  for (const auto & topic_name : parameters_->get_params().topic_names) {
-    std::function<void(const Trajectories::ConstSharedPtr msg)> callback =
-      std::bind(&TrajectoryConcatenaterNode::process, this, std::placeholders::_1, topic_name);
-    subs_trajectories_.emplace(
-      topic_name, this->create_subscription<Trajectories>(topic_name, 1, callback));
-  }
 }
 
-void TrajectoryConcatenaterNode::process(
-  const Trajectories::ConstSharedPtr msg, const std::string & topic_name)
+void TrajectoryConcatenaterNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (buffer_.count(topic_name) == 0) {
-    buffer_.emplace(topic_name, msg);
-  } else {
-    buffer_.at(topic_name) = msg;
+  for (const auto & generator_info : msg->generator_info) {
+    const auto uuid = autoware::universe_utils::toHexString(generator_info.generator_id);
+
+    auto trajectories = msg->trajectories;
+    const auto itr = std::remove_if(
+      trajectories.begin(), trajectories.end(),
+      [&generator_info](const auto & t) { return t.generator_id != generator_info.generator_id; });
+    trajectories.erase(itr, trajectories.end());
+
+    const auto pre_combine =
+      autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectories>()
+        .trajectories(trajectories)
+        .generator_info({generator_info});
+
+    if (buffer_.count(uuid) == 0) {
+      buffer_.emplace(uuid, std::make_shared<Trajectories>(pre_combine));
+    } else {
+      buffer_.at(uuid) = std::make_shared<Trajectories>(pre_combine);
+    }
   }
 }
 
@@ -54,10 +66,12 @@ void TrajectoryConcatenaterNode::publish()
 
     if (buffer_.empty()) return;
 
-    for (const auto & [topic_name, msg] : buffer_) {
-      trajectories.insert(trajectories.end(), msg->trajectories.begin(), msg->trajectories.end());
+    for (const auto & [uuid, pre_combine] : buffer_) {
+      trajectories.insert(
+        trajectories.end(), pre_combine->trajectories.begin(), pre_combine->trajectories.end());
       generator_info.insert(
-        generator_info.end(), msg->generator_info.begin(), msg->generator_info.end());
+        generator_info.end(), pre_combine->generator_info.begin(),
+        pre_combine->generator_info.end());
     }
 
     buffer_.clear();
