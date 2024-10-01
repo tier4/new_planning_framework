@@ -20,14 +20,18 @@
 
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
+#include <lanelet2_core/geometry/LineString.h>
+
 namespace autoware::trajectory_selector::trajectory_evaluator
 {
 
 DataInterface::DataInterface(
   const std::shared_ptr<CoreData> & core_data, const std::shared_ptr<RouteHandler> & route_handler,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
   const std::shared_ptr<VehicleInfo> & vehicle_info)
 : core_data_{core_data},
   route_handler_{route_handler},
+  preferred_lanes_{preferred_lanes},
   vehicle_info_{vehicle_info},
   metrics_(static_cast<size_t>(METRIC::SIZE), std::vector<double>(core_data->points->size(), 0.0)),
   scores_(static_cast<size_t>(SCORE::SIZE), 0.0)
@@ -92,13 +96,8 @@ double DataInterface::travel_distance(const size_t idx) const
 
 double DataInterface::lateral_deviation(const size_t idx) const
 {
-  lanelet::ConstLanelet nearest{};
-  if (!route_handler_->getClosestPreferredLaneletWithinRoute(
-        autoware::universe_utils::getPose(core_data_->points->at(idx)), &nearest)) {
-    return std::numeric_limits<double>::max();
-  }
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(
-    {nearest}, autoware::universe_utils::getPose(core_data_->points->at(idx)));
+    *preferred_lanes_, autoware::universe_utils::getPose(core_data_->points->at(idx)));
   return std::abs(arc_coordinates.distance);
 }
 
@@ -129,8 +128,8 @@ void DataInterface::normalize(
 auto DataInterface::compress(
   const std::vector<std::vector<double>> & weight, const METRIC & metric_type) const -> double
 {
-  const auto w = weight.at(static_cast<size_t>(metric_type));
-  const auto metric = metrics_.at(static_cast<size_t>(metric_type));
+  const auto & w = weight.at(static_cast<size_t>(metric_type));
+  const auto & metric = metrics_.at(static_cast<size_t>(metric_type));
   return std::inner_product(w.begin(), w.end(), metric.begin(), 0.0);
 }
 
@@ -154,7 +153,10 @@ void Evaluator::normalize()
       results_.begin(), results_.end(),
       [&idx](const auto & a, const auto & b) { return a->scores().at(idx) < b->scores().at(idx); });
 
-    return std::make_pair((*min_itr)->scores().at(idx), (*max_itr)->scores().at(idx));
+    const auto & min = (*min_itr)->scores().at(idx);
+    const auto & max = (*max_itr)->scores().at(idx);
+
+    return std::make_pair(min, max);
   };
 
   const auto [s0_min, s0_max] = range(static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY));
@@ -208,12 +210,37 @@ auto Evaluator::get(const std::string & tag) const -> std::shared_ptr<DataInterf
 
 void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
 {
-  const auto ptr = std::make_shared<DataInterface>(core_data, route_handler_, vehicle_info_);
+  const auto preferred_lanes = route_handler_->getPreferredLanelets();
+
+  lanelet::ConstLanelet nearest{};
+  if (!route_handler_->getClosestPreferredLaneletWithinRoute(
+        core_data->odometry->pose.pose, &nearest)) {
+    RCLCPP_ERROR(rclcpp::get_logger(__func__), "couldn't find nearest preferred lane.");
+  }
+
+  const auto itr = std::find_if(
+    preferred_lanes.begin(), preferred_lanes.end(),
+    [&nearest](const auto & lanelet) { return lanelet.id() == nearest.id(); });
+
+  double length = 0.0;
+
+  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_nearby{};
+  std::for_each(
+    itr, preferred_lanes.end(), [&length, &preferred_lanes_nearby](const auto & lanelet) {
+      length +=
+        static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
+      constexpr double threshold = 150.0;
+      if (length < threshold) preferred_lanes_nearby->push_back(lanelet);
+    });
+
+  const auto ptr = std::make_shared<DataInterface>(
+    core_data, route_handler_, preferred_lanes_nearby, vehicle_info_);
   results_.push_back(ptr);
 }
 
-auto Evaluator::best(const std::shared_ptr<EvaluatorParameters> & parameters)
-  -> std::shared_ptr<DataInterface>
+auto Evaluator::best(
+  const std::shared_ptr<EvaluatorParameters> & parameters,
+  const std::string & exclude) -> std::shared_ptr<DataInterface>
 {
   pruning();
 
@@ -223,16 +250,19 @@ auto Evaluator::best(const std::shared_ptr<EvaluatorParameters> & parameters)
 
   weighting(parameters->score_weight);
 
-  return best();
+  return best(exclude);
 }
 
-auto Evaluator::best() const -> std::shared_ptr<DataInterface>
+auto Evaluator::best(const std::string & exclude) const -> std::shared_ptr<DataInterface>
 {
   if (results_.empty()) return nullptr;
 
-  if (!results_.front()->feasible()) return nullptr;
+  const auto itr = std::find_if(results_.begin(), results_.end(), [&exclude](const auto & result) {
+    return result->tag() != exclude && result->feasible();
+  });
+  if (results_.end() == itr) return nullptr;
 
-  return results_.front();
+  return *itr;
 }
 
 auto Evaluator::statistics(const SCORE & score_type) const -> std::pair<double, double>

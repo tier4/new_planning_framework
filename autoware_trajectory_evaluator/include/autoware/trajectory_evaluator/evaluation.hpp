@@ -31,6 +31,7 @@ public:
   DataInterface(
     const std::shared_ptr<CoreData> & core_data,
     const std::shared_ptr<RouteHandler> & route_handler,
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
     const std::shared_ptr<VehicleInfo> & vehicle_info);
 
   void compress(const std::vector<std::vector<double>> & weight);
@@ -74,6 +75,8 @@ private:
 
   std::shared_ptr<RouteHandler> route_handler_;
 
+  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
+
   std::shared_ptr<VehicleInfo> vehicle_info_;
 
   std::vector<std::vector<double>> metrics_;
@@ -95,8 +98,9 @@ public:
 
   void add(const std::shared_ptr<CoreData> & core_data);
 
-  auto best(const std::shared_ptr<EvaluatorParameters> & parameters)
-    -> std::shared_ptr<DataInterface>;
+  auto best(
+    const std::shared_ptr<EvaluatorParameters> & parameters,
+    const std::string & exclude = "") -> std::shared_ptr<DataInterface>;
 
   auto results() const -> std::vector<std::shared_ptr<DataInterface>> { return results_; }
 
@@ -115,7 +119,7 @@ protected:
 
   void weighting(const std::vector<double> & weight);
 
-  auto best() const -> std::shared_ptr<DataInterface>;
+  auto best(const std::string & exclude = "") const -> std::shared_ptr<DataInterface>;
 
 private:
   std::vector<std::shared_ptr<DataInterface>> results_;
