@@ -224,7 +224,7 @@ void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
 
   double length = 0.0;
 
-  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_nearby{};
+  const auto preferred_lanes_nearby = std::make_shared<lanelet::ConstLanelets>();
   std::for_each(
     itr, preferred_lanes.end(), [&length, &preferred_lanes_nearby](const auto & lanelet) {
       length +=
