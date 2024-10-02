@@ -1,9 +1,0 @@
-<launch>
-  <arg name="input"/>
-  <arg name="output"/>
-
-  <node pkg="autoware_valid_trajectory_filter" exec="autoware_valid_trajectory_filter_node" name="valid_trajectory_filter" output="screen">
-    <remap from="~/input/trajectories" to="$(var input)"/>
-    <remap from="~/output/trajectories" to="$(var output)"/>
-  </node>
-</launch>
