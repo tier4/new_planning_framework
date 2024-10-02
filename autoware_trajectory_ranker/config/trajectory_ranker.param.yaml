@@ -1,9 +1,0 @@
-/**:
-  ros__parameters:
-    resample_num: 20
-    time_resolution: 0.5
-    weight:
-      w0: 1.0
-      w1: 1.0
-      w2: 1.0
-      w3: 1.0

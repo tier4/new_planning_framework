@@ -46,12 +46,18 @@ enum class SCORE {
 struct EvaluatorParameters
 {
   explicit EvaluatorParameters(const size_t sample_num)
-  : time_decay_weight(static_cast<size_t>(METRIC::SIZE), std::vector<double>(sample_num, 0.0)),
+  : sample_num{sample_num},
+    time_decay_weight(static_cast<size_t>(METRIC::SIZE), std::vector<double>(sample_num, 0.0)),
     score_weight(static_cast<size_t>(SCORE::SIZE), 0.0)
   {
   }
 
+  size_t sample_num;
+
+  double resolution;
+
   std::vector<std::vector<double>> time_decay_weight;
+
   std::vector<double> score_weight;
 };
 
@@ -65,6 +71,25 @@ struct CoreData
   {
   }
 
+  CoreData(
+    const std::shared_ptr<TrajectoryPoints> & original,
+    const std::shared_ptr<TrajectoryPoints> & points,
+    const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const Header & header,
+    const UUID & generator_id)
+  : original{original},
+    points{points},
+    objects{objects},
+    odometry{odometry},
+    preferred_lanes{preferred_lanes},
+    tag{"__anon"},
+    header{header},
+    generator_id{generator_id}
+  {
+  }
+
+  std::shared_ptr<TrajectoryPoints> original;
+
   std::shared_ptr<TrajectoryPoints> points;
 
   std::shared_ptr<PredictedObjects> objects;
@@ -74,6 +99,10 @@ struct CoreData
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes;
 
   std::string tag;
+
+  Header header;
+
+  UUID generator_id;
 };
 }  // namespace autoware::trajectory_selector::trajectory_evaluator
 

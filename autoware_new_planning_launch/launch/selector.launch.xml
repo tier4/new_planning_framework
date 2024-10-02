@@ -4,7 +4,7 @@
 
   <!-- param path -->
   <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
-  <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/trajectory_ranker.param.yaml"/>
+  <arg name="evaluator_weight_param_path" default="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
 
   <!-- topic name -->
   <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
@@ -52,11 +52,13 @@
 
     <!-- evaluate trajectory and calculate score for each trajectories -->
     <composable_node pkg="autoware_trajectory_ranker" plugin="autoware::trajectory_selector::trajectory_ranker::TrajectoryRankerNode" name="trajectory_ranker" namespace="">
-      <param from="$(var trajectory_ranker_param_path)"/>
+      <param from="$(var evaluator_weight_param_path)"/>
 
       <remap from="~/input/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
 
+      <remap from="~/input/route" to="/planning/mission_planning/route"/>
+      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
     </composable_node>

@@ -14,16 +14,44 @@
 
 #include "node.hpp"
 
-#include "utils.hpp"
+#include "autoware/trajectory_evaluator/utils.hpp"
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
 TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
-  parameters_{std::make_shared<parameters::ParamListener>(get_node_parameters_interface())},
-  vehicle_info_{autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo()}
+  route_handler_{std::make_shared<RouteHandler>()},
+  vehicle_info_{std::make_shared<VehicleInfo>(
+    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())},
+  previous_points_{nullptr}
 {
+  evaluator_ = std::make_shared<trajectory_evaluator::Evaluator>(route_handler_, vehicle_info_);
+
+  sub_map_ = create_subscription<LaneletMapBin>(
+    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
+    [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
+
+  sub_route_ = create_subscription<LaneletRoute>(
+    "~/input/route", rclcpp::QoS{1}.transient_local(),
+    [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
+
+  parameters_ = std::make_shared<trajectory_evaluator::EvaluatorParameters>(
+    declare_parameter<int>("sample_num"));
+  parameters_->resolution = declare_parameter<double>("resolution");
+  parameters_->time_decay_weight.at(0) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s0");
+  parameters_->time_decay_weight.at(1) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s1");
+  parameters_->time_decay_weight.at(2) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s2");
+  parameters_->time_decay_weight.at(3) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s3");
+  parameters_->time_decay_weight.at(4) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s4");
+  parameters_->time_decay_weight.at(5) =
+    declare_parameter<std::vector<double>>("time_decay_weight.s5");
+  parameters_->score_weight = declare_parameter<std::vector<double>>("score_weight");
 }
 
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
@@ -34,56 +62,51 @@ void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   -> Trajectories::ConstSharedPtr
 {
-  const auto param = parameters_->get_params();
+  if (!route_handler_->isHandlerReady()) {
+    return msg;
+  }
 
-  const auto odometry_ptr = sub_odometry_.takeData();
+  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.takeData());
   if (odometry_ptr == nullptr) {
     return msg;
   }
 
-  const auto objects = [this]() {
-    const auto ptr = sub_objects_.takeData();
-    return ptr == nullptr ? PredictedObjects{} : *ptr;
-  }();
-
-  const auto resample_num = static_cast<size_t>(param.resample_num);
+  const auto objects_ptr = std::const_pointer_cast<PredictedObjects>(sub_objects_.takeData());
+  if (objects_ptr == nullptr) {
+    return msg;
+  }
+  const auto preferred_lanes =
+    std::make_shared<lanelet::ConstLanelets>(route_handler_->getPreferredLanelets());
 
   std::vector<Trajectory> trajectories;
   trajectories.reserve(msg->trajectories.size());
 
+  evaluator_->clear();
+
   for (const auto & t : msg->trajectories) {
     const auto points =
-      resampling(t.points, odometry_ptr->pose.pose, param.resample_num, param.time_resolution);
+      trajectory_evaluator::utils::sampling(t.points, odometry_ptr->pose.pose, 20, 0.5);
 
-    std::vector<double> lateral_accel_values;
-    std::vector<double> minimum_ttc_values;
-    std::vector<double> longitudinal_jerk_values;
-    std::vector<double> travel_distance_values;
+    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
+      std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
+      objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
 
-    for (size_t i = 0; i < resample_num - 1; i++) {
-      lateral_accel_values.push_back(lateral_accel(vehicle_info_, points, i));
-      longitudinal_jerk_values.push_back(longitudinal_jerk(points, i));
-      minimum_ttc_values.push_back(minimum_ttc(objects, points, i));
-      travel_distance_values.push_back(travel_distance(points, i));
-    }
+    evaluator_->add(core_data);
+  }
 
-    {
-      lateral_accel_values.push_back(lateral_accel(vehicle_info_, points, resample_num - 1));
-      longitudinal_jerk_values.push_back(0.0);
-      minimum_ttc_values.push_back(minimum_ttc(objects, points, resample_num - 1));
-      travel_distance_values.push_back(travel_distance(points, resample_num - 1));
-    }
+  evaluator_->setup(previous_points_);
 
-    const auto score =
-      param.weight.w0 * lateral_comfortability(lateral_accel_values, resample_num) +
-      param.weight.w1 * longitudinal_comfortability(longitudinal_jerk_values, resample_num) +
-      param.weight.w2 * efficiency(travel_distance_values, resample_num) +
-      param.weight.w3 * safety(minimum_ttc_values, resample_num);
+  const auto best_data = evaluator_->best(parameters_);
+  previous_points_ = best_data == nullptr ? nullptr : best_data->points();
+
+  evaluator_->show();
+
+  for (const auto & result : evaluator_->results()) {
     const auto scored_trajectory = autoware_new_planning_msgs::build<Trajectory>()
-                                     .header(t.header)
-                                     .generator_id(t.generator_id)
-                                     .points(t.points)
-                                     .score(score);
+                                     .header(result->header())
+                                     .generator_id(result->uuid())
+                                     .points(*result->original())
+                                     .score(result->total());
     trajectories.push_back(scored_trajectory);
   }
 
