@@ -21,6 +21,8 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
+#include <lanelet2_core/geometry/LineString.h>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -41,22 +43,54 @@ BagEvaluator::BagEvaluator(
   odometry_{std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
               ->get(bag_data->timestamp)},
   objects_{objects(bag_data, parameters)},
-  ground_truth_{ground_truth(bag_data, parameters)},
-  augment_data_{augment_data(bag_data, vehicle_info, parameters)}
+  preferred_lanes_{preferred_lanes(bag_data, route_handler)}
 {
+  // add actual driving data
   {
     const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
-      ground_truth_, objects_, odometry_, "ground_truth");
+      ground_truth(bag_data, parameters), objects_, odometry_, preferred_lanes_, "ground_truth");
 
     add(core_data);
   }
 
-  for (const auto & points : augment_data_) {
-    const auto core_data =
-      std::make_shared<trajectory_evaluator::CoreData>(points, objects_, odometry_, "candidates");
+  // data augmentation
+  for (const auto & points : augment_data(bag_data, vehicle_info, parameters)) {
+    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
+      points, objects_, odometry_, preferred_lanes_, "candidates");
 
     add(core_data);
   }
+}
+
+auto BagEvaluator::preferred_lanes(
+  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
+  const -> std::shared_ptr<lanelet::ConstLanelets>
+{
+  const auto lanes = route_handler->getPreferredLanelets();
+
+  const auto odometry =
+    std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
+      ->get(bag_data->timestamp);
+
+  lanelet::ConstLanelet nearest{};
+  if (!route_handler->getClosestPreferredLaneletWithinRoute(odometry->pose.pose, &nearest)) {
+    RCLCPP_ERROR(rclcpp::get_logger(__func__), "couldn't find nearest preferred lane.");
+  }
+
+  const auto itr = std::find_if(lanes.begin(), lanes.end(), [&nearest](const auto & lanelet) {
+    return lanelet.id() == nearest.id();
+  });
+
+  double length = 0.0;
+
+  const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>();
+  std::for_each(itr, lanes.end(), [&length, &preferred_lanes](const auto & lanelet) {
+    length += static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
+    constexpr double threshold = 150.0;
+    if (length < threshold) preferred_lanes->push_back(lanelet);
+  });
+
+  return preferred_lanes;
 }
 
 auto BagEvaluator::objects(
