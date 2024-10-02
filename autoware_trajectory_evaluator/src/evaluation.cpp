@@ -30,7 +30,7 @@ DataInterface::DataInterface(
   route_handler_{route_handler},
   vehicle_info_{vehicle_info},
   metrics_(static_cast<size_t>(METRIC::SIZE), std::vector<double>(core_data->points->size(), 0.0)),
-  scores_(static_cast<size_t>(SCORE::SIZE), 0.0)
+  scores_(std::make_shared<std::vector<double>>(static_cast<size_t>(SCORE::SIZE), 0.0))
 {
   for (size_t i = 0; i < core_data_->points->size(); i++) {
     metrics_.at(static_cast<size_t>(METRIC::LATERAL_ACCEL)).at(i) = lateral_accel(i);
@@ -57,15 +57,15 @@ void DataInterface::setup(const std::shared_ptr<TrajectoryPoints> & previous_poi
 
 void DataInterface::compress(const std::vector<std::vector<double>> & weight)
 {
-  scores_.at(static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY)) =
+  scores_->at(static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY)) =
     compress(weight, METRIC::LATERAL_ACCEL);
-  scores_.at(static_cast<size_t>(SCORE::LONGITUDINAL_COMFORTABILITY)) =
+  scores_->at(static_cast<size_t>(SCORE::LONGITUDINAL_COMFORTABILITY)) =
     compress(weight, METRIC::LONGITUDINAL_JERK);
-  scores_.at(static_cast<size_t>(SCORE::EFFICIENCY)) = compress(weight, METRIC::TRAVEL_DISTANCE);
-  scores_.at(static_cast<size_t>(SCORE::SAFETY)) = compress(weight, METRIC::MINIMUM_TTC);
-  scores_.at(static_cast<size_t>(SCORE::ACHIEVABILITY)) =
+  scores_->at(static_cast<size_t>(SCORE::EFFICIENCY)) = compress(weight, METRIC::TRAVEL_DISTANCE);
+  scores_->at(static_cast<size_t>(SCORE::SAFETY)) = compress(weight, METRIC::MINIMUM_TTC);
+  scores_->at(static_cast<size_t>(SCORE::ACHIEVABILITY)) =
     compress(weight, METRIC::LATERAL_DEVIATION);
-  scores_.at(static_cast<size_t>(SCORE::CONSISTENCY)) =
+  scores_->at(static_cast<size_t>(SCORE::CONSISTENCY)) =
     compress(weight, METRIC::TRAJECTORY_DEVIATION);
 }
 
@@ -111,8 +111,8 @@ double DataInterface::trajectory_deviation(const size_t idx) const
 
   if (idx + 1 > previous_points_->size()) return 0.0;
 
-  const auto & p1 = autoware::universe_utils::getPose(core_data_->points->at(idx));
-  const auto & p2 = autoware::universe_utils::getPose(previous_points_->at(idx));
+  const auto & p1 = core_data_->points->at(idx).pose;
+  const auto & p2 = previous_points_->at(idx).pose;
   return autoware::universe_utils::calcSquaredDistance2d(p1, p2);
 }
 
@@ -125,8 +125,8 @@ bool DataInterface::feasible() const
 void DataInterface::normalize(
   const double min, const double max, const size_t score_type, const bool flip)
 {
-  scores_.at(score_type) = flip ? (max - scores_.at(score_type)) / (max - min)
-                                : (scores_.at(score_type) - min) / (max - min);
+  scores_->at(score_type) = flip ? (max - scores_->at(score_type)) / (max - min)
+                                 : (scores_->at(score_type) - min) / (max - min);
 }
 
 auto DataInterface::compress(
@@ -139,36 +139,32 @@ auto DataInterface::compress(
 
 auto DataInterface::score(const SCORE & score_type) const -> double
 {
-  return scores_.at(static_cast<size_t>(score_type));
+  return scores_->at(static_cast<size_t>(score_type));
 }
 
 void DataInterface::weighting(const std::vector<double> & weight)
 {
-  total_ = std::inner_product(weight.begin(), weight.end(), scores_.begin(), 0.0);
+  total_ = std::inner_product(weight.begin(), weight.end(), (*scores_).begin(), 0.0);
 }
 
 void Evaluator::normalize()
 {
-  const auto range = [this](const size_t idx) {
-    const auto min_itr = std::min_element(
-      results_.begin(), results_.end(),
-      [&idx](const auto & a, const auto & b) { return a->scores().at(idx) < b->scores().at(idx); });
-    const auto max_itr = std::max_element(
-      results_.begin(), results_.end(),
-      [&idx](const auto & a, const auto & b) { return a->scores().at(idx) < b->scores().at(idx); });
-
-    const auto & min = (*min_itr)->scores().at(idx);
-    const auto & max = (*max_itr)->scores().at(idx);
-
+  const auto range = [this](const auto & score_type) {
+    double min = std::numeric_limits<double>::max();
+    double max = std::numeric_limits<double>::lowest();
+    for (const auto & result : results_) {
+      min = std::min(min, result->score(score_type));
+      max = std::max(max, result->score(score_type));
+    }
     return std::make_pair(min, max);
   };
 
-  const auto [s0_min, s0_max] = range(static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY));
-  const auto [s1_min, s1_max] = range(static_cast<size_t>(SCORE::LONGITUDINAL_COMFORTABILITY));
-  const auto [s2_min, s2_max] = range(static_cast<size_t>(SCORE::EFFICIENCY));
-  const auto [s3_min, s3_max] = range(static_cast<size_t>(SCORE::SAFETY));
-  const auto [s4_min, s4_max] = range(static_cast<size_t>(SCORE::ACHIEVABILITY));
-  const auto [s5_min, s5_max] = range(static_cast<size_t>(SCORE::CONSISTENCY));
+  const auto [s0_min, s0_max] = range(SCORE::LATERAL_COMFORTABILITY);
+  const auto [s1_min, s1_max] = range(SCORE::LONGITUDINAL_COMFORTABILITY);
+  const auto [s2_min, s2_max] = range(SCORE::EFFICIENCY);
+  const auto [s3_min, s3_max] = range(SCORE::SAFETY);
+  const auto [s4_min, s4_max] = range(SCORE::ACHIEVABILITY);
+  const auto [s5_min, s5_max] = range(SCORE::CONSISTENCY);
 
   for (auto & data : results_) {
     data->normalize(s0_min, s0_max, static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY), true);

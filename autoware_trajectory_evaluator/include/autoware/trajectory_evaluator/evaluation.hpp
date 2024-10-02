@@ -50,7 +50,7 @@ public:
 
   auto score(const SCORE & score_type) const -> double;
 
-  auto scores() const -> std::vector<double> { return scores_; }
+  auto scores() const -> std::shared_ptr<std::vector<double>> { return scores_; }
 
   auto points() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->points; }
 
@@ -84,7 +84,7 @@ private:
 
   std::vector<std::vector<double>> metrics_;
 
-  std::vector<double> scores_;
+  std::shared_ptr<std::vector<double>> scores_;
 
   double total_;
 };
