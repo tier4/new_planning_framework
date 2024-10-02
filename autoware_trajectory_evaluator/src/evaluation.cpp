@@ -36,17 +36,25 @@ DataInterface::DataInterface(
   metrics_(static_cast<size_t>(METRIC::SIZE), std::vector<double>(core_data->points->size(), 0.0)),
   scores_(static_cast<size_t>(SCORE::SIZE), 0.0)
 {
-  evaluate();
-}
-
-void DataInterface::evaluate()
-{
   for (size_t i = 0; i < core_data_->points->size(); i++) {
     metrics_.at(static_cast<size_t>(METRIC::LATERAL_ACCEL)).at(i) = lateral_accel(i);
     metrics_.at(static_cast<size_t>(METRIC::LONGITUDINAL_JERK)).at(i) = longitudinal_jerk(i);
     metrics_.at(static_cast<size_t>(METRIC::MINIMUM_TTC)).at(i) = minimum_ttc(i);
     metrics_.at(static_cast<size_t>(METRIC::TRAVEL_DISTANCE)).at(i) = travel_distance(i);
     metrics_.at(static_cast<size_t>(METRIC::LATERAL_DEVIATION)).at(i) = lateral_deviation(i);
+  }
+}
+
+void DataInterface::set_previous_points(const std::shared_ptr<TrajectoryPoints> & previous_points)
+{
+  previous_points_ = previous_points;
+}
+
+void DataInterface::setup(const std::shared_ptr<TrajectoryPoints> & previous_points)
+{
+  set_previous_points(previous_points);
+
+  for (size_t i = 0; i < core_data_->points->size(); i++) {
     metrics_.at(static_cast<size_t>(METRIC::TRAJECTORY_DEVIATION)).at(i) = trajectory_deviation(i);
   }
 }
@@ -103,12 +111,12 @@ double DataInterface::lateral_deviation(const size_t idx) const
 
 double DataInterface::trajectory_deviation(const size_t idx) const
 {
-  if (core_data_->previous_points == nullptr) return 0.0;
+  if (previous_points_ == nullptr) return 0.0;
 
-  if (idx + 1 > core_data_->previous_points->size()) return 0.0;
+  if (idx + 1 > previous_points_->size()) return 0.0;
 
   const auto & p1 = autoware::universe_utils::getPose(core_data_->points->at(idx));
-  const auto & p2 = autoware::universe_utils::getPose(core_data_->previous_points->at(idx));
+  const auto & p2 = autoware::universe_utils::getPose(previous_points_->at(idx));
   return autoware::universe_utils::calcSquaredDistance2d(p1, p2);
 }
 
@@ -236,6 +244,13 @@ void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
   const auto ptr = std::make_shared<DataInterface>(
     core_data, route_handler_, preferred_lanes_nearby, vehicle_info_);
   results_.push_back(ptr);
+}
+
+void Evaluator::setup(const std::shared_ptr<TrajectoryPoints> & previous_points)
+{
+  std::for_each(results_.begin(), results_.end(), [&previous_points](const auto & result) {
+    result->setup(previous_points);
+  });
 }
 
 auto Evaluator::best(

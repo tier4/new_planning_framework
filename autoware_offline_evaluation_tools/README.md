@@ -1,13 +1,9 @@
 # Offline Evaluation Tools
 
-<div align="center">
-  <img src="./docs/planning_data_analyzer.png" width=100%>
-</div>
-
 ## Usage
 
 ```sh
-ros2 launch autoware_planning_data_analyzer behavior_analyzer.launch.xml bag_path:=<ROSBAG>
+ros2 launch autoware_offline_evaluation_tools offline_evaluator.launch.xml bag_path:=<ROSBAG> map_path:=<MAP> vehicle_model:=<VEHICLE> sensor_model:=<SENSOR>
 ```
 
 ## Output

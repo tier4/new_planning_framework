@@ -34,19 +34,7 @@ public:
   BagEvaluator(
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
     const std::shared_ptr<VehicleInfo> & vehicle_info,
-    const std::shared_ptr<DataAugmentParameters> & parameters)
-  : trajectory_evaluator::Evaluator{route_handler, vehicle_info},
-    tf_{std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
-          ->get(bag_data->timestamp)},
-    odometry_{std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-                ->get(bag_data->timestamp)},
-    objects_{objects(bag_data, parameters)},
-    ground_truth_{ground_truth(bag_data, parameters)},
-    augment_data_{augment_data(bag_data, vehicle_info, parameters)}
-  {
-  }
-
-  void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
+    const std::shared_ptr<DataAugmentParameters> & parameters);
 
   auto loss(const std::shared_ptr<EvaluatorParameters> & parameters)
     -> std::pair<double, std::shared_ptr<TrajectoryPoints>>;
