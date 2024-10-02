@@ -324,8 +324,8 @@ void OfflineEvaluatorNode::weight(
     RCLCPP_INFO_STREAM(get_logger(), ss.str());
   };
 
-  const size_t thread_num =
-    autoware::universe_utils::getOrDeclareParameter<int>(*this, "grid_seach.thread_num");
+  // const size_t thread_num =
+  //   autoware::universe_utils::getOrDeclareParameter<int>(*this, "grid_seach.thread_num");
   const auto time_step =
     autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.time_step");
 
@@ -374,18 +374,20 @@ void OfflineEvaluatorNode::weight(
       }
     };
 
-    size_t i = 0;
-    while (rclcpp::ok()) {
-      std::vector<std::thread> threads;
-      for (size_t thread_id = 0; thread_id < thread_num; thread_id++) {
-        threads.emplace_back(update, i + thread_id);
-      }
+    // TODO(satoshi-ota): use multithread
+    // size_t i = 0;
+    // while (rclcpp::ok()) {
+    //   std::vector<std::thread> threads;
+    //   for (size_t thread_id = 0; thread_id < thread_num; thread_id++) {
+    //     threads.emplace_back(update, i + thread_id);
+    //   }
+    //   for (auto & t : threads) t.join();
+    //   if (i + 1 >= weight_grid.size()) break;
+    //   i += thread_num;
+    // }
 
-      for (auto & t : threads) t.join();
-
-      if (i + 1 >= weight_grid.size()) break;
-
-      i += thread_num;
+    for (size_t i = 0; i < weight_grid.size(); i++) {
+      update(i);
     }
 
     show_best_result();

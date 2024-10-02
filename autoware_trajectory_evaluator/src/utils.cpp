@@ -113,7 +113,7 @@ auto to_marker(
   if (data == nullptr) return Marker{};
 
   const auto idx = static_cast<size_t>(score_type);
-  const auto score = data->scores().at(idx);
+  const auto score = data->scores()->at(idx);
   std::stringstream ss;
   ss << magic_enum::enum_name(score_type);
 
