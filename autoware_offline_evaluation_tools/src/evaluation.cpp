@@ -31,6 +31,34 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
+BagEvaluator::BagEvaluator(
+  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+  const std::shared_ptr<VehicleInfo> & vehicle_info,
+  const std::shared_ptr<DataAugmentParameters> & parameters)
+: trajectory_evaluator::Evaluator{route_handler, vehicle_info},
+  tf_{std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
+        ->get(bag_data->timestamp)},
+  odometry_{std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
+              ->get(bag_data->timestamp)},
+  objects_{objects(bag_data, parameters)},
+  ground_truth_{ground_truth(bag_data, parameters)},
+  augment_data_{augment_data(bag_data, vehicle_info, parameters)}
+{
+  {
+    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
+      ground_truth_, objects_, odometry_, "ground_truth");
+
+    add(core_data);
+  }
+
+  for (const auto & points : augment_data_) {
+    const auto core_data =
+      std::make_shared<trajectory_evaluator::CoreData>(points, objects_, odometry_, "candidates");
+
+    add(core_data);
+  }
+}
+
 auto BagEvaluator::objects(
   const std::shared_ptr<BagData> & bag_data,
   const std::shared_ptr<DataAugmentParameters> & parameters) const
@@ -157,23 +185,6 @@ auto BagEvaluator::augment_data(
   }
 
   return augment_data;
-}
-
-void BagEvaluator::setup(const std::shared_ptr<TrajectoryPoints> & previous_points)
-{
-  {
-    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
-      ground_truth_, previous_points, objects_, odometry_, "ground_truth");
-
-    add(core_data);
-  }
-
-  for (const auto & points : augment_data_) {
-    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
-      points, previous_points, objects_, odometry_, "candidates");
-
-    add(core_data);
-  }
 }
 
 auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)

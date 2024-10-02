@@ -34,6 +34,10 @@ public:
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
     const std::shared_ptr<VehicleInfo> & vehicle_info);
 
+  void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
+
+  void set_previous_points(const std::shared_ptr<TrajectoryPoints> & previous_points);
+
   void compress(const std::vector<std::vector<double>> & weight);
 
   void normalize(
@@ -73,6 +77,8 @@ private:
 
   std::shared_ptr<CoreData> core_data_;
 
+  std::shared_ptr<TrajectoryPoints> previous_points_;
+
   std::shared_ptr<RouteHandler> route_handler_;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
@@ -97,6 +103,8 @@ public:
   }
 
   void add(const std::shared_ptr<CoreData> & core_data);
+
+  void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
 
   auto best(
     const std::shared_ptr<EvaluatorParameters> & parameters,

@@ -29,7 +29,7 @@
     </include>
   </group>
 
-  <node_container pkg="rclcpp_components" exec="component_container" name="behavior_analyzer_container" namespace="" output="screen">
+  <node_container pkg="rclcpp_components" exec="component_container" name="offline_evaluator_container" namespace="" output="screen">
     <composable_node pkg="autoware_offline_evaluation_tools" plugin="autoware::trajectory_selector::offline_evaluation_tools::OfflineEvaluatorNode" name="offline_evaluator">
       <param name="bag_path" value="$(var bag_path)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
