@@ -123,10 +123,15 @@ bool DataInterface::feasible() const
 }
 
 void DataInterface::normalize(
-  const double min, const double max, const size_t score_type, const bool flip)
+  const double min, const double max, const SCORE & score_type, const bool flip)
 {
-  scores_->at(score_type) = flip ? (max - scores_->at(score_type)) / (max - min)
-                                 : (scores_->at(score_type) - min) / (max - min);
+  const auto idx = static_cast<size_t>(score_type);
+  if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
+    scores_->at(idx) = 1.0;
+  } else {
+    scores_->at(idx) =
+      flip ? (max - scores_->at(idx)) / (max - min) : (scores_->at(idx) - min) / (max - min);
+  }
 }
 
 auto DataInterface::compress(
@@ -149,6 +154,8 @@ void DataInterface::weighting(const std::vector<double> & weight)
 
 void Evaluator::normalize()
 {
+  if (results_.size() < 2) return;
+
   const auto range = [this](const auto & score_type) {
     double min = std::numeric_limits<double>::max();
     double max = std::numeric_limits<double>::lowest();
@@ -167,12 +174,12 @@ void Evaluator::normalize()
   const auto [s5_min, s5_max] = range(SCORE::CONSISTENCY);
 
   for (auto & data : results_) {
-    data->normalize(s0_min, s0_max, static_cast<size_t>(SCORE::LATERAL_COMFORTABILITY), true);
-    data->normalize(s1_min, s1_max, static_cast<size_t>(SCORE::LONGITUDINAL_COMFORTABILITY), true);
-    data->normalize(s2_min, s2_max, static_cast<size_t>(SCORE::EFFICIENCY));
-    data->normalize(s3_min, s3_max, static_cast<size_t>(SCORE::SAFETY));
-    data->normalize(s4_min, s4_max, static_cast<size_t>(SCORE::ACHIEVABILITY), true);
-    data->normalize(s5_min, s5_max, static_cast<size_t>(SCORE::CONSISTENCY), true);
+    data->normalize(s0_min, s0_max, SCORE::LATERAL_COMFORTABILITY, true);
+    data->normalize(s1_min, s1_max, SCORE::LONGITUDINAL_COMFORTABILITY, true);
+    data->normalize(s2_min, s2_max, SCORE::EFFICIENCY);
+    data->normalize(s3_min, s3_max, SCORE::SAFETY);
+    data->normalize(s4_min, s4_max, SCORE::ACHIEVABILITY, true);
+    data->normalize(s5_min, s5_max, SCORE::CONSISTENCY, true);
   }
 }
 
@@ -285,6 +292,7 @@ void Evaluator::show() const
   std::stringstream ss;
   ss << std::fixed << std::setprecision(2) << "\n";
   // clang-format off
+  ss << " size              :" << results_.size()                                       << "\n";
   ss << " tag               :" << best_data->tag()                                      << "\n";
   ss << " lat comfortability:" << best_data->score(SCORE::LATERAL_COMFORTABILITY)       << " mean:" << s0.first << " std:" << std::sqrt(s0.second) << "\n"; // NOLINT
   ss << " lon comfortability:" << best_data->score(SCORE::LONGITUDINAL_COMFORTABILITY)  << " mean:" << s1.first << " std:" << std::sqrt(s1.second) << "\n"; // NOLINT

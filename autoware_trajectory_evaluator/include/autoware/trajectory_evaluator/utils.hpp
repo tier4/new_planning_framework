@@ -16,7 +16,6 @@
 #define AUTOWARE__TRAJECTORY_EVALUATOR__UTILS_HPP_
 
 #include "autoware/trajectory_evaluator/evaluation.hpp"
-#include "autoware/trajectory_evaluator/type_alias.hpp"
 
 #include <memory>
 
@@ -25,6 +24,10 @@ namespace autoware::trajectory_selector::trajectory_evaluator::utils
 auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
   const std::shared_ptr<PredictedObjects> & objects, const size_t idx) -> double;
+
+auto sampling(
+  const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
+  const double time_resolution) -> TrajectoryPoints;
 
 auto to_marker(
   const std::shared_ptr<DataInterface> & data, const SCORE & score_type, const size_t id) -> Marker;

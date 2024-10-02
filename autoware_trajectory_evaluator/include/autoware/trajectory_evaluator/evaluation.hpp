@@ -40,7 +40,7 @@ public:
   void compress(const std::vector<std::vector<double>> & weight);
 
   void normalize(
-    const double min, const double max, const size_t score_type, const bool flip = false);
+    const double min, const double max, const SCORE & score_type, const bool flip = false);
 
   void weighting(const std::vector<double> & weight);
 
@@ -53,6 +53,12 @@ public:
   auto scores() const -> std::shared_ptr<std::vector<double>> { return scores_; }
 
   auto points() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->points; }
+
+  auto original() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->original; }
+
+  auto header() const -> Header { return core_data_->header; }
+
+  auto uuid() const -> UUID { return core_data_->generator_id; }
 
   auto tag() const -> std::string { return core_data_->tag; }
 
@@ -106,6 +112,8 @@ public:
   auto best(
     const std::shared_ptr<EvaluatorParameters> & parameters,
     const std::string & exclude = "") -> std::shared_ptr<DataInterface>;
+
+  void clear() { results_.clear(); }
 
   auto results() const -> std::vector<std::shared_ptr<DataInterface>> { return results_; }
 

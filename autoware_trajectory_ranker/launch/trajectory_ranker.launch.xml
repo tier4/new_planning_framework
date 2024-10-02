@@ -1,9 +1,0 @@
-<launch>
-  <arg name="input"/>
-  <arg name="output"/>
-
-  <node pkg="autoware_trajectory_ranker" exec="autoware_trajectory_ranker_node" name="trajectory_ranker" output="screen">
-    <remap from="~/input/trajectories" to="$(var input)"/>
-    <remap from="~/output/trajectories" to="$(var output)"/>
-  </node>
-</launch>

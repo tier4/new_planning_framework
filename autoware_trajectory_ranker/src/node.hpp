@@ -15,9 +15,10 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
+#include "autoware/trajectory_evaluator/evaluation.hpp"
 #include "autoware/trajectory_filter_interface/interface.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
-#include "trajectory_ranker_param.hpp"
+#include "type_alias.hpp"
 
 #include <memory>
 #include <vector>
@@ -41,9 +42,19 @@ private:
   autoware::universe_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
     this, "~/input/odometry"};
 
-  std::shared_ptr<parameters::ParamListener> parameters_;
+  rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
 
-  VehicleInfo vehicle_info_;
+  rclcpp::Subscription<LaneletRoute>::SharedPtr sub_route_;
+
+  std::shared_ptr<trajectory_evaluator::Evaluator> evaluator_;
+
+  std::shared_ptr<RouteHandler> route_handler_;
+
+  std::shared_ptr<trajectory_evaluator::EvaluatorParameters> parameters_;
+
+  std::shared_ptr<VehicleInfo> vehicle_info_;
+
+  std::shared_ptr<TrajectoryPoints> previous_points_;
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker
