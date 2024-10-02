@@ -46,6 +46,10 @@ public:
   auto marker() const -> std::shared_ptr<MarkerArray>;
 
 private:
+  auto preferred_lanes(
+    const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
+    const -> std::shared_ptr<lanelet::ConstLanelets>;
+
   auto objects(
     const std::shared_ptr<BagData> & bag_data,
     const std::shared_ptr<DataAugmentParameters> & parameters) const
@@ -67,9 +71,7 @@ private:
 
   std::shared_ptr<PredictedObjects> objects_;
 
-  std::shared_ptr<TrajectoryPoints> ground_truth_;
-
-  std::vector<std::shared_ptr<TrajectoryPoints>> augment_data_;
+  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

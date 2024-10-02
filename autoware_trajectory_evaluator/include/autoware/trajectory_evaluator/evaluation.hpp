@@ -31,7 +31,6 @@ public:
   DataInterface(
     const std::shared_ptr<CoreData> & core_data,
     const std::shared_ptr<RouteHandler> & route_handler,
-    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
     const std::shared_ptr<VehicleInfo> & vehicle_info);
 
   void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
@@ -80,8 +79,6 @@ private:
   std::shared_ptr<TrajectoryPoints> previous_points_;
 
   std::shared_ptr<RouteHandler> route_handler_;
-
-  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
 
   std::shared_ptr<VehicleInfo> vehicle_info_;
 

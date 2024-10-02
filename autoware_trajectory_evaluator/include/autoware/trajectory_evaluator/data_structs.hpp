@@ -60,8 +60,8 @@ struct CoreData
   CoreData(
     const std::shared_ptr<TrajectoryPoints> & points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
-    const std::string & tag)
-  : points{points}, objects{objects}, odometry{odometry}, tag{tag}
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const std::string & tag)
+  : points{points}, objects{objects}, odometry{odometry}, preferred_lanes{preferred_lanes}, tag{tag}
   {
   }
 
@@ -70,6 +70,8 @@ struct CoreData
   std::shared_ptr<PredictedObjects> objects;
 
   std::shared_ptr<Odometry> odometry;
+
+  std::shared_ptr<lanelet::ConstLanelets> preferred_lanes;
 
   std::string tag;
 };
