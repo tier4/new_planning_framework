@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_FILTER_INTERFACE__INTERFACE_HPP_
-#define AUTOWARE__TRAJECTORY_FILTER_INTERFACE__INTERFACE_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE_HPP_
 
-#include "autoware/trajectory_filter_interface/type_alias.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -49,4 +49,4 @@ private:
 
 }  // namespace autoware::trajectory_selector
 
-#endif  // AUTOWARE__TRAJECTORY_FILTER_INTERFACE__INTERFACE_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE_HPP_

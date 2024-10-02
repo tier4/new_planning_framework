@@ -16,7 +16,7 @@
 #define NODE_HPP_
 
 #include "autoware/trajectory_evaluator/evaluation.hpp"
-#include "autoware/trajectory_filter_interface/interface.hpp"
+#include "autoware/trajectory_selector_common/interface.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "type_alias.hpp"
 

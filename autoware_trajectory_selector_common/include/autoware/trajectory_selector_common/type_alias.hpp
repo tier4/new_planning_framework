@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_FILTER_INTERFACE__TYPE_ALIAS_HPP_
-#define AUTOWARE__TRAJECTORY_FILTER_INTERFACE__TYPE_ALIAS_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_
 
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 
@@ -60,4 +60,4 @@ using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 }  // namespace autoware::trajectory_selector
 
-#endif  // AUTOWARE__TRAJECTORY_FILTER_INTERFACE__TYPE_ALIAS_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_
