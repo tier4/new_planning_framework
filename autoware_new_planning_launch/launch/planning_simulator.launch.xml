@@ -11,9 +11,11 @@
 
   <!-- option -->
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
+  <arg name="rviz_config" default="$(find-pkg-share autoware_new_planning_launch)/rviz/autoware.rviz" description="rviz config"/>
 
   <group scoped="false">
     <include file="$(find-pkg-share autoware_launch)/launch/planning_simulator.launch.xml">
+      <arg name="rviz_config" value="$(var rviz_config)"/>
       <arg name="map_path" value="$(var map_path)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
       <arg name="sensor_model" value="$(var sensor_model)"/>

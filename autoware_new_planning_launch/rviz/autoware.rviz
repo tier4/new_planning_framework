@@ -804,8 +804,7 @@ Visualization Manager:
                     Alpha: 0.999
                     Color: 119; 11; 32
                   Name: PredictedObjects
-                  Namespaces:
-                    path: false
+                  Namespaces: {}
                   PEDESTRIAN:
                     Alpha: 0.999
                     Color: 255; 192; 203
@@ -2393,7 +2392,7 @@ Visualization Manager:
               Value: true
           Enabled: false
           Name: Diagnostic
-      Enabled: false
+      Enabled: true
       Name: Planning
     - Class: rviz_common/Group
       Displays:
@@ -3800,7 +3799,7 @@ Visualization Manager:
       Name: Current View
       Near Clip Distance: 0.009999999776482582
       Scale: 10
-      Target Frame: base_link
+      Target Frame: viewer
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0
       Y: 0
@@ -3836,7 +3835,7 @@ Visualization Manager:
         Name: TopDownOrtho
         Near Clip Distance: 0.009999999776482582
         Scale: 10
-        Target Frame: base_link
+        Target Frame: viewer
         Value: TopDownOrtho (rviz)
         X: 0
         Y: 0

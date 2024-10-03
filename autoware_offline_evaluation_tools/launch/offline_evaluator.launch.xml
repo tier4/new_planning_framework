@@ -33,7 +33,8 @@
     <composable_node pkg="autoware_offline_evaluation_tools" plugin="autoware::trajectory_selector::offline_evaluation_tools::OfflineEvaluatorNode" name="offline_evaluator">
       <param name="bag_path" value="$(var bag_path)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
-      <remap from="input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
     </composable_node>
 
     <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
