@@ -61,6 +61,7 @@
       <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
+      <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
     </composable_node>
 
     <!-- select best trajectory -->

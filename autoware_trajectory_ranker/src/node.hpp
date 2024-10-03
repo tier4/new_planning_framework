@@ -39,6 +39,10 @@ private:
 
   auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
 
+  void visualize(
+    const std::shared_ptr<trajectory_evaluator::Evaluator> evaluator,
+    const std::shared_ptr<trajectory_evaluator::DataInterface> & best_data) const;
+
   autoware::universe_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};
 
@@ -48,6 +52,8 @@ private:
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
 
   rclcpp::Subscription<LaneletRoute>::SharedPtr sub_route_;
+
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 
   std::shared_ptr<trajectory_evaluator::Evaluator> evaluator_;
 

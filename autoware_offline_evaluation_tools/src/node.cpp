@@ -35,14 +35,14 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   vehicle_info_{std::make_shared<VehicleInfo>(
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
 {
-  pub_marker_ = create_publisher<MarkerArray>("~/marker", 1);
+  pub_marker_ = create_publisher<MarkerArray>("~/output/markers", 1);
 
   pub_objects_ = create_publisher<PredictedObjects>(TOPIC::OBJECTS, rclcpp::QoS(1));
 
   pub_tf_ = create_publisher<TFMessage>(TOPIC::TF, rclcpp::QoS(1));
 
   sub_map_ = create_subscription<LaneletMapBin>(
-    "input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
+    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
 
   srv_play_ = this->create_service<Trigger>(

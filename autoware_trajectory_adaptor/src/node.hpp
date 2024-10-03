@@ -19,14 +19,10 @@
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
-#include "visualization_msgs/msg/marker.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
 
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
 
-using visualization_msgs::msg::Marker;
-using visualization_msgs::msg::MarkerArray;
 using InputMsgType = autoware_new_planning_msgs::msg::Trajectories;
 using OutputMsgType = autoware_planning_msgs::msg::Trajectory;
 
@@ -38,13 +34,9 @@ public:
 private:
   void process(const InputMsgType::ConstSharedPtr msg);
 
-  void visualize(const InputMsgType::ConstSharedPtr msg);
-
   rclcpp::Subscription<InputMsgType>::SharedPtr sub_trajectories_;
 
   rclcpp::Publisher<OutputMsgType>::SharedPtr pub_trajectory_;
-
-  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_adaptor
