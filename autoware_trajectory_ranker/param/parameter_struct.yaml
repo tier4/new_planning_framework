@@ -1,0 +1,64 @@
+evaluation:
+  sample_num:
+    type: int
+    default_value: 20
+    description: trajectory sampling parameter.
+    read_only: false
+
+  resolution:
+    type: double
+    default_value: 0.5
+    description: trajectory sampling parameter.
+    read_only: false
+
+  score_weight:
+    type: double_array
+    description: weight.
+    read_only: false
+    validation:
+      element_bounds<>: [0.0, 1.0]
+      fixed_size<>: [6]
+
+  time_decay_weight:
+    s0:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]
+    s1:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]
+    s2:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]
+    s3:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]
+    s4:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]
+    s5:
+      type: double_array
+      description: weight.
+      read_only: false
+      validation:
+        element_bounds<>: [0.0, 1.0]
+        fixed_size<>: [20]

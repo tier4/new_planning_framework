@@ -25,12 +25,14 @@ namespace autoware::trajectory_selector::trajectory_ranker
 TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)},
+  listener_{std::make_unique<evaluation::ParamListener>(get_node_parameters_interface())},
   route_handler_{std::make_shared<RouteHandler>()},
-  vehicle_info_{std::make_shared<VehicleInfo>(
-    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())},
   previous_points_{nullptr}
 {
-  evaluator_ = std::make_shared<trajectory_evaluator::Evaluator>(route_handler_, vehicle_info_);
+  const auto vehicle_info = std::make_shared<VehicleInfo>(
+    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo());
+
+  evaluator_ = std::make_shared<trajectory_evaluator::Evaluator>(route_handler_, vehicle_info);
 
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
@@ -39,22 +41,6 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
   sub_route_ = create_subscription<LaneletRoute>(
     "~/input/route", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
-
-  parameters_ = std::make_shared<EvaluatorParameters>(declare_parameter<int>("sample_num"));
-  parameters_->resolution = declare_parameter<double>("resolution");
-  parameters_->time_decay_weight.at(0) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s0");
-  parameters_->time_decay_weight.at(1) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s1");
-  parameters_->time_decay_weight.at(2) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s2");
-  parameters_->time_decay_weight.at(3) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s3");
-  parameters_->time_decay_weight.at(4) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s4");
-  parameters_->time_decay_weight.at(5) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s5");
-  parameters_->score_weight = declare_parameter<std::vector<double>>("score_weight");
 }
 
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
@@ -98,7 +84,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
   evaluator_->setup(previous_points_);
 
-  const auto best_data = evaluator_->best(parameters_);
+  const auto best_data = evaluator_->best(parameters());
   previous_points_ = best_data == nullptr ? nullptr : best_data->points();
 
   evaluator_->show();
@@ -119,6 +105,24 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
                                   .generator_info(msg->generator_info);
 
   return std::make_shared<Trajectories>(new_trajectories);
+}
+
+auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParameters>
+{
+  const auto node_params = listener_->get_params();
+
+  const auto parameters = std::make_shared<EvaluatorParameters>(node_params.sample_num);
+
+  parameters->resolution = node_params.resolution;
+  parameters->score_weight = node_params.score_weight;
+  parameters->time_decay_weight.at(0) = node_params.time_decay_weight.s0;
+  parameters->time_decay_weight.at(1) = node_params.time_decay_weight.s1;
+  parameters->time_decay_weight.at(2) = node_params.time_decay_weight.s2;
+  parameters->time_decay_weight.at(3) = node_params.time_decay_weight.s3;
+  parameters->time_decay_weight.at(4) = node_params.time_decay_weight.s4;
+  parameters->time_decay_weight.at(5) = node_params.time_decay_weight.s5;
+
+  return parameters;
 }
 
 void TrajectoryRankerNode::visualize(
