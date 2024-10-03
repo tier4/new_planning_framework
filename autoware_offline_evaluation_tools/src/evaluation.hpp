@@ -15,10 +15,13 @@
 #ifndef EVALUATION_HPP_
 #define EVALUATION_HPP_
 
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
-#include "type_alias.hpp"
+#include "data_structs.hpp"
 
 #include <autoware/trajectory_evaluator/evaluation.hpp>
+
+#include "autoware_planning_msgs/msg/trajectory.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -28,6 +31,9 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
+
+using autoware_planning_msgs::msg::Trajectory;
+
 class BagEvaluator : public trajectory_evaluator::Evaluator
 {
 public:

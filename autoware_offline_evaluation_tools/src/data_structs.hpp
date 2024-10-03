@@ -15,7 +15,7 @@
 #ifndef DATA_STRUCTS_HPP_
 #define DATA_STRUCTS_HPP_
 
-#include "type_alias.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <memory>
 #include <string>
@@ -23,17 +23,6 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-struct TOPIC
-{
-  static std::string TF;
-  static std::string ODOMETRY;
-  static std::string ACCELERATION;
-  static std::string OBJECTS;
-  static std::string TRAJECTORY;
-  static std::string STEERING;
-  static std::string ROUTE;
-};
-
 struct TargetStateParameters
 {
   std::vector<double> lat_positions{};

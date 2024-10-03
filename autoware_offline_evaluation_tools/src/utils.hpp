@@ -15,30 +15,27 @@
 #ifndef UTILS_HPP_
 #define UTILS_HPP_
 
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "autoware_frenet_planner/frenet_planner.hpp"
 #include "autoware_path_sampler/prepare_inputs.hpp"
 #include "autoware_path_sampler/utils/trajectory_utils.hpp"
-#include "evaluation.hpp"
-#include "type_alias.hpp"
+#include "data_structs.hpp"
+
+#include "autoware_planning_msgs/msg/trajectory.hpp"
 
 #include <memory>
 #include <vector>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools::utils
 {
-auto sampling(
-  const Trajectory & trajectory, const Pose & p_ego, const size_t resample_num,
-  const double time_resolution) -> std::vector<TrajectoryPoint>;
+
+using autoware_planning_msgs::msg::Trajectory;
 
 auto augment(
   const Trajectory & trajectory, const Pose & p_ego, const double v_ego, const double a_ego,
   const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters)
   -> std::vector<std::vector<TrajectoryPoint>>;
-
-auto to_marker(
-  const std::shared_ptr<trajectory_evaluator::DataInterface> & data, const SCORE & score_type,
-  const size_t id) -> Marker;
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools::utils
 
 #endif  // UTILS_HPP_

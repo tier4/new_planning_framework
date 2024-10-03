@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "autoware/trajectory_evaluator/utils.hpp"
+#include "autoware/trajectory_selector_common/utils.hpp"
 
 #include "autoware/interpolation/linear_interpolation.hpp"
 #include "autoware/motion_utils/trajectory/interpolation.hpp"
@@ -21,7 +21,7 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
-namespace autoware::trajectory_selector::trajectory_evaluator::utils
+namespace autoware::trajectory_selector::utils
 {
 
 using autoware::universe_utils::createDefaultMarker;
@@ -228,27 +228,20 @@ auto sampling(
 }
 
 auto to_marker(
-  const std::shared_ptr<trajectory_evaluator::DataInterface> & data,
-  const trajectory_evaluator::SCORE & score_type, const size_t id) -> Marker
+  const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,
+  const std::string & ns, const size_t id) -> Marker
 {
-  if (data == nullptr) return Marker{};
-
-  const auto idx = static_cast<size_t>(score_type);
-  const auto score = data->scores()->at(idx);
-  std::stringstream ss;
-  ss << magic_enum::enum_name(score_type);
-
   Marker marker = createDefaultMarker(
-    "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ss.str(), id, Marker::LINE_STRIP,
+    "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
     createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
 
-  if (!data->feasible()) {
-    for (const auto & point : *data->points()) {
+  if (!feasible) {
+    for (const auto & point : *points) {
       marker.points.push_back(point.pose.position);
       marker.colors.push_back(createMarkerColor(0.1, 0.1, 0.1, 0.3));
     }
   } else {
-    for (const auto & point : *data->points()) {
+    for (const auto & point : *points) {
       marker.points.push_back(point.pose.position);
       marker.colors.push_back(createMarkerColor(1.0 - score, score, 0.0, std::min(0.5, score)));
     }
@@ -256,5 +249,4 @@ auto to_marker(
 
   return marker;
 }
-
-}  // namespace autoware::trajectory_selector::trajectory_evaluator::utils
+}  // namespace autoware::trajectory_selector::utils

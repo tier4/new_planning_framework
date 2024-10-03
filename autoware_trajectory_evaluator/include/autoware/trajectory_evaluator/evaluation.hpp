@@ -15,8 +15,8 @@
 #ifndef AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 #define AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 
-#include "autoware/trajectory_evaluator/data_structs.hpp"
-#include "autoware/trajectory_evaluator/type_alias.hpp"
+#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <memory>
 #include <string>
@@ -61,6 +61,8 @@ public:
   auto uuid() const -> UUID { return core_data_->generator_id; }
 
   auto tag() const -> std::string { return core_data_->tag; }
+
+  auto marker() const -> std::shared_ptr<MarkerArray>;
 
 private:
   void evaluate();

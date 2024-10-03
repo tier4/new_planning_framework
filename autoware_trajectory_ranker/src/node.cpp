@@ -14,7 +14,7 @@
 
 #include "node.hpp"
 
-#include "autoware/trajectory_evaluator/utils.hpp"
+#include "autoware/trajectory_selector_common/utils.hpp"
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
@@ -36,8 +36,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
     "~/input/route", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
 
-  parameters_ = std::make_shared<trajectory_evaluator::EvaluatorParameters>(
-    declare_parameter<int>("sample_num"));
+  parameters_ = std::make_shared<EvaluatorParameters>(declare_parameter<int>("sample_num"));
   parameters_->resolution = declare_parameter<double>("resolution");
   parameters_->time_decay_weight.at(0) =
     declare_parameter<std::vector<double>>("time_decay_weight.s0");
@@ -84,10 +83,9 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   evaluator_->clear();
 
   for (const auto & t : msg->trajectories) {
-    const auto points =
-      trajectory_evaluator::utils::sampling(t.points, odometry_ptr->pose.pose, 20, 0.5);
+    const auto points = utils::sampling(t.points, odometry_ptr->pose.pose, 20, 0.5);
 
-    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
+    const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
       objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
 

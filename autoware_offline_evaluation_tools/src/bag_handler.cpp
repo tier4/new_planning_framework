@@ -14,10 +14,18 @@
 
 #include "bag_handler.hpp"
 
-#include "utils.hpp"
+#include "autoware/trajectory_selector_common/utils.hpp"
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
+
+std::string TOPIC::TF = "/tf";                                             // NOLINT
+std::string TOPIC::ODOMETRY = "/localization/kinematic_state";             // NOLINT
+std::string TOPIC::ACCELERATION = "/localization/acceleration";            // NOLINT
+std::string TOPIC::OBJECTS = "/perception/object_recognition/objects";     // NOLINT
+std::string TOPIC::TRAJECTORY = "/planning/scenario_planning/trajectory";  // NOLINT
+std::string TOPIC::STEERING = "/vehicle/status/steering_status";           // NOLINT
+std::string TOPIC::ROUTE = "/planning/mission_planning/route";             // NOLINT
 
 template <>
 bool Buffer<SteeringReport>::ready() const

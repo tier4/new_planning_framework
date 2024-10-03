@@ -15,15 +15,17 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
 #include "evaluation.hpp"
 #include "rosbag2_cpp/reader.hpp"
-#include "type_alias.hpp"
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
-#include <magic_enum.hpp>
 #include <rclcpp/rclcpp.hpp>
+
+#include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <std_srvs/srv/trigger.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -36,6 +38,10 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
+
+using autoware_planning_msgs::msg::Trajectory;
+using std_srvs::srv::Trigger;
+
 class OfflineEvaluatorNode : public rclcpp::Node
 {
 public:
