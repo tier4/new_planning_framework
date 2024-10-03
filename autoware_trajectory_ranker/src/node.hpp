@@ -18,6 +18,7 @@
 #include "autoware/trajectory_evaluator/evaluation.hpp"
 #include "autoware/trajectory_selector_common/interface.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
+#include "autoware_trajectory_ranker_param.hpp"
 
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
 
@@ -39,6 +40,8 @@ private:
 
   auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
 
+  auto parameters() const -> std::shared_ptr<EvaluatorParameters>;
+
   void visualize(
     const std::shared_ptr<trajectory_evaluator::Evaluator> evaluator,
     const std::shared_ptr<trajectory_evaluator::DataInterface> & best_data) const;
@@ -57,11 +60,9 @@ private:
 
   std::shared_ptr<trajectory_evaluator::Evaluator> evaluator_;
 
+  std::unique_ptr<evaluation::ParamListener> listener_;
+
   std::shared_ptr<RouteHandler> route_handler_;
-
-  std::shared_ptr<EvaluatorParameters> parameters_;
-
-  std::shared_ptr<VehicleInfo> vehicle_info_;
 
   std::shared_ptr<TrajectoryPoints> previous_points_;
 };
