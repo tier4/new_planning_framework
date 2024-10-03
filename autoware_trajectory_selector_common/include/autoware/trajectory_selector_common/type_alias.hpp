@@ -12,27 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TYPE_ALIAS_HPP_
-#define TYPE_ALIAS_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <builtin_interfaces/msg/duration.hpp>
 
 #include "autoware_map_msgs/msg/lanelet_map_bin.hpp"
-#include "autoware_new_planning_msgs/msg/trajectory.hpp"
+#include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_perception_msgs/msg/predicted_objects.hpp"
 #include "autoware_planning_msgs/msg/lanelet_route.hpp"
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
+#include "autoware_vehicle_msgs/msg/steering_report.hpp"
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include <tf2_msgs/msg/tf_message.hpp>
 #include <unique_identifier_msgs/msg/uuid.hpp>
 
 #include <vector>
 
-namespace autoware::trajectory_selector::trajectory_ranker
+namespace autoware::trajectory_selector
 {
 // std
 using std::chrono::duration_cast;
@@ -41,12 +43,13 @@ using std::chrono::seconds;
 
 // autoware
 using autoware_map_msgs::msg::LaneletMapBin;
-using autoware_new_planning_msgs::msg::Trajectory;
+using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_perception_msgs::msg::PredictedObjectKinematics;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
 using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::TrajectoryPoint;
+using autoware_vehicle_msgs::msg::SteeringReport;
 using route_handler::RouteHandler;
 using vehicle_info_utils::VehicleInfo;
 
@@ -61,9 +64,10 @@ using geometry_msgs::msg::Twist;
 using geometry_msgs::msg::Vector3;
 using nav_msgs::msg::Odometry;
 using std_msgs::msg::Header;
+using tf2_msgs::msg::TFMessage;
 using unique_identifier_msgs::msg::UUID;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-}  // namespace autoware::trajectory_selector::trajectory_ranker
+}  // namespace autoware::trajectory_selector
 
-#endif  // TYPE_ALIAS_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__TYPE_ALIAS_HPP_

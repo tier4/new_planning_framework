@@ -16,15 +16,18 @@
 #define NODE_HPP_
 
 #include "autoware/trajectory_evaluator/evaluation.hpp"
-#include "autoware/trajectory_filter_interface/interface.hpp"
+#include "autoware/trajectory_selector_common/interface.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
-#include "type_alias.hpp"
+
+#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 
 #include <memory>
 #include <vector>
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
+
+using autoware_new_planning_msgs::msg::Trajectory;
 
 class TrajectoryRankerNode : public TrajectoryFilterInterface
 {
@@ -50,7 +53,7 @@ private:
 
   std::shared_ptr<RouteHandler> route_handler_;
 
-  std::shared_ptr<trajectory_evaluator::EvaluatorParameters> parameters_;
+  std::shared_ptr<EvaluatorParameters> parameters_;
 
   std::shared_ptr<VehicleInfo> vehicle_info_;
 

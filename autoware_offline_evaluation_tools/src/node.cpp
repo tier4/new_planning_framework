@@ -14,9 +14,9 @@
 
 #include "node.hpp"
 
+#include "autoware/trajectory_selector_common/utils.hpp"
 #include "autoware/universe_utils/ros/parameter.hpp"
 #include "autoware/universe_utils/system/stop_watch.hpp"
-#include "utils.hpp"
 
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
@@ -30,7 +30,7 @@ using autoware::universe_utils::Point2d;
 using autoware::universe_utils::Polygon2d;
 
 OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options)
-: Node("path_selector_node", node_options),
+: Node("offline_evaluator_node", node_options),
   route_handler_{std::make_shared<RouteHandler>()},
   vehicle_info_{std::make_shared<VehicleInfo>(
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}

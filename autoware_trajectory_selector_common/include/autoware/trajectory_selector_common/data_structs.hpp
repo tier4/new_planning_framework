@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_EVALUATOR__DATA_STRUCTS_HPP_
-#define AUTOWARE__TRAJECTORY_EVALUATOR__DATA_STRUCTS_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_
 
-#include "autoware/trajectory_evaluator/type_alias.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace autoware::trajectory_selector::trajectory_evaluator
+namespace autoware::trajectory_selector
 {
 enum class METRIC {
   LATERAL_ACCEL = 0,
@@ -67,7 +67,12 @@ struct CoreData
     const std::shared_ptr<TrajectoryPoints> & points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const std::string & tag)
-  : points{points}, objects{objects}, odometry{odometry}, preferred_lanes{preferred_lanes}, tag{tag}
+  : original{points},
+    points{points},
+    objects{objects},
+    odometry{odometry},
+    preferred_lanes{preferred_lanes},
+    tag{tag}
   {
   }
 
@@ -104,6 +109,6 @@ struct CoreData
 
   UUID generator_id;
 };
-}  // namespace autoware::trajectory_selector::trajectory_evaluator
+}  // namespace autoware::trajectory_selector
 
-#endif  // AUTOWARE__TRAJECTORY_EVALUATOR__DATA_STRUCTS_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_

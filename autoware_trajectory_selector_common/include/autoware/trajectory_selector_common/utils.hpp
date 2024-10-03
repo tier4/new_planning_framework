@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_EVALUATOR__UTILS_HPP_
-#define AUTOWARE__TRAJECTORY_EVALUATOR__UTILS_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__UTILS_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__UTILS_HPP_
 
-#include "autoware/trajectory_evaluator/evaluation.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <memory>
+#include <string>
 
-namespace autoware::trajectory_selector::trajectory_evaluator::utils
+namespace autoware::trajectory_selector::utils
 {
 auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
@@ -30,7 +31,8 @@ auto sampling(
   const double time_resolution) -> TrajectoryPoints;
 
 auto to_marker(
-  const std::shared_ptr<DataInterface> & data, const SCORE & score_type, const size_t id) -> Marker;
-}  // namespace autoware::trajectory_selector::trajectory_evaluator::utils
+  const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,
+  const std::string & ns, const size_t id) -> Marker;
+}  // namespace autoware::trajectory_selector::utils
 
-#endif  // AUTOWARE__TRAJECTORY_EVALUATOR__UTILS_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__UTILS_HPP_

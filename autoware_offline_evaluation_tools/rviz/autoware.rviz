@@ -3713,7 +3713,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /behavior_analyzer/marker
+        Value: /offline_evaluator/marker
       Value: true
   Enabled: true
   Global Options:

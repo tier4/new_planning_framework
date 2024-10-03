@@ -14,12 +14,15 @@
 
 #include "evaluation.hpp"
 
+#include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
 #include "data_structs.hpp"
 #include "utils.hpp"
 
+#include <autoware/universe_utils/geometry/geometry.hpp>
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
+#include <magic_enum.hpp>
 
 #include <lanelet2_core/geometry/LineString.h>
 
@@ -47,7 +50,7 @@ BagEvaluator::BagEvaluator(
 {
   // add actual driving data
   {
-    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
+    const auto core_data = std::make_shared<CoreData>(
       ground_truth(bag_data, parameters), objects_, odometry_, preferred_lanes_, "ground_truth");
 
     add(core_data);
@@ -55,8 +58,8 @@ BagEvaluator::BagEvaluator(
 
   // data augmentation
   for (const auto & points : augment_data(bag_data, vehicle_info, parameters)) {
-    const auto core_data = std::make_shared<trajectory_evaluator::CoreData>(
-      points, objects_, odometry_, preferred_lanes_, "candidates");
+    const auto core_data =
+      std::make_shared<CoreData>(points, objects_, odometry_, preferred_lanes_, "candidates");
 
     add(core_data);
   }
@@ -278,12 +281,52 @@ auto BagEvaluator::marker() const -> std::shared_ptr<MarkerArray>
   }
 
   for (size_t i = 0; i < results().size(); ++i) {
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::LATERAL_COMFORTABILITY, i));
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::LONGITUDINAL_COMFORTABILITY, i));
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::EFFICIENCY, i));
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::SAFETY, i));
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::ACHIEVABILITY, i));
-    msg.markers.push_back(utils::to_marker(results().at(i), SCORE::CONSISTENCY, i));
+    const auto result = results().at(i);
+
+    if (result == nullptr) continue;
+
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::LATERAL_COMFORTABILITY);
+      const auto score = result->score(SCORE::LATERAL_COMFORTABILITY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::LONGITUDINAL_COMFORTABILITY);
+      const auto score = result->score(SCORE::LONGITUDINAL_COMFORTABILITY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::EFFICIENCY);
+      const auto score = result->score(SCORE::EFFICIENCY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::SAFETY);
+      const auto score = result->score(SCORE::SAFETY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::ACHIEVABILITY);
+      const auto score = result->score(SCORE::ACHIEVABILITY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
+    {
+      std::stringstream ss;
+      ss << magic_enum::enum_name(SCORE::CONSISTENCY);
+      const auto score = result->score(SCORE::CONSISTENCY);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), ss.str(), i));
+    }
   }
 
   return std::make_shared<MarkerArray>(msg);

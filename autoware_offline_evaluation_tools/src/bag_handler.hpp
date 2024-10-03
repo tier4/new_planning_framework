@@ -15,8 +15,10 @@
 #ifndef BAG_HANDLER_HPP_
 #define BAG_HANDLER_HPP_
 
-#include "data_structs.hpp"
-#include "type_alias.hpp"
+#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
+
+#include "autoware_planning_msgs/msg/trajectory.hpp"
 
 #include <map>
 #include <memory>
@@ -25,6 +27,19 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
+
+using autoware_planning_msgs::msg::Trajectory;
+
+struct TOPIC
+{
+  static std::string TF;
+  static std::string ODOMETRY;
+  static std::string ACCELERATION;
+  static std::string OBJECTS;
+  static std::string TRAJECTORY;
+  static std::string STEERING;
+  static std::string ROUTE;
+};
 
 struct BufferBase
 {

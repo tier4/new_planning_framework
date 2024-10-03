@@ -20,29 +20,12 @@
 #include "autoware_path_sampler/prepare_inputs.hpp"
 #include "autoware_path_sampler/utils/trajectory_utils.hpp"
 
-#include <autoware/universe_utils/ros/marker_helper.hpp>
-#include <magic_enum.hpp>
-
-#include <algorithm>
-#include <limits>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools::utils
 {
-
-using autoware::universe_utils::createDefaultMarker;
-using autoware::universe_utils::createMarkerColor;
-using autoware::universe_utils::createMarkerScale;
-
-struct FrenetPoint
-{
-  double length{0.0};    // longitudinal
-  double distance{0.0};  // lateral
-};
 
 auto convertToTrajectoryPoints(
   const autoware::sampler_common::Trajectory & trajectory,
@@ -67,22 +50,6 @@ auto convertToTrajectoryPoints(
     traj_points.push_back(p);
   }
   return traj_points;
-}
-
-template <class T>
-auto convertToFrenetPoint(const T & points, const Point & search_point_geom, const size_t seg_idx)
-  -> FrenetPoint
-{
-  FrenetPoint frenet_point;
-
-  const double longitudinal_length =
-    autoware::motion_utils::calcLongitudinalOffsetToSegment(points, seg_idx, search_point_geom);
-  frenet_point.length =
-    autoware::motion_utils::calcSignedArcLength(points, 0, seg_idx) + longitudinal_length;
-  frenet_point.distance =
-    autoware::motion_utils::calcLateralOffset(points, search_point_geom, seg_idx);
-
-  return frenet_point;
 }
 
 auto prepareSamplingParameters(
@@ -126,33 +93,6 @@ auto prepareSamplingParameters(
     // if (p.target_state.position.s == max_s) break;
   }
   return sampling_parameters;
-}
-
-auto sampling(
-  const Trajectory & trajectory, const Pose & p_ego, const size_t sample_num,
-  const double resolution) -> std::vector<TrajectoryPoint>
-{
-  const auto ego_seg_idx = autoware::motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
-    trajectory.points, p_ego, 10.0, M_PI_2);
-
-  std::vector<TrajectoryPoint> output;
-  const auto vehicle_pose_frenet =
-    convertToFrenetPoint(trajectory.points, p_ego.position, ego_seg_idx);
-
-  double length = 0.0;
-  for (size_t i = 0; i < sample_num; i++) {
-    const auto pose = autoware::motion_utils::calcInterpolatedPose(
-      trajectory.points, vehicle_pose_frenet.length + length);
-    const auto p_trajectory = autoware::motion_utils::calcInterpolatedPoint(trajectory, pose);
-    output.push_back(p_trajectory);
-
-    const auto pred_accel = p_trajectory.acceleration_mps2;
-    const auto pred_velocity = p_trajectory.longitudinal_velocity_mps;
-
-    length += pred_velocity * resolution + 0.5 * pred_accel * resolution * resolution;
-  }
-
-  return output;
 }
 
 auto augment(
@@ -218,35 +158,4 @@ auto augment(
 
   return output;
 }
-
-auto to_marker(
-  const std::shared_ptr<trajectory_evaluator::DataInterface> & data, const SCORE & score_type,
-  const size_t id) -> Marker
-{
-  if (data == nullptr) return Marker{};
-
-  const auto idx = static_cast<size_t>(score_type);
-  const auto score = data->scores()->at(idx);
-  std::stringstream ss;
-  ss << magic_enum::enum_name(score_type);
-
-  Marker marker = createDefaultMarker(
-    "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ss.str(), id, Marker::LINE_STRIP,
-    createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
-
-  if (!data->feasible()) {
-    for (const auto & point : *data->points()) {
-      marker.points.push_back(point.pose.position);
-      marker.colors.push_back(createMarkerColor(0.1, 0.1, 0.1, 0.3));
-    }
-  } else {
-    for (const auto & point : *data->points()) {
-      marker.points.push_back(point.pose.position);
-      marker.colors.push_back(createMarkerColor(1.0 - score, score, 0.0, std::min(0.5, score)));
-    }
-  }
-
-  return marker;
-}
-
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools::utils

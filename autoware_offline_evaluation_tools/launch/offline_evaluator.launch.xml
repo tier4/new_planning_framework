@@ -6,7 +6,7 @@
   <arg name="pointcloud_map_file" default="pointcloud_map.pcd" description="pointcloud map file name"/>
 
   <arg name="rviz" default="true" description="launch rviz"/>
-  <arg name="rviz_config" default="$(find-pkg-share autoware_planning_data_analyzer)/rviz/autoware.rviz" description="rviz config"/>
+  <arg name="rviz_config" default="$(find-pkg-share autoware_offline_evaluation_tools)/rviz/autoware.rviz" description="rviz config"/>
 
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
   <arg name="vehicle_model" default="sample_vehicle" description="vehicle model name"/>
