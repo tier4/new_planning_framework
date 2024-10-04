@@ -17,9 +17,12 @@
 #include "autoware/interpolation/linear_interpolation.hpp"
 #include "autoware/motion_utils/trajectory/interpolation.hpp"
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
+#include "autoware/universe_utils/geometry/boost_polygon_utils.hpp"
 
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+
+#include <boost/geometry/algorithms/disjoint.hpp>
 
 namespace autoware::trajectory_selector::utils
 {
@@ -200,6 +203,55 @@ auto time_to_collision(
   return time_to_collisions.front();
 }
 
+auto time_to_collision(
+  const std::shared_ptr<TrajectoryPoints> & points,
+  const std::shared_ptr<PredictedObjects> & objects,
+  const std::shared_ptr<VehicleInfo> & vehicle_info) -> std::vector<double>
+{
+  if (objects->objects.empty()) {
+    return std::vector<double>(20, 10000.0);
+  }
+
+  const double base_to_front = vehicle_info->max_longitudinal_offset_m;
+  const double base_to_rear = vehicle_info->rear_overhang_m;
+  const double width = vehicle_info->vehicle_width_m;
+
+  std::vector<double> time_to_collisions(points->size());
+
+  for (size_t i = 0; i < 20; i++) {
+    const auto & ego_pose = points->at(i).pose;
+    const auto ego_polygon =
+      autoware::universe_utils::toFootprint(ego_pose, base_to_front, base_to_rear, width);
+
+    for (const auto & object : objects->objects) {
+      const auto max_confidence_path = std::max_element(
+        object.kinematics.predicted_paths.begin(), object.kinematics.predicted_paths.end(),
+        [](const auto & a, const auto & b) { return a.confidence < b.confidence; });
+
+      if (max_confidence_path == object.kinematics.predicted_paths.end()) continue;
+
+      if (max_confidence_path->path.size() < i + 1) continue;
+
+      const auto object_pose = max_confidence_path->path.at(i);
+      const auto object_polygon = autoware::universe_utils::toPolygon2d(object_pose, object.shape);
+
+      if (!boost::geometry::disjoint(ego_polygon, object_polygon)) {
+        std::reverse(time_to_collisions.begin(), time_to_collisions.end());
+        for (size_t j = time_to_collisions.size() - 1 - i; j < time_to_collisions.size(); j++) {
+          time_to_collisions.at(j) = (j + i - time_to_collisions.size()) * 0.5;
+        }
+        std::reverse(time_to_collisions.begin(), time_to_collisions.end());
+        for (size_t j = i; j < time_to_collisions.size(); j++) {
+          time_to_collisions.at(j) = 0.0;
+        }
+        return time_to_collisions;
+      }
+    }
+  }
+
+  return std::vector<double>(20, 10000.0);
+}
+
 auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double resolution) -> TrajectoryPoints
@@ -243,7 +295,8 @@ auto to_marker(
   } else {
     for (const auto & point : *points) {
       marker.points.push_back(point.pose.position);
-      marker.colors.push_back(createMarkerColor(1.0 - score, score, 0.0, std::min(0.5, score)));
+      marker.colors.push_back(
+        createMarkerColor(1.0 - score, score, 0.0, std::clamp(score, 0.5, 0.999)));
     }
   }
 

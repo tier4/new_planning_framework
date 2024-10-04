@@ -35,10 +35,13 @@ DataInterface::DataInterface(
   for (size_t i = 0; i < core_data_->points->size(); i++) {
     metrics_.at(static_cast<size_t>(METRIC::LATERAL_ACCEL)).at(i) = lateral_accel(i);
     metrics_.at(static_cast<size_t>(METRIC::LONGITUDINAL_JERK)).at(i) = longitudinal_jerk(i);
-    metrics_.at(static_cast<size_t>(METRIC::MINIMUM_TTC)).at(i) = minimum_ttc(i);
     metrics_.at(static_cast<size_t>(METRIC::TRAVEL_DISTANCE)).at(i) = travel_distance(i);
     metrics_.at(static_cast<size_t>(METRIC::LATERAL_DEVIATION)).at(i) = lateral_deviation(i);
   }
+
+  metrics_.at(static_cast<size_t>(METRIC::MINIMUM_TTC)) =
+    autoware::trajectory_selector::utils::time_to_collision(
+      core_data_->points, core_data_->objects, vehicle_info_);
 }
 
 void DataInterface::set_previous_points(const std::shared_ptr<TrajectoryPoints> & previous_points)
