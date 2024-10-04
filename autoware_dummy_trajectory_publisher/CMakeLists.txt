@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.14)
 project(autoware_dummy_trajectory_publisher)
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wno-error=deprecated-declarations)
+endif()
+
 find_package(autoware_cmake REQUIRED)
 autoware_package()
 
-generate_parameter_library(dummy_trajectory_publisher_param
-  param/dummy_trajectory_publisher_param.yaml
+generate_parameter_library(${PROJECT_NAME}_param
+  param/parameter_struct.yaml
 )
 
 include_directories(
@@ -17,7 +21,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 )
 
 target_link_libraries(${PROJECT_NAME}
-  dummy_trajectory_publisher_param
+  ${PROJECT_NAME}_param
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
@@ -28,5 +32,4 @@ rclcpp_components_register_node(${PROJECT_NAME}
 ament_auto_package(
   INSTALL_TO_SHARE
   config
-  launch
 )

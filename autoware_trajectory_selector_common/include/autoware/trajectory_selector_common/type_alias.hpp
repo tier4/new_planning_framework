@@ -21,6 +21,7 @@
 
 #include "autoware_map_msgs/msg/lanelet_map_bin.hpp"
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
+#include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
 #include "autoware_perception_msgs/msg/predicted_objects.hpp"
 #include "autoware_planning_msgs/msg/lanelet_route.hpp"
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
@@ -29,6 +30,8 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include <std_msgs/msg/header.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
 #include <unique_identifier_msgs/msg/uuid.hpp>
 
@@ -44,6 +47,7 @@ using std::chrono::seconds;
 // autoware
 using autoware_map_msgs::msg::LaneletMapBin;
 using autoware_new_planning_msgs::msg::Trajectories;
+using autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo;
 using autoware_perception_msgs::msg::PredictedObjectKinematics;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
@@ -64,6 +68,7 @@ using geometry_msgs::msg::Twist;
 using geometry_msgs::msg::Vector3;
 using nav_msgs::msg::Odometry;
 using std_msgs::msg::Header;
+using std_msgs::msg::String;
 using tf2_msgs::msg::TFMessage;
 using unique_identifier_msgs::msg::UUID;
 using visualization_msgs::msg::Marker;
