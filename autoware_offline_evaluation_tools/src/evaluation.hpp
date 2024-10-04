@@ -15,9 +15,9 @@
 #ifndef EVALUATION_HPP_
 #define EVALUATION_HPP_
 
+#include "autoware/offline_evaluation_tools/data_structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
-#include "data_structs.hpp"
 
 #include <autoware/trajectory_evaluator/evaluation.hpp>
 

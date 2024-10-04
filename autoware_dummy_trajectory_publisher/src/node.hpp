@@ -15,19 +15,18 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
+#include "autoware/offline_evaluation_tools/data_structs.hpp"
+#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
-#include "dummy_trajectory_publisher_param.hpp"
+#include "autoware_dummy_trajectory_publisher_param.hpp"
 
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
-#include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
-#include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-#include "std_msgs/msg/string.hpp"
 
 #include <memory>
 #include <string>
@@ -35,14 +34,6 @@
 
 namespace autoware::trajectory_selector::dummy_trajectory_publisher
 {
-
-using autoware_planning_msgs::msg::TrajectoryPoint;
-using geometry_msgs::msg::AccelWithCovarianceStamped;
-using geometry_msgs::msg::Point;
-using geometry_msgs::msg::Pose;
-using nav_msgs::msg::Odometry;
-using unique_identifier_msgs::msg::UUID;
-using vehicle_info_utils::VehicleInfo;
 
 using TrajectoryPoints = std::vector<TrajectoryPoint>;
 
@@ -54,10 +45,11 @@ class DummyTrajectoryPublisherNode : public rclcpp::Node
 public:
   explicit DummyTrajectoryPublisherNode(const rclcpp::NodeOptions & node_options);
 
-protected:
+private:
   void process(const InputMsgType::ConstSharedPtr msg);
 
-private:
+  auto parameters() const -> std::shared_ptr<offline_evaluation_tools::DataAugmentParameters>;
+
   rclcpp::Subscription<InputMsgType>::SharedPtr sub_trajectory_;
 
   rclcpp::Publisher<OutputMsgType>::SharedPtr pub_trajectories_;
@@ -68,9 +60,9 @@ private:
   autoware::universe_utils::InterProcessPollingSubscriber<AccelWithCovarianceStamped>
     sub_acceleration_{this, "~/input/acceleration"};
 
-  std::shared_ptr<parameters::ParamListener> parameters_;
+  std::shared_ptr<augment::ParamListener> listener_;
 
-  VehicleInfo vehicle_info_;
+  std::shared_ptr<VehicleInfo> vehicle_info_;
 
   std::string generator_name_;
 

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DATA_STRUCTS_HPP_
-#define DATA_STRUCTS_HPP_
+#ifndef AUTOWARE__OFFLINE_EVALUATION_TOOLS__DATA_STRUCTS_HPP_
+#define AUTOWARE__OFFLINE_EVALUATION_TOOLS__DATA_STRUCTS_HPP_
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
@@ -56,4 +56,4 @@ struct Result
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
-#endif  // DATA_STRUCTS_HPP_
+#endif  // AUTOWARE__OFFLINE_EVALUATION_TOOLS__DATA_STRUCTS_HPP_

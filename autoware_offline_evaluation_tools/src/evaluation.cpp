@@ -14,10 +14,9 @@
 
 #include "evaluation.hpp"
 
+#include "autoware/offline_evaluation_tools/utils.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
-#include "data_structs.hpp"
-#include "utils.hpp"
 
 #include <autoware/universe_utils/geometry/geometry.hpp>
 #include <autoware/universe_utils/ros/marker_helper.hpp>
