@@ -19,6 +19,9 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
+#include <algorithm>
+#include <limits>
+
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
@@ -145,6 +148,8 @@ void TrajectoryRankerNode::visualize(
     msg.markers.push_back(marker);
   }
 
+  double min = std::numeric_limits<double>::max();
+  double max = std::numeric_limits<double>::lowest();
   for (size_t i = 0; i < evaluator->results().size(); ++i) {
     const auto result = evaluator->results().at(i);
 
@@ -193,8 +198,22 @@ void TrajectoryRankerNode::visualize(
         result->original(), score, result->feasible(), ss.str(), i));
     }
     {
+      min = std::min(min, result->total());
+      max = std::max(max, result->total());
+    }
+  }
+
+  for (size_t i = 0; i < evaluator->results().size(); ++i) {
+    const auto result = evaluator->results().at(i);
+
+    if (result == nullptr) continue;
+
+    if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->points(), 1.0, result->feasible(), "TOTAL", i));
+    } else {
       // convert score to 0.0~1.0 value
-      const auto score = result->total() / static_cast<double>(SCORE::SIZE);
+      const auto score = (result->total() - min) / (max - min);
       msg.markers.push_back(trajectory_selector::utils::to_marker(
         result->original(), score, result->feasible(), "TOTAL", i));
     }
