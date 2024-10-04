@@ -232,6 +232,8 @@ void OfflineEvaluatorNode::play(
     pub_marker_->publish(*bag_evaluator->marker());
 
     bag_evaluator->show();
+
+    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
   }
 
   res->success = true;

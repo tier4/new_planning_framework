@@ -121,6 +121,14 @@ double DataInterface::trajectory_deviation(const size_t idx) const
 
 bool DataInterface::feasible() const
 {
+  const auto idx = autoware::motion_utils::findNearestIndex(
+    *core_data_->points, core_data_->odometry->pose.pose.position);
+  const auto & p1 = core_data_->points->at(idx).pose.position;
+  const auto & p2 = core_data_->odometry->pose.pose.position;
+  if (autoware::universe_utils::calcSquaredDistance2d(p1, p2) > 10.0) {
+    return false;
+  }
+
   const auto condition = [](const auto & p) { return p.longitudinal_velocity_mps >= 0.0; };
   return std::all_of(core_data_->points->begin(), core_data_->points->end(), condition);
 }

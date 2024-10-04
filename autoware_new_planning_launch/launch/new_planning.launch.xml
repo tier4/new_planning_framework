@@ -11,7 +11,7 @@
 
   <group scoped="false">
     <include file="$(find-pkg-share autoware_new_planning_launch)/launch/planning_simulator.launch.xml">
-      <arg name="launch_single_planner" value="false"/>
+      <arg name="launch_single_planner" value="true"/>
       <arg name="map_path" value="$(var map_path)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
       <arg name="sensor_model" value="$(var sensor_model)"/>
@@ -28,7 +28,7 @@
   <group>
     <include file="$(find-pkg-share autoware_new_planning_launch)/launch/selector.launch.xml">
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
-      <arg name="use_dummy_trajectory" value="false"/>
+      <arg name="use_dummy_trajectory" value="true"/>
       <arg name="stand_alone" value="false"/>
     </include>
   </group>

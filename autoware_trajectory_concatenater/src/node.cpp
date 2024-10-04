@@ -66,6 +66,8 @@ void TrajectoryConcatenaterNode::publish()
 
     if (buffer_.empty()) return;
 
+    if (buffer_.size() < 2) return;
+
     for (const auto & [uuid, pre_combine] : buffer_) {
       trajectories.insert(
         trajectories.end(), pre_combine->trajectories.begin(), pre_combine->trajectories.end());
