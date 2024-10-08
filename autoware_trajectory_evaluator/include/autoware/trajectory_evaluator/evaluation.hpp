@@ -15,8 +15,12 @@
 #ifndef AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 #define AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 
+#include "autoware/trajectory_selector_common/data_interface.hpp"
 #include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/metrics_interface.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
+
+#include <pluginlib/class_loader.hpp>
 
 #include <memory>
 #include <string>
@@ -25,77 +29,6 @@
 
 namespace autoware::trajectory_selector::trajectory_evaluator
 {
-class DataInterface
-{
-public:
-  DataInterface(
-    const std::shared_ptr<CoreData> & core_data,
-    const std::shared_ptr<RouteHandler> & route_handler,
-    const std::shared_ptr<VehicleInfo> & vehicle_info);
-
-  void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
-
-  void set_previous_points(const std::shared_ptr<TrajectoryPoints> & previous_points);
-
-  void compress(const std::vector<std::vector<double>> & weight);
-
-  void normalize(
-    const double min, const double max, const SCORE & score_type, const bool flip = false);
-
-  void weighting(const std::vector<double> & weight);
-
-  auto total() const -> double { return total_; };
-
-  bool feasible() const;
-
-  auto score(const SCORE & score_type) const -> double;
-
-  auto scores() const -> std::shared_ptr<std::vector<double>> { return scores_; }
-
-  auto points() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->points; }
-
-  auto original() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->original; }
-
-  auto header() const -> Header { return core_data_->header; }
-
-  auto uuid() const -> UUID { return core_data_->generator_id; }
-
-  auto tag() const -> std::string { return core_data_->tag; }
-
-  auto marker() const -> std::shared_ptr<MarkerArray>;
-
-private:
-  void evaluate();
-
-  auto lateral_accel(const size_t idx) const -> double;
-
-  auto longitudinal_jerk(const size_t idx) const -> double;
-
-  auto minimum_ttc(const size_t idx) const -> double;
-
-  auto travel_distance(const size_t idx) const -> double;
-
-  auto lateral_deviation(const size_t idx) const -> double;
-
-  auto trajectory_deviation(const size_t idx) const -> double;
-
-  auto compress(const std::vector<std::vector<double>> & weight, const METRIC & metric_type) const
-    -> double;
-
-  std::shared_ptr<CoreData> core_data_;
-
-  std::shared_ptr<TrajectoryPoints> previous_points_;
-
-  std::shared_ptr<RouteHandler> route_handler_;
-
-  std::shared_ptr<VehicleInfo> vehicle_info_;
-
-  std::vector<std::vector<double>> metrics_;
-
-  std::shared_ptr<std::vector<double>> scores_;
-
-  double total_;
-};
 
 class Evaluator
 {
@@ -103,9 +36,14 @@ public:
   explicit Evaluator(
     const std::shared_ptr<RouteHandler> & route_handler,
     const std::shared_ptr<VehicleInfo> & vehicle_info)
-  : route_handler_{route_handler}, vehicle_info_{vehicle_info}
+  : plugin_loader_(
+      "autoware_trajectory_evaluator", "autoware::trajectory_selector::MetricInterface"),
+    route_handler_{route_handler},
+    vehicle_info_{vehicle_info}
   {
   }
+
+  void loadMetricPlugin(const std::string & name);
 
   void add(const std::shared_ptr<CoreData> & core_data);
 
@@ -137,6 +75,10 @@ protected:
   auto best(const std::string & exclude = "") const -> std::shared_ptr<DataInterface>;
 
 private:
+  pluginlib::ClassLoader<MetricInterface> plugin_loader_;
+
+  std::vector<std::shared_ptr<MetricInterface>> metric_ptrs_;
+
   std::vector<std::shared_ptr<DataInterface>> results_;
 
   std::shared_ptr<RouteHandler> route_handler_;
