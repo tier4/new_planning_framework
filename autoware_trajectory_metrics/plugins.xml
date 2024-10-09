@@ -1,0 +1,8 @@
+<library path="autoware_trajectory_metrics">
+  <class type="autoware::trajectory_selector::trajectory_metrics::LateralAcceleration" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::LongitudinalJerk" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::TimeToCollision" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::TravelDistance" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::LateralDeviation" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::TrajectoryDeviation" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+</library>
