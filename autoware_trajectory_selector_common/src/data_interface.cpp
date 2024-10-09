@@ -22,10 +22,10 @@
 namespace autoware::trajectory_selector
 {
 
-DataInterface::DataInterface(const std::shared_ptr<CoreData> & core_data)
+DataInterface::DataInterface(const std::shared_ptr<CoreData> & core_data, const size_t metrics_num)
 : core_data_{core_data},
-  metrics_(static_cast<size_t>(METRIC::SIZE), std::vector<double>(core_data->points->size(), 0.0)),
-  scores_(std::make_shared<std::vector<double>>(static_cast<size_t>(SCORE::SIZE), 0.0))
+  metrics_(metrics_num, std::vector<double>(core_data->points->size(), 0.0)),
+  scores_(std::make_shared<std::vector<double>>(metrics_num, 0.0))
 {
 }
 

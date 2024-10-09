@@ -35,7 +35,7 @@ void LateralAcceleration::evaluate(const std::shared_ptr<DataInterface> & result
     metric.push_back(std::abs(speed * speed / radius));
   }
 
-  result->set_metric(static_cast<size_t>(METRIC::LATERAL_ACCEL), metric);
+  result->set_metric(index(), metric);
 }
 
 void LongitudinalJerk::evaluate(const std::shared_ptr<DataInterface> & result) const
@@ -53,7 +53,7 @@ void LongitudinalJerk::evaluate(const std::shared_ptr<DataInterface> & result) c
   }
   metric.push_back(metric.back());
 
-  result->set_metric(static_cast<size_t>(METRIC::LONGITUDINAL_JERK), metric);
+  result->set_metric(index(), metric);
 }
 
 void TimeToCollision::evaluate(const std::shared_ptr<DataInterface> & result) const
@@ -65,7 +65,7 @@ void TimeToCollision::evaluate(const std::shared_ptr<DataInterface> & result) co
     metric.push_back(utils::time_to_collision(result->points(), result->objects(), i));
   }
 
-  result->set_metric(static_cast<size_t>(METRIC::MINIMUM_TTC), metric);
+  result->set_metric(index(), metric);
 }
 
 void TravelDistance::evaluate(const std::shared_ptr<DataInterface> & result) const
@@ -77,7 +77,7 @@ void TravelDistance::evaluate(const std::shared_ptr<DataInterface> & result) con
     metric.push_back(autoware::motion_utils::calcSignedArcLength(*result->points(), 0L, i));
   }
 
-  result->set_metric(static_cast<size_t>(METRIC::TRAVEL_DISTANCE), metric);
+  result->set_metric(index(), metric);
 }
 
 void LateralDeviation::evaluate(const std::shared_ptr<DataInterface> & result) const
@@ -91,7 +91,7 @@ void LateralDeviation::evaluate(const std::shared_ptr<DataInterface> & result) c
     metric.push_back(std::abs(arc_coordinates.distance));
   }
 
-  result->set_metric(static_cast<size_t>(METRIC::LATERAL_DEVIATION), metric);
+  result->set_metric(index(), metric);
 }
 
 void TrajectoryDeviation::evaluate(const std::shared_ptr<DataInterface> & result) const
@@ -107,7 +107,7 @@ void TrajectoryDeviation::evaluate(const std::shared_ptr<DataInterface> & result
     metric.push_back(autoware::universe_utils::calcSquaredDistance2d(p1, p2));
   }
 
-  result->set_metric(static_cast<size_t>(METRIC::LATERAL_DEVIATION), metric);
+  result->set_metric(index(), metric);
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_metrics

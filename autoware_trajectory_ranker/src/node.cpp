@@ -120,7 +120,8 @@ auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParame
 {
   const auto node_params = listener_->get_params();
 
-  const auto parameters = std::make_shared<EvaluatorParameters>(node_params.sample_num);
+  const auto parameters =
+    std::make_shared<EvaluatorParameters>(node_params.metrics.size(), node_params.sample_num);
 
   parameters->resolution = node_params.resolution;
   parameters->score_weight = node_params.score_weight;

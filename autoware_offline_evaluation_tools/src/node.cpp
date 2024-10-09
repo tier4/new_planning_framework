@@ -72,8 +72,9 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
 
 auto OfflineEvaluatorNode::evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>
 {
+  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
   const auto sample_num = getOrDeclareParameter<int>(*this, "sample_num");
-  const auto parameters = std::make_shared<EvaluatorParameters>(sample_num);
+  const auto parameters = std::make_shared<EvaluatorParameters>(metrics.size(), sample_num);
   parameters->score_weight = getOrDeclareParameter<std::vector<double>>(*this, "score_weight");
   parameters->time_decay_weight.at(0) =
     getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s0");
@@ -367,9 +368,10 @@ void OfflineEvaluatorNode::weight(
     std::mutex g_mutex;
     std::mutex e_mutex;
 
-    const auto update = [&bag_data, &bag_evaluator, &weight_grid, &g_mutex,
+    const auto update = [&bag_data, &bag_evaluator, &metrics, &weight_grid, &g_mutex,
                          &e_mutex](const auto idx) {
-      const auto selector_parameters = std::make_shared<EvaluatorParameters>(20);
+      // TODO(satoshi-ota): remove hard code param
+      const auto selector_parameters = std::make_shared<EvaluatorParameters>(6, 20);
 
       double loss = 0.0;
 
@@ -379,8 +381,7 @@ void OfflineEvaluatorNode::weight(
         if (idx + 1 > weight_grid.size()) return;
         selector_parameters->score_weight = weight_grid.at(idx).weight;
         selector_parameters->time_decay_weight = std::vector<std::vector<double>>(
-          static_cast<size_t>(METRIC::SIZE),
-          {1.0, 0.8, 0.64, 0.51, 0.41, 0.33, 0.26, 0.21, 0.17, 0.13});
+          metrics.size(), {1.0, 0.8, 0.64, 0.51, 0.41, 0.33, 0.26, 0.21, 0.17, 0.13});
         previous_points = weight_grid.at(idx).previous_points;
       }
 

@@ -30,7 +30,7 @@ namespace autoware::trajectory_selector
 class DataInterface
 {
 public:
-  explicit DataInterface(const std::shared_ptr<CoreData> & core_data);
+  explicit DataInterface(const std::shared_ptr<CoreData> & core_data, const size_t metrics_num);
 
   void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
 

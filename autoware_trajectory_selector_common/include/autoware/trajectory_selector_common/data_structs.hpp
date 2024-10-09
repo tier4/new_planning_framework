@@ -23,32 +23,12 @@
 
 namespace autoware::trajectory_selector
 {
-enum class METRIC {
-  LATERAL_ACCEL = 0,
-  LONGITUDINAL_JERK = 1,
-  TRAVEL_DISTANCE = 2,
-  MINIMUM_TTC = 3,
-  LATERAL_DEVIATION = 4,
-  TRAJECTORY_DEVIATION = 5,
-  SIZE
-};
-
-enum class SCORE {
-  LATERAL_COMFORTABILITY = 0,
-  LONGITUDINAL_COMFORTABILITY = 1,
-  EFFICIENCY = 2,
-  SAFETY = 3,
-  ACHIEVABILITY = 4,
-  CONSISTENCY = 5,
-  SIZE
-};
-
 struct EvaluatorParameters
 {
-  explicit EvaluatorParameters(const size_t sample_num)
+  explicit EvaluatorParameters(const size_t metrics_num, const size_t sample_num)
   : sample_num{sample_num},
-    time_decay_weight(static_cast<size_t>(METRIC::SIZE), std::vector<double>(sample_num, 0.0)),
-    score_weight(static_cast<size_t>(SCORE::SIZE), 0.0)
+    time_decay_weight(metrics_num, std::vector<double>(sample_num, 0.0)),
+    score_weight(metrics_num, 0.0)
   {
   }
 

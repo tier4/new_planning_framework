@@ -116,7 +116,7 @@ auto Evaluator::get(const std::string & tag) const -> std::shared_ptr<DataInterf
 
 void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
 {
-  const auto ptr = std::make_shared<DataInterface>(core_data);
+  const auto ptr = std::make_shared<DataInterface>(core_data, metric_ptrs_.size());
   results_.push_back(ptr);
 }
 
