@@ -30,10 +30,7 @@ namespace autoware::trajectory_selector
 class DataInterface
 {
 public:
-  DataInterface(
-    const std::shared_ptr<CoreData> & core_data,
-    const std::shared_ptr<RouteHandler> & route_handler,
-    const std::shared_ptr<VehicleInfo> & vehicle_info);
+  explicit DataInterface(const std::shared_ptr<CoreData> & core_data);
 
   void setup(const std::shared_ptr<TrajectoryPoints> & previous_points);
 
@@ -41,8 +38,7 @@ public:
 
   void compress(const std::vector<std::vector<double>> & weight);
 
-  void normalize(
-    const double min, const double max, const SCORE & score_type, const bool flip = false);
+  void normalize(const double min, const double max, const size_t index, const bool flip = false);
 
   void weighting(const std::vector<double> & weight);
 
@@ -50,13 +46,27 @@ public:
 
   bool feasible() const;
 
-  auto score(const SCORE & score_type) const -> double;
+  void set_metric(const size_t idx, const std::vector<double> & metric)
+  {
+    metrics_.at(idx) = metric;
+  }
+
+  auto score(const size_t index) const -> double { return scores_->at(index); }
 
   auto scores() const -> std::shared_ptr<std::vector<double>> { return scores_; }
 
   auto points() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->points; }
 
+  auto previous() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->previous_points; }
+
   auto original() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->original; }
+
+  auto objects() const -> std::shared_ptr<PredictedObjects> { return core_data_->objects; }
+
+  auto preferred_lanes() const -> std::shared_ptr<lanelet::ConstLanelets>
+  {
+    return core_data_->preferred_lanes;
+  }
 
   auto header() const -> Header { return core_data_->header; }
 
@@ -69,28 +79,9 @@ public:
 private:
   void evaluate();
 
-  auto lateral_accel(const size_t idx) const -> double;
-
-  auto longitudinal_jerk(const size_t idx) const -> double;
-
-  auto minimum_ttc(const size_t idx) const -> double;
-
-  auto travel_distance(const size_t idx) const -> double;
-
-  auto lateral_deviation(const size_t idx) const -> double;
-
-  auto trajectory_deviation(const size_t idx) const -> double;
-
-  auto compress(const std::vector<std::vector<double>> & weight, const METRIC & metric_type) const
-    -> double;
-
   std::shared_ptr<CoreData> core_data_;
 
   std::shared_ptr<TrajectoryPoints> previous_points_;
-
-  std::shared_ptr<RouteHandler> route_handler_;
-
-  std::shared_ptr<VehicleInfo> vehicle_info_;
 
   std::vector<std::vector<double>> metrics_;
 

@@ -41,10 +41,21 @@ public:
 
   virtual void evaluate(const std::shared_ptr<DataInterface> & result) const = 0;
 
+  void init(const std::shared_ptr<VehicleInfo> & vehicle_info) { vehicle_info_ = vehicle_info; }
+
+  void set_index(const size_t index) { index_ = index; }
+
   auto name() const -> std::string { return name_; }
 
+  auto index() const -> size_t { return index_; }
+
 protected:
+  std::shared_ptr<VehicleInfo> vehicle_info_;
+
+private:
   std::string name_;
+
+  size_t index_;
 };
 
 }  // namespace autoware::trajectory_selector

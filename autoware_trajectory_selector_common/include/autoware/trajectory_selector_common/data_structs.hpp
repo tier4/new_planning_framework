@@ -84,6 +84,7 @@ struct CoreData
     const UUID & generator_id)
   : original{original},
     points{points},
+    previous_points{points},  // TODO(satoshi-ota): fix this line.
     objects{objects},
     odometry{odometry},
     preferred_lanes{preferred_lanes},
@@ -96,6 +97,8 @@ struct CoreData
   std::shared_ptr<TrajectoryPoints> original;
 
   std::shared_ptr<TrajectoryPoints> points;
+
+  std::shared_ptr<TrajectoryPoints> previous_points;
 
   std::shared_ptr<PredictedObjects> objects;
 
