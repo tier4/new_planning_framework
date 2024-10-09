@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <string>
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
@@ -36,6 +37,11 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo());
 
   evaluator_ = std::make_shared<trajectory_evaluator::Evaluator>(route_handler_, vehicle_info);
+
+  const auto metrics = declare_parameter<std::vector<std::string>>("metrics");
+  for (size_t i = 0; i < metrics.size(); i++) {
+    evaluator_->loadMetricPlugin(metrics.at(i), i);
+  }
 
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
@@ -92,7 +98,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
   evaluator_->show();
 
-  visualize(evaluator_, best_data);
+  pub_marker_->publish(*evaluator_->marker());
 
   for (const auto & result : evaluator_->results()) {
     const auto scored_trajectory = autoware_new_planning_msgs::build<Trajectory>()
@@ -114,7 +120,8 @@ auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParame
 {
   const auto node_params = listener_->get_params();
 
-  const auto parameters = std::make_shared<EvaluatorParameters>(node_params.sample_num);
+  const auto parameters =
+    std::make_shared<EvaluatorParameters>(node_params.metrics.size(), node_params.sample_num);
 
   parameters->resolution = node_params.resolution;
   parameters->score_weight = node_params.score_weight;
@@ -126,100 +133,6 @@ auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParame
   parameters->time_decay_weight.at(5) = node_params.time_decay_weight.s5;
 
   return parameters;
-}
-
-void TrajectoryRankerNode::visualize(
-  const std::shared_ptr<trajectory_evaluator::Evaluator> evaluator,
-  const std::shared_ptr<trajectory_evaluator::DataInterface> & best_data) const
-{
-  using autoware::universe_utils::createDefaultMarker;
-  using autoware::universe_utils::createMarkerColor;
-  using autoware::universe_utils::createMarkerScale;
-
-  MarkerArray msg;
-
-  if (best_data != nullptr) {
-    Marker marker = createDefaultMarker(
-      "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "best_score", 0L, Marker::LINE_STRIP,
-      createMarkerScale(0.2, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
-    for (const auto & point : *best_data->points()) {
-      marker.points.push_back(point.pose.position);
-    }
-    msg.markers.push_back(marker);
-  }
-
-  double min = std::numeric_limits<double>::max();
-  double max = std::numeric_limits<double>::lowest();
-  for (size_t i = 0; i < evaluator->results().size(); ++i) {
-    const auto result = evaluator->results().at(i);
-
-    if (result == nullptr) continue;
-
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::LATERAL_COMFORTABILITY);
-      const auto score = result->score(SCORE::LATERAL_COMFORTABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::LONGITUDINAL_COMFORTABILITY);
-      const auto score = result->score(SCORE::LONGITUDINAL_COMFORTABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::EFFICIENCY);
-      const auto score = result->score(SCORE::EFFICIENCY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::SAFETY);
-      const auto score = result->score(SCORE::SAFETY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::ACHIEVABILITY);
-      const auto score = result->score(SCORE::ACHIEVABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::CONSISTENCY);
-      const auto score = result->score(SCORE::CONSISTENCY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      min = std::min(min, result->total());
-      max = std::max(max, result->total());
-    }
-  }
-
-  for (size_t i = 0; i < evaluator->results().size(); ++i) {
-    const auto result = evaluator->results().at(i);
-
-    if (result == nullptr) continue;
-
-    if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->points(), 1.0, result->feasible(), "TOTAL", i));
-    } else {
-      // convert score to 0.0~1.0 value
-      const auto score = (result->total() - min) / (max - min);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), "TOTAL", i));
-    }
-  }
-
-  pub_marker_->publish(msg);
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker

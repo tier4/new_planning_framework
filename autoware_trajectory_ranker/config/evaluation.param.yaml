@@ -1,5 +1,12 @@
 /**:
   ros__parameters:
+    metrics: ["autoware::trajectory_selector::trajectory_metrics::LateralAcceleration",
+              "autoware::trajectory_selector::trajectory_metrics::LongitudinalJerk",
+              "autoware::trajectory_selector::trajectory_metrics::TravelDistance",
+              "autoware::trajectory_selector::trajectory_metrics::TimeToCollision",
+              "autoware::trajectory_selector::trajectory_metrics::LateralDeviation",
+              "autoware::trajectory_selector::trajectory_metrics::TrajectoryDeviation"]
+
     score_weight: [0.1, 0.1, 0.3, 0.6, 0.3, 0.3]
     time_decay_weight:
       s0: [1.0, 0.8, 0.64, 0.51, 0.41, 0.33, 0.26, 0.21, 0.17, 0.13, 0.10, 0.08, 0.067, 0.053, 0.043, 0.034, 0.027, 0.021, 0.017, 0.014]

@@ -19,6 +19,14 @@ evaluation:
       element_bounds<>: [0.0, 1.0]
       fixed_size<>: [6]
 
+  metrics:
+    type: string_array
+    description: metrics.
+    read_only: false
+    validation:
+      unique<>: []
+      not_empty<>: []
+
   time_decay_weight:
     s0:
       type: double_array

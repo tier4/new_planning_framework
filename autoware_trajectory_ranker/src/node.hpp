@@ -42,10 +42,6 @@ private:
 
   auto parameters() const -> std::shared_ptr<EvaluatorParameters>;
 
-  void visualize(
-    const std::shared_ptr<trajectory_evaluator::Evaluator> evaluator,
-    const std::shared_ptr<trajectory_evaluator::DataInterface> & best_data) const;
-
   autoware::universe_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};
 

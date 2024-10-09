@@ -38,9 +38,13 @@ class BagEvaluator : public trajectory_evaluator::Evaluator
 {
 public:
   BagEvaluator(
-    const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+    const std::shared_ptr<RouteHandler> & route_handler,
     const std::shared_ptr<VehicleInfo> & vehicle_info,
     const std::shared_ptr<DataAugmentParameters> & parameters);
+
+  void setup(
+    const std::shared_ptr<BagData> & bag_data,
+    const std::shared_ptr<TrajectoryPoints> & previous_points);
 
   auto loss(const std::shared_ptr<EvaluatorParameters> & parameters)
     -> std::pair<double, std::shared_ptr<TrajectoryPoints>>;
@@ -70,6 +74,8 @@ private:
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
     const std::shared_ptr<DataAugmentParameters> & parameters) const
     -> std::vector<std::shared_ptr<TrajectoryPoints>>;
+
+  std::shared_ptr<DataAugmentParameters> parameters_;
 
   std::shared_ptr<TFMessage> tf_;
 
