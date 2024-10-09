@@ -43,7 +43,7 @@ public:
   {
   }
 
-  void loadMetricPlugin(const std::string & name);
+  void loadMetricPlugin(const std::string & name, const size_t index);
 
   void add(const std::shared_ptr<CoreData> & core_data);
 
@@ -59,12 +59,16 @@ public:
 
   auto get(const std::string & tag) const -> std::shared_ptr<DataInterface>;
 
-  auto statistics(const SCORE & score_type) const -> std::pair<double, double>;
+  auto statistics(const size_t metric_index) const -> std::pair<double, double>;
 
   void show() const;
 
+  auto marker() const -> std::shared_ptr<MarkerArray>;
+
 protected:
   void pruning();
+
+  void evaluate();
 
   void compress(const std::vector<std::vector<double>> & weight);
 
@@ -73,6 +77,10 @@ protected:
   void weighting(const std::vector<double> & weight);
 
   auto best(const std::string & exclude = "") const -> std::shared_ptr<DataInterface>;
+
+  auto route_handler() const -> std::shared_ptr<RouteHandler> { return route_handler_; }
+
+  auto vehicle_info() const -> std::shared_ptr<VehicleInfo> { return vehicle_info_; }
 
 private:
   pluginlib::ClassLoader<MetricInterface> plugin_loader_;

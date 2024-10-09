@@ -18,14 +18,18 @@
 #include "autoware/trajectory_selector_common/data_structs.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 
+#include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
 namespace autoware::trajectory_selector::trajectory_evaluator
 {
-void Evaluator::loadMetricPlugin(const std::string & name)
+void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
 {
   if (plugin_loader_.isClassAvailable(name)) {
     const auto plugin = plugin_loader_.createSharedInstance(name);
+
+    plugin->init(vehicle_info_);
+    plugin->set_index(index);
 
     // Check if the plugin is already registered.
     for (const auto & running_plugin : metric_ptrs_) {
@@ -46,34 +50,35 @@ void Evaluator::loadMetricPlugin(const std::string & name)
   }
 }
 
+void Evaluator::evaluate()
+{
+  for (const auto & result : results_) {
+    for (const auto & metric_ptr : metric_ptrs_) {
+      metric_ptr->evaluate(result);
+    }
+  }
+}
+
 void Evaluator::normalize()
 {
   if (results_.size() < 2) return;
 
-  const auto range = [this](const auto & score_type) {
+  const auto range = [this](const size_t index) {
     double min = std::numeric_limits<double>::max();
     double max = std::numeric_limits<double>::lowest();
     for (const auto & result : results_) {
-      min = std::min(min, result->score(score_type));
-      max = std::max(max, result->score(score_type));
+      min = std::min(min, result->score(index));
+      max = std::max(max, result->score(index));
     }
     return std::make_pair(min, max);
   };
 
-  const auto [s0_min, s0_max] = range(SCORE::LATERAL_COMFORTABILITY);
-  const auto [s1_min, s1_max] = range(SCORE::LONGITUDINAL_COMFORTABILITY);
-  const auto [s2_min, s2_max] = range(SCORE::EFFICIENCY);
-  const auto [s3_min, s3_max] = range(SCORE::SAFETY);
-  const auto [s4_min, s4_max] = range(SCORE::ACHIEVABILITY);
-  const auto [s5_min, s5_max] = range(SCORE::CONSISTENCY);
-
-  for (auto & data : results_) {
-    data->normalize(s0_min, s0_max, SCORE::LATERAL_COMFORTABILITY, true);
-    data->normalize(s1_min, s1_max, SCORE::LONGITUDINAL_COMFORTABILITY, true);
-    data->normalize(s2_min, s2_max, SCORE::EFFICIENCY);
-    data->normalize(s3_min, s3_max, SCORE::SAFETY);
-    data->normalize(s4_min, s4_max, SCORE::ACHIEVABILITY, true);
-    data->normalize(s5_min, s5_max, SCORE::CONSISTENCY, true);
+  // TODO(satoshi-ota): implement flip
+  for (const auto & metric_ptr : metric_ptrs_) {
+    const auto [min, max] = range(metric_ptr->index());
+    for (auto & data : results_) {
+      data->normalize(min, max, metric_ptr->index(), true);
+    }
   }
 }
 
@@ -111,7 +116,7 @@ auto Evaluator::get(const std::string & tag) const -> std::shared_ptr<DataInterf
 
 void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
 {
-  const auto ptr = std::make_shared<DataInterface>(core_data, route_handler_, vehicle_info_);
+  const auto ptr = std::make_shared<DataInterface>(core_data);
   results_.push_back(ptr);
 }
 
@@ -127,6 +132,8 @@ auto Evaluator::best(
   const std::string & exclude) -> std::shared_ptr<DataInterface>
 {
   pruning();
+
+  evaluate();
 
   compress(parameters->time_decay_weight);
 
@@ -149,7 +156,7 @@ auto Evaluator::best(const std::string & exclude) const -> std::shared_ptr<DataI
   return *itr;
 }
 
-auto Evaluator::statistics(const SCORE & score_type) const -> std::pair<double, double>
+auto Evaluator::statistics(const size_t metric_index) const -> std::pair<double, double>
 {
   double ave = 0.0;
   double dev = 0.0;
@@ -162,7 +169,7 @@ auto Evaluator::statistics(const SCORE & score_type) const -> std::pair<double, 
   };
 
   for (size_t i = 0; i < results_.size(); i++) {
-    std::tie(ave, dev) = update(ave, dev, results_.at(i)->score(score_type), i);
+    std::tie(ave, dev) = update(ave, dev, results_.at(i)->score(metric_index), i);
   }
 
   return std::make_pair(ave, dev);
@@ -176,26 +183,72 @@ void Evaluator::show() const
     return;
   }
 
-  const auto s0 = statistics(SCORE::LATERAL_COMFORTABILITY);
-  const auto s1 = statistics(SCORE::LONGITUDINAL_COMFORTABILITY);
-  const auto s2 = statistics(SCORE::EFFICIENCY);
-  const auto s3 = statistics(SCORE::SAFETY);
-  const auto s4 = statistics(SCORE::ACHIEVABILITY);
-  const auto s5 = statistics(SCORE::CONSISTENCY);
-
   std::stringstream ss;
   ss << std::fixed << std::setprecision(2) << "\n";
-  // clang-format off
-  ss << " size              :" << results_.size()                                       << "\n";
-  ss << " tag               :" << best_data->tag()                                      << "\n";
-  ss << " lat comfortability:" << best_data->score(SCORE::LATERAL_COMFORTABILITY)       << " mean:" << s0.first << " std:" << std::sqrt(s0.second) << "\n"; // NOLINT
-  ss << " lon comfortability:" << best_data->score(SCORE::LONGITUDINAL_COMFORTABILITY)  << " mean:" << s1.first << " std:" << std::sqrt(s1.second) << "\n"; // NOLINT
-  ss << " efficiency        :" << best_data->score(SCORE::EFFICIENCY)                   << " mean:" << s2.first << " std:" << std::sqrt(s2.second) << "\n"; // NOLINT
-  ss << " safety            :" << best_data->score(SCORE::SAFETY)                       << " mean:" << s3.first << " std:" << std::sqrt(s3.second) << "\n"; // NOLINT
-  ss << " achievability     :" << best_data->score(SCORE::ACHIEVABILITY)                << " mean:" << s4.first << " std:" << std::sqrt(s4.second) << "\n"; // NOLINT
-  ss << " consistency       :" << best_data->score(SCORE::CONSISTENCY)                  << " mean:" << s5.first << " std:" << std::sqrt(s5.second) << "\n"; // NOLINT
-  ss << " total             :" << best_data->total();
-  // clang-format on
+  ss << "size:" << results_.size() << "\n";
+  ss << "tag:" << best_data->tag() << "\n";
+  for (const auto & metric_ptr : metric_ptrs_) {
+    const auto [mean, dev] = statistics(metric_ptr->index());
+    ss << metric_ptr->name() << ":" << " mean:" << mean << " std:" << std::sqrt(dev) << "\n";
+  }
+  ss << "total:" << best_data->total();
   RCLCPP_INFO_STREAM(rclcpp::get_logger(__func__), ss.str());
+}
+
+auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
+{
+  using autoware::universe_utils::createDefaultMarker;
+  using autoware::universe_utils::createMarkerColor;
+  using autoware::universe_utils::createMarkerScale;
+
+  MarkerArray msg;
+
+  const auto best_data = best();
+  if (best_data != nullptr) {
+    Marker marker = createDefaultMarker(
+      "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "best_score", 0L, Marker::LINE_STRIP,
+      createMarkerScale(0.2, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
+    for (const auto & point : *best_data->points()) {
+      marker.points.push_back(point.pose.position);
+    }
+    msg.markers.push_back(marker);
+  }
+
+  double min = std::numeric_limits<double>::max();
+  double max = std::numeric_limits<double>::lowest();
+  for (size_t i = 0; i < results().size(); ++i) {
+    const auto result = results().at(i);
+
+    if (result == nullptr) continue;
+
+    for (const auto & metric_ptr : metric_ptrs_) {
+      const auto score = result->score(metric_ptr->index());
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), metric_ptr->name(), i));
+    }
+
+    {
+      min = std::min(min, result->total());
+      max = std::max(max, result->total());
+    }
+  }
+
+  for (size_t i = 0; i < results().size(); ++i) {
+    const auto result = results().at(i);
+
+    if (result == nullptr) continue;
+
+    if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->points(), 1.0, result->feasible(), "TOTAL", i));
+    } else {
+      // convert score to 0.0~1.0 value
+      const auto score = (result->total() - min) / (max - min);
+      msg.markers.push_back(trajectory_selector::utils::to_marker(
+        result->original(), score, result->feasible(), "TOTAL", i));
+    }
+  }
+
+  return std::make_shared<MarkerArray>(msg);
 }
 }  // namespace autoware::trajectory_selector::trajectory_evaluator

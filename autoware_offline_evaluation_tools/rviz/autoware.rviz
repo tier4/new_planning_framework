@@ -3701,6 +3701,7 @@ Visualization Manager:
       Name: MarkerArray
       Namespaces:
         ACHIEVABILITY: false
+        CONSISTENCY: false
         EFFICIENCY: false
         LATERAL_COMFORTABILITY: false
         LONGITUDINAL_COMFORTABILITY: false

@@ -66,6 +66,10 @@ private:
 
   void plot(const std::shared_ptr<BagEvaluator> & bag_evaluator) const;
 
+  auto evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>;
+
+  auto data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>;
+
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 
   rclcpp::Publisher<PredictedObjects>::SharedPtr pub_objects_;
@@ -85,10 +89,6 @@ private:
   std::shared_ptr<RouteHandler> route_handler_;
 
   std::shared_ptr<VehicleInfo> vehicle_info_;
-
-  std::shared_ptr<DataAugmentParameters> data_augument_parameters_;
-
-  std::shared_ptr<EvaluatorParameters> evaluator_parameters_;
 
   mutable std::mutex mutex_;
 

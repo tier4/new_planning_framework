@@ -26,6 +26,7 @@ namespace autoware::trajectory_selector::offline_evaluation_tools
 using autoware::universe_utils::createDefaultMarker;
 using autoware::universe_utils::createMarkerColor;
 using autoware::universe_utils::createMarkerScale;
+using autoware::universe_utils::getOrDeclareParameter;
 using autoware::universe_utils::Point2d;
 using autoware::universe_utils::Polygon2d;
 
@@ -66,39 +67,50 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
-  reader_.open(declare_parameter<std::string>("bag_path"));
+  reader_.open(getOrDeclareParameter<std::string>(*this, "bag_path"));
+}
 
-  data_augument_parameters_ = std::make_shared<DataAugmentParameters>();
-  data_augument_parameters_->sample_num = declare_parameter<int>("sample_num");
-  data_augument_parameters_->resolution = declare_parameter<double>("resolution");
-  data_augument_parameters_->target_state.lat_positions =
-    declare_parameter<std::vector<double>>("target_state.lateral_positions");
-  data_augument_parameters_->target_state.lat_velocities =
-    declare_parameter<std::vector<double>>("target_state.lateral_velocities");
-  data_augument_parameters_->target_state.lat_accelerations =
-    declare_parameter<std::vector<double>>("target_state.lateral_accelerations");
-  data_augument_parameters_->target_state.lon_positions =
-    declare_parameter<std::vector<double>>("target_state.longitudinal_positions");
-  data_augument_parameters_->target_state.lon_velocities =
-    declare_parameter<std::vector<double>>("target_state.longitudinal_velocities");
-  data_augument_parameters_->target_state.lon_accelerations =
-    declare_parameter<std::vector<double>>("target_state.longitudinal_accelerations");
+auto OfflineEvaluatorNode::evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>
+{
+  const auto sample_num = getOrDeclareParameter<int>(*this, "sample_num");
+  const auto parameters = std::make_shared<EvaluatorParameters>(sample_num);
+  parameters->score_weight = getOrDeclareParameter<std::vector<double>>(*this, "score_weight");
+  parameters->time_decay_weight.at(0) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s0");
+  parameters->time_decay_weight.at(1) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s1");
+  parameters->time_decay_weight.at(2) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s2");
+  parameters->time_decay_weight.at(3) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s3");
+  parameters->time_decay_weight.at(4) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s4");
+  parameters->time_decay_weight.at(5) =
+    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s5");
 
-  evaluator_parameters_ =
-    std::make_shared<EvaluatorParameters>(data_augument_parameters_->sample_num);
-  evaluator_parameters_->time_decay_weight.at(0) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s0");
-  evaluator_parameters_->time_decay_weight.at(1) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s1");
-  evaluator_parameters_->time_decay_weight.at(2) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s2");
-  evaluator_parameters_->time_decay_weight.at(3) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s3");
-  evaluator_parameters_->time_decay_weight.at(4) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s4");
-  evaluator_parameters_->time_decay_weight.at(5) =
-    declare_parameter<std::vector<double>>("time_decay_weight.s5");
-  evaluator_parameters_->score_weight = declare_parameter<std::vector<double>>("score_weight");
+  return parameters;
+}
+
+auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>
+{
+  const auto parameters = std::make_shared<DataAugmentParameters>();
+
+  parameters->sample_num = getOrDeclareParameter<int>(*this, "sample_num");
+  parameters->resolution = getOrDeclareParameter<double>(*this, "resolution");
+  parameters->target_state.lat_positions =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_positions");
+  parameters->target_state.lat_velocities =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_velocities");
+  parameters->target_state.lat_accelerations =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_accelerations");
+  parameters->target_state.lon_positions =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_positions");
+  parameters->target_state.lon_velocities =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_velocities");
+  parameters->target_state.lon_accelerations =
+    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_accelerations");
+
+  return parameters;
 }
 
 auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
@@ -206,22 +218,28 @@ void OfflineEvaluatorNode::play(
   const auto bag_data = std::make_shared<BagData>(
     duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
 
-  const auto time_step =
-    autoware::universe_utils::getOrDeclareParameter<double>(*this, "play.time_step");
+  const auto time_step = getOrDeclareParameter<double>(*this, "play.time_step");
 
   RCLCPP_INFO(get_logger(), "rosbag play now...");
 
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
 
+  const auto bag_evaluator =
+    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
+
+  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
+  for (size_t i = 0; i < metrics.size(); i++) {
+    bag_evaluator->loadMetricPlugin(metrics.at(i), i);
+  }
+
+  const auto parameters = evaluator_parameters();
+
   while (reader_.has_next() && rclcpp::ok()) {
     update(bag_data, time_step);
 
-    const auto bag_evaluator = std::make_shared<BagEvaluator>(
-      bag_data, route_handler_, vehicle_info_, data_augument_parameters_);
+    bag_evaluator->setup(bag_data, previous_points);
 
-    bag_evaluator->setup(previous_points);
-
-    const auto best_data = bag_evaluator->best(evaluator_parameters_);
+    const auto best_data = bag_evaluator->best(parameters);
 
     previous_points = best_data == nullptr ? nullptr : best_data->points();
 
@@ -232,6 +250,8 @@ void OfflineEvaluatorNode::play(
     pub_marker_->publish(*bag_evaluator->marker());
 
     bag_evaluator->show();
+
+    bag_evaluator->clear();
   }
 
   res->success = true;
@@ -329,6 +349,14 @@ void OfflineEvaluatorNode::weight(
   const auto time_step =
     autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.time_step");
 
+  const auto bag_evaluator =
+    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
+
+  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
+  for (size_t i = 0; i < metrics.size(); i++) {
+    bag_evaluator->loadMetricPlugin(metrics.at(i), i);
+  }
+
   // start grid search
   while (reader_.has_next() && rclcpp::ok()) {
     stop_watch.tic("one_step");
@@ -336,13 +364,11 @@ void OfflineEvaluatorNode::weight(
 
     if (!bag_data->ready()) break;
 
-    const auto bag_evaluator = std::make_shared<BagEvaluator>(
-      bag_data, route_handler_, vehicle_info_, data_augument_parameters_);
-
     std::mutex g_mutex;
     std::mutex e_mutex;
 
-    const auto update = [&bag_evaluator, &weight_grid, &g_mutex, &e_mutex](const auto idx) {
+    const auto update = [&bag_data, &bag_evaluator, &weight_grid, &g_mutex,
+                         &e_mutex](const auto idx) {
       const auto selector_parameters = std::make_shared<EvaluatorParameters>(20);
 
       double loss = 0.0;
@@ -361,8 +387,9 @@ void OfflineEvaluatorNode::weight(
       std::shared_ptr<TrajectoryPoints> selected_points;
       {
         std::lock_guard<std::mutex> lock(e_mutex);
-        bag_evaluator->setup(previous_points);
+        bag_evaluator->setup(bag_data, previous_points);
         std::tie(loss, selected_points) = bag_evaluator->loss(selector_parameters);
+        bag_evaluator->clear();
       }
 
       {

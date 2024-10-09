@@ -36,32 +36,44 @@
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 BagEvaluator::BagEvaluator(
-  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+  const std::shared_ptr<RouteHandler> & route_handler,
   const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters)
-: trajectory_evaluator::Evaluator{route_handler, vehicle_info},
-  tf_{std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
-        ->get(bag_data->timestamp)},
-  odometry_{std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-              ->get(bag_data->timestamp)},
-  objects_{objects(bag_data, parameters)},
-  preferred_lanes_{preferred_lanes(bag_data, route_handler)}
+: trajectory_evaluator::Evaluator{route_handler, vehicle_info}, parameters_{parameters}
 {
+}
+
+void BagEvaluator::setup(
+  const std::shared_ptr<BagData> & bag_data,
+  const std::shared_ptr<TrajectoryPoints> & previous_points)
+{
+  tf_ = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
+          ->get(bag_data->timestamp);
+
+  odometry_ = std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
+                ->get(bag_data->timestamp);
+
+  objects_ = objects(bag_data, parameters_);
+
+  preferred_lanes_ = preferred_lanes(bag_data, route_handler());
+
   // add actual driving data
   {
     const auto core_data = std::make_shared<CoreData>(
-      ground_truth(bag_data, parameters), objects_, odometry_, preferred_lanes_, "ground_truth");
+      ground_truth(bag_data, parameters_), objects_, odometry_, preferred_lanes_, "ground_truth");
 
     add(core_data);
   }
 
   // data augmentation
-  for (const auto & points : augment_data(bag_data, vehicle_info, parameters)) {
+  for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
     const auto core_data =
       std::make_shared<CoreData>(points, objects_, odometry_, preferred_lanes_, "candidates");
 
     add(core_data);
   }
+
+  Evaluator::setup(previous_points);
 }
 
 auto BagEvaluator::preferred_lanes(
@@ -268,65 +280,7 @@ auto BagEvaluator::marker() const -> std::shared_ptr<MarkerArray>
     }
   }
 
-  const auto best_data = best();
-  if (best_data != nullptr) {
-    Marker marker = createDefaultMarker(
-      "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "best_score", 0L, Marker::LINE_STRIP,
-      createMarkerScale(0.2, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
-    for (const auto & point : *best_data->points()) {
-      marker.points.push_back(point.pose.position);
-    }
-    msg.markers.push_back(marker);
-  }
-
-  for (size_t i = 0; i < results().size(); ++i) {
-    const auto result = results().at(i);
-
-    if (result == nullptr) continue;
-
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::LATERAL_COMFORTABILITY);
-      const auto score = result->score(SCORE::LATERAL_COMFORTABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::LONGITUDINAL_COMFORTABILITY);
-      const auto score = result->score(SCORE::LONGITUDINAL_COMFORTABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::EFFICIENCY);
-      const auto score = result->score(SCORE::EFFICIENCY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::SAFETY);
-      const auto score = result->score(SCORE::SAFETY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::ACHIEVABILITY);
-      const auto score = result->score(SCORE::ACHIEVABILITY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-    {
-      std::stringstream ss;
-      ss << magic_enum::enum_name(SCORE::CONSISTENCY);
-      const auto score = result->score(SCORE::CONSISTENCY);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), ss.str(), i));
-    }
-  }
+  autoware::universe_utils::appendMarkerArray(*Evaluator::marker(), &msg);
 
   return std::make_shared<MarkerArray>(msg);
 }
