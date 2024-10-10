@@ -73,11 +73,10 @@ void Evaluator::normalize()
     return std::make_pair(min, max);
   };
 
-  // TODO(satoshi-ota): implement flip
   for (const auto & metric_ptr : metric_ptrs_) {
     const auto [min, max] = range(metric_ptr->index());
     for (auto & data : results_) {
-      data->normalize(min, max, metric_ptr->index(), true);
+      data->normalize(min, max, metric_ptr->index(), metric_ptr->is_deviation());
     }
   }
 }
