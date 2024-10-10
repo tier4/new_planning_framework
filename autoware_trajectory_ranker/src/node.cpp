@@ -36,7 +36,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
   const auto vehicle_info = std::make_shared<VehicleInfo>(
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo());
 
-  evaluator_ = std::make_shared<trajectory_evaluator::Evaluator>(route_handler_, vehicle_info);
+  evaluator_ = std::make_shared<Evaluator>(route_handler_, vehicle_info);
 
   const auto metrics = declare_parameter<std::vector<std::string>>("metrics");
   for (size_t i = 0; i < metrics.size(); i++) {

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_
-#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__STRUCTS_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__STRUCTS_HPP_
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
@@ -94,4 +94,4 @@ struct CoreData
 };
 }  // namespace autoware::trajectory_selector
 
-#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_STRUCTS_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__STRUCTS_HPP_

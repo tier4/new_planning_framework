@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_INTERFACE_HPP_
-#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_INTERFACE_HPP_
+#ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE__DATA_INTERFACE_HPP_
+#define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE__DATA_INTERFACE_HPP_
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "autoware/universe_utils/geometry/geometry.hpp"
 
@@ -131,4 +131,4 @@ private:
 
 }  // namespace autoware::trajectory_selector
 
-#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__DATA_INTERFACE_HPP_
+#endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE__DATA_INTERFACE_HPP_
