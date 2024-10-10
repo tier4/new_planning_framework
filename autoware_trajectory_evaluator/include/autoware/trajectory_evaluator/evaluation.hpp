@@ -15,9 +15,9 @@
 #ifndef AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 #define AUTOWARE__TRAJECTORY_EVALUATOR__EVALUATION_HPP_
 
-#include "autoware/trajectory_selector_common/data_interface.hpp"
-#include "autoware/trajectory_selector_common/data_structs.hpp"
-#include "autoware/trajectory_selector_common/metrics_interface.hpp"
+#include "autoware/trajectory_selector_common/interface/data_interface.hpp"
+#include "autoware/trajectory_selector_common/interface/metrics_interface.hpp"
+#include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <pluginlib/class_loader.hpp>

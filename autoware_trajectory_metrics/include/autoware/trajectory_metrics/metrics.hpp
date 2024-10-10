@@ -15,7 +15,7 @@
 #ifndef AUTOWARE__TRAJECTORY_METRICS__METRICS_HPP_
 #define AUTOWARE__TRAJECTORY_METRICS__METRICS_HPP_
 
-#include "autoware/trajectory_selector_common/metrics_interface.hpp"
+#include "autoware/trajectory_selector_common/interface/metrics_interface.hpp"
 
 #include <memory>
 #include <string>

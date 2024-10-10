@@ -15,7 +15,7 @@
 #ifndef BAG_HANDLER_HPP_
 #define BAG_HANDLER_HPP_
 
-#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"

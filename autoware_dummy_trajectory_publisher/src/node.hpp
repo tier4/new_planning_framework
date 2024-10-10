@@ -16,7 +16,7 @@
 #define NODE_HPP_
 
 #include "autoware/offline_evaluation_tools/data_structs.hpp"
-#include "autoware/trajectory_selector_common/data_structs.hpp"
+#include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_dummy_trajectory_publisher_param.hpp"

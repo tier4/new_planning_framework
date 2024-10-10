@@ -15,7 +15,6 @@
 #include "autoware/trajectory_evaluator/evaluation.hpp"
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware/trajectory_selector_common/data_structs.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 
 #include <autoware/universe_utils/ros/marker_helper.hpp>

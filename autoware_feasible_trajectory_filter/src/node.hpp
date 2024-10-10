@@ -15,7 +15,7 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include "autoware/trajectory_selector_common/interface.hpp"
+#include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
