@@ -41,6 +41,8 @@ public:
 
   virtual void evaluate(const std::shared_ptr<DataInterface> & result) const = 0;
 
+  virtual bool is_deviation() const = 0;
+
   void init(const std::shared_ptr<VehicleInfo> & vehicle_info) { vehicle_info_ = vehicle_info; }
 
   void set_index(const size_t index) { index_ = index; }
@@ -50,9 +52,11 @@ public:
   auto index() const -> size_t { return index_; }
 
 protected:
-  std::shared_ptr<VehicleInfo> vehicle_info_;
+  auto vehicle_info() const -> std::shared_ptr<VehicleInfo> { return vehicle_info_; }
 
 private:
+  std::shared_ptr<VehicleInfo> vehicle_info_;
+
   std::string name_;
 
   size_t index_;

@@ -30,7 +30,7 @@ void LateralAcceleration::evaluate(const std::shared_ptr<DataInterface> & result
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size(); i++) {
     const auto radius =
-      vehicle_info_->wheel_base_m / std::tan(result->points()->at(i).front_wheel_angle_rad);
+      vehicle_info()->wheel_base_m / std::tan(result->points()->at(i).front_wheel_angle_rad);
     const auto speed = result->points()->at(i).longitudinal_velocity_mps;
     metric.push_back(std::abs(speed * speed / radius));
   }
