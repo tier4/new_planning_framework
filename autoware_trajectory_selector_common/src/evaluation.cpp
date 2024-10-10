@@ -49,6 +49,23 @@ void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
   }
 }
 
+void Evaluator::removeMetricPlugin(const std::string & name)
+{
+  auto it = std::remove_if(
+    metric_ptrs_.begin(), metric_ptrs_.end(),
+    [&](const std::shared_ptr<MetricInterface> plugin) { return plugin->name() == name; });
+
+  if (it == metric_ptrs_.end()) {
+    RCLCPP_WARN_STREAM(
+      rclcpp::get_logger(__func__),
+      "The scene plugin '" << name << "' is not found in the registered modules.");
+  } else {
+    metric_ptrs_.erase(it, metric_ptrs_.end());
+    RCLCPP_INFO_STREAM(
+      rclcpp::get_logger(__func__), "The scene plugin '" << name << "' is unloaded.");
+  }
+}
+
 void Evaluator::evaluate()
 {
   for (const auto & result : results_) {
