@@ -15,7 +15,7 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include "autoware/trajectory_evaluator/evaluation.hpp"
+#include "autoware/trajectory_selector_common/evaluation.hpp"
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
@@ -54,7 +54,7 @@ private:
 
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 
-  std::shared_ptr<trajectory_evaluator::Evaluator> evaluator_;
+  std::shared_ptr<Evaluator> evaluator_;
 
   std::unique_ptr<evaluation::ParamListener> listener_;
 

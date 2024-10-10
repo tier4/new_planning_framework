@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "autoware/trajectory_evaluator/evaluation.hpp"
+#include "autoware/trajectory_selector_common/evaluation.hpp"
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
@@ -20,7 +20,7 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
-namespace autoware::trajectory_selector::trajectory_evaluator
+namespace autoware::trajectory_selector
 {
 void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
 {
@@ -249,4 +249,4 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
 
   return std::make_shared<MarkerArray>(msg);
 }
-}  // namespace autoware::trajectory_selector::trajectory_evaluator
+}  // namespace autoware::trajectory_selector

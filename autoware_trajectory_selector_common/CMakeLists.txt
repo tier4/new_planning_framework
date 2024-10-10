@@ -10,6 +10,7 @@ include_directories(
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/utils.cpp
+  src/evaluation.cpp
 )
 
 ament_auto_package()

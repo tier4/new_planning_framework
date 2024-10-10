@@ -19,7 +19,7 @@
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
 
-#include <autoware/trajectory_evaluator/evaluation.hpp>
+#include <autoware/trajectory_selector_common/evaluation.hpp>
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 
@@ -34,7 +34,7 @@ namespace autoware::trajectory_selector::offline_evaluation_tools
 
 using autoware_planning_msgs::msg::Trajectory;
 
-class BagEvaluator : public trajectory_evaluator::Evaluator
+class BagEvaluator : public Evaluator
 {
 public:
   BagEvaluator(

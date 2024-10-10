@@ -39,7 +39,7 @@ BagEvaluator::BagEvaluator(
   const std::shared_ptr<RouteHandler> & route_handler,
   const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters)
-: trajectory_evaluator::Evaluator{route_handler, vehicle_info}, parameters_{parameters}
+: Evaluator{route_handler, vehicle_info}, parameters_{parameters}
 {
 }
 
