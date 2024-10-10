@@ -40,7 +40,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 
   const auto metrics = declare_parameter<std::vector<std::string>>("metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
-    evaluator_->loadMetricPlugin(metrics.at(i), i);
+    evaluator_->load_metric(metrics.at(i), i);
   }
 
   sub_map_ = create_subscription<LaneletMapBin>(

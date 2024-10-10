@@ -22,7 +22,7 @@
 
 namespace autoware::trajectory_selector
 {
-void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
+void Evaluator::load_metric(const std::string & name, const size_t index)
 {
   if (plugin_loader_.isClassAvailable(name)) {
     const auto plugin = plugin_loader_.createSharedInstance(name);
@@ -49,7 +49,7 @@ void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
   }
 }
 
-void Evaluator::removeMetricPlugin(const std::string & name)
+void Evaluator::unload_metric(const std::string & name)
 {
   auto it = std::remove_if(
     plugins_.begin(), plugins_.end(),

@@ -43,9 +43,9 @@ public:
   {
   }
 
-  void loadMetricPlugin(const std::string & name, const size_t index);
+  void load_metric(const std::string & name, const size_t index);
 
-  void removeMetricPlugin(const std::string & name);
+  void unload_metric(const std::string & name);
 
   void add(const std::shared_ptr<CoreData> & core_data);
 
