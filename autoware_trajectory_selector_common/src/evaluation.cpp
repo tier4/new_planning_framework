@@ -22,7 +22,7 @@
 
 namespace autoware::trajectory_selector
 {
-void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
+void Evaluator::load_metric(const std::string & name, const size_t index)
 {
   if (plugin_loader_.isClassAvailable(name)) {
     const auto plugin = plugin_loader_.createSharedInstance(name);
@@ -31,7 +31,7 @@ void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
     plugin->set_index(index);
 
     // Check if the plugin is already registered.
-    for (const auto & running_plugin : metric_ptrs_) {
+    for (const auto & running_plugin : plugins_) {
       if (plugin->name() == running_plugin->name()) {
         RCLCPP_WARN_STREAM(
           rclcpp::get_logger(__func__), "The plugin '" << name << "' is already loaded.");
@@ -40,7 +40,7 @@ void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
     }
 
     // register
-    metric_ptrs_.push_back(plugin);
+    plugins_.push_back(plugin);
     RCLCPP_INFO_STREAM(
       rclcpp::get_logger(__func__), "The scene plugin '" << name << "' is loaded.");
   } else {
@@ -49,11 +49,28 @@ void Evaluator::loadMetricPlugin(const std::string & name, const size_t index)
   }
 }
 
+void Evaluator::unload_metric(const std::string & name)
+{
+  auto it = std::remove_if(
+    plugins_.begin(), plugins_.end(),
+    [&](const std::shared_ptr<MetricInterface> plugin) { return plugin->name() == name; });
+
+  if (it == plugins_.end()) {
+    RCLCPP_WARN_STREAM(
+      rclcpp::get_logger(__func__),
+      "The scene plugin '" << name << "' is not found in the registered modules.");
+  } else {
+    plugins_.erase(it, plugins_.end());
+    RCLCPP_INFO_STREAM(
+      rclcpp::get_logger(__func__), "The scene plugin '" << name << "' is unloaded.");
+  }
+}
+
 void Evaluator::evaluate()
 {
   for (const auto & result : results_) {
-    for (const auto & metric_ptr : metric_ptrs_) {
-      metric_ptr->evaluate(result);
+    for (const auto & plugin : plugins_) {
+      plugin->evaluate(result);
     }
   }
 }
@@ -72,10 +89,10 @@ void Evaluator::normalize()
     return std::make_pair(min, max);
   };
 
-  for (const auto & metric_ptr : metric_ptrs_) {
-    const auto [min, max] = range(metric_ptr->index());
+  for (const auto & plugin : plugins_) {
+    const auto [min, max] = range(plugin->index());
     for (auto & data : results_) {
-      data->normalize(min, max, metric_ptr->index(), metric_ptr->is_deviation());
+      data->normalize(min, max, plugin->index(), plugin->is_deviation());
     }
   }
 }
@@ -114,7 +131,7 @@ auto Evaluator::get(const std::string & tag) const -> std::shared_ptr<DataInterf
 
 void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
 {
-  const auto ptr = std::make_shared<DataInterface>(core_data, metric_ptrs_.size());
+  const auto ptr = std::make_shared<DataInterface>(core_data, plugins_.size());
   results_.push_back(ptr);
 }
 
@@ -185,9 +202,9 @@ void Evaluator::show() const
   ss << std::fixed << std::setprecision(2) << "\n";
   ss << "size:" << results_.size() << "\n";
   ss << "tag:" << best_data->tag() << "\n";
-  for (const auto & metric_ptr : metric_ptrs_) {
-    const auto [mean, dev] = statistics(metric_ptr->index());
-    ss << metric_ptr->name() << ":" << " mean:" << mean << " std:" << std::sqrt(dev) << "\n";
+  for (const auto & plugin : plugins_) {
+    const auto [mean, dev] = statistics(plugin->index());
+    ss << plugin->name() << ":" << " mean:" << mean << " std:" << std::sqrt(dev) << "\n";
   }
   ss << "total:" << best_data->total();
   RCLCPP_INFO_STREAM(rclcpp::get_logger(__func__), ss.str());
@@ -219,10 +236,10 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
 
     if (result == nullptr) continue;
 
-    for (const auto & metric_ptr : metric_ptrs_) {
-      const auto score = result->score(metric_ptr->index());
+    for (const auto & plugin : plugins_) {
+      const auto score = result->score(plugin->index());
       msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), metric_ptr->name(), i));
+        result->original(), score, result->feasible(), plugin->name(), i));
     }
 
     {
