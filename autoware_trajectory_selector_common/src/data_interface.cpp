@@ -25,7 +25,7 @@ namespace autoware::trajectory_selector
 DataInterface::DataInterface(const std::shared_ptr<CoreData> & core_data, const size_t metrics_num)
 : core_data_{core_data},
   metrics_(metrics_num, std::vector<double>(core_data->points->size(), 0.0)),
-  scores_(std::make_shared<std::vector<double>>(metrics_num, 0.0))
+  scores_(metrics_num, 0.0)
 {
 }
 
@@ -45,7 +45,7 @@ void DataInterface::compress(const std::vector<std::vector<double>> & weight)
   for (size_t i = 0; i < metrics_.size(); i++) {
     const auto & w = weight.at(i);
     const auto & metric = metrics_.at(i);
-    scores_->at(i) = std::inner_product(w.begin(), w.end(), metric.begin(), 0.0);
+    scores_.at(i) = std::inner_product(w.begin(), w.end(), metric.begin(), 0.0);
   }
 }
 
@@ -67,16 +67,16 @@ void DataInterface::normalize(
   const double min, const double max, const size_t index, const bool flip)
 {
   if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
-    scores_->at(index) = 1.0;
+    scores_.at(index) = 1.0;
   } else {
-    scores_->at(index) =
-      flip ? (max - scores_->at(index)) / (max - min) : (scores_->at(index) - min) / (max - min);
+    scores_.at(index) =
+      flip ? (max - scores_.at(index)) / (max - min) : (scores_.at(index) - min) / (max - min);
   }
 }
 
 void DataInterface::weighting(const std::vector<double> & weight)
 {
-  total_ = std::inner_product(weight.begin(), weight.end(), (*scores_).begin(), 0.0);
+  total_ = std::inner_product(weight.begin(), weight.end(), scores_.begin(), 0.0);
 }
 
 }  // namespace autoware::trajectory_selector

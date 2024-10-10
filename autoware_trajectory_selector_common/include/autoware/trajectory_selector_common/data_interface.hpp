@@ -51,9 +51,7 @@ public:
     metrics_.at(idx) = metric;
   }
 
-  auto score(const size_t index) const -> double { return scores_->at(index); }
-
-  auto scores() const -> std::shared_ptr<std::vector<double>> { return scores_; }
+  auto score(const size_t index) const -> double { return scores_.at(index); }
 
   auto points() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->points; }
 
@@ -85,7 +83,7 @@ private:
 
   std::vector<std::vector<double>> metrics_;
 
-  std::shared_ptr<std::vector<double>> scores_;
+  std::vector<double> scores_;
 
   double total_;
 };
