@@ -87,7 +87,7 @@ protected:
 private:
   pluginlib::ClassLoader<MetricInterface> plugin_loader_;
 
-  std::vector<std::shared_ptr<MetricInterface>> metric_ptrs_;
+  std::vector<std::shared_ptr<MetricInterface>> plugins_;
 
   std::vector<std::shared_ptr<DataInterface>> results_;
 
