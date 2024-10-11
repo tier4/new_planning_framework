@@ -26,6 +26,15 @@
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
+auto generator_name(const UUID & uuid, const std::vector<TrajectoryGeneratorInfo> & generator_info)
+  -> std::string
+{
+  const auto generator_itr = std::find_if(
+    generator_info.begin(), generator_info.end(),
+    [&uuid](const auto & info) { return info.generator_id == uuid; });
+  return generator_itr == generator_info.end() ? "NOT FOUND" : generator_itr->generator_name.data;
+}
+
 TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)},
@@ -38,7 +47,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 
   evaluator_ = std::make_shared<Evaluator>(route_handler_, vehicle_info);
 
-  const auto metrics = declare_parameter<std::vector<std::string>>("metrics");
+  const auto metrics = listener_->get_params().metrics;
   for (size_t i = 0; i < metrics.size(); i++) {
     evaluator_->load_metric(metrics.at(i), i);
   }
@@ -82,7 +91,12 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   evaluator_->clear();
 
   for (const auto & t : msg->trajectories) {
-    const auto points = utils::sampling(t.points, odometry_ptr->pose.pose, 20, 0.5);
+    // TODO(satoshi-ota): remove this lambda.
+    const auto points = [&t, &msg, &odometry_ptr]() {
+      return generator_name(t.generator_id, msg->generator_info) == "frenet_planner"
+               ? t.points
+               : utils::sampling(t.points, odometry_ptr->pose.pose, 20, 0.5);
+    }();
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
