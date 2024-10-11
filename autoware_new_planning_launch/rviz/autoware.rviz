@@ -3699,13 +3699,13 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        ACHIEVABILITY: false
-        EFFICIENCY: false
-        LATERAL_COMFORTABILITY: false
-        LONGITUDINAL_COMFORTABILITY: false
-        SAFETY: false
+        LateralDeviation: false
+        TravelDistance: false
+        LateralAcceleration: false
+        LongitudinalJerk: false
+        TimeToCollision: false
+        TrajectoryDeviation: false
         TOTAL: true
-        human: true
         preferred_lanes: true
       Topic:
         Depth: 5
