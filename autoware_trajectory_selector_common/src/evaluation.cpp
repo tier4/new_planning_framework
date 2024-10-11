@@ -19,6 +19,7 @@
 
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
+#include <autoware_lanelet2_extension/visualization/visualization.hpp>
 
 namespace autoware::trajectory_selector
 {
@@ -239,7 +240,7 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
     for (const auto & plugin : plugins_) {
       const auto score = result->score(plugin->index());
       msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), plugin->name(), i));
+        result->points(), score, result->feasible(), plugin->name(), i));
     }
 
     {
@@ -260,9 +261,15 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
       // convert score to 0.0~1.0 value
       const auto score = (result->total() - min) / (max - min);
       msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->original(), score, result->feasible(), "TOTAL", i));
+        result->points(), score, result->feasible(), "TOTAL", i));
     }
   }
+
+  autoware::universe_utils::appendMarkerArray(
+    lanelet::visualization::laneletsAsTriangleMarkerArray(
+      "preferred_lanes", route_handler_->getPreferredLanelets(),
+      createMarkerColor(0.16, 1.0, 0.69, 0.2)),
+    &msg);
 
   return std::make_shared<MarkerArray>(msg);
 }

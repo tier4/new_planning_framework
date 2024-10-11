@@ -58,14 +58,16 @@ void LongitudinalJerk::evaluate(const std::shared_ptr<DataInterface> & result) c
 
 void TimeToCollision::evaluate(const std::shared_ptr<DataInterface> & result) const
 {
-  std::vector<double> metric;
+  // TODO(satoshi-ota): remove old implementation.
+  // std::vector<double> metric;
 
-  metric.reserve(result->points()->size());
-  for (size_t i = 0; i < result->points()->size() - 1; i++) {
-    metric.push_back(utils::time_to_collision(result->points(), result->objects(), i));
-  }
+  // metric.reserve(result->points()->size());
+  // for (size_t i = 0; i < result->points()->size() - 1; i++) {
+  //   metric.push_back(utils::time_to_collision(result->points(), result->objects(), i));
+  // }
 
-  result->set_metric(index(), metric);
+  result->set_metric(
+    index(), utils::time_to_collision(result->points(), result->objects(), vehicle_info()));
 }
 
 void TravelDistance::evaluate(const std::shared_ptr<DataInterface> & result) const
