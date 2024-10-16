@@ -85,6 +85,16 @@ public:
   bool is_deviation() const override { return true; }
 };
 
+class SteeringConsistency : public MetricInterface
+{
+public:
+  SteeringConsistency() : MetricInterface{"SteeringConsistency"} {}
+
+  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+
+  bool is_deviation() const override { return true; }
+};
+
 }  // namespace autoware::trajectory_selector::trajectory_metrics
 
 #endif  // AUTOWARE__TRAJECTORY_METRICS__METRICS_HPP_
