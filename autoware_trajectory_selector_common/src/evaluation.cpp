@@ -136,12 +136,13 @@ void Evaluator::add(const std::shared_ptr<CoreData> & core_data)
   results_.push_back(ptr);
 }
 
-void Evaluator::setup(const std::shared_ptr<TrajectoryPoints> & previous_points)
-{
-  std::for_each(results_.begin(), results_.end(), [&previous_points](const auto & result) {
-    result->setup(previous_points);
-  });
-}
+// TODO(satoshi-ota): remove this function.
+// void Evaluator::setup(const std::shared_ptr<TrajectoryPoints> & previous_points)
+// {
+//   std::for_each(results_.begin(), results_.end(), [&previous_points](const auto & result) {
+//     result->setup(previous_points);
+//   });
+// }
 
 auto Evaluator::best(
   const std::shared_ptr<EvaluatorParameters> & parameters,

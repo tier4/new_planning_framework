@@ -45,10 +45,12 @@ struct CoreData
 {
   CoreData(
     const std::shared_ptr<TrajectoryPoints> & points,
+    const std::shared_ptr<TrajectoryPoints> & previous_points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const std::string & tag)
   : original{points},
     points{points},
+    previous_points{previous_points},
     objects{objects},
     odometry{odometry},
     preferred_lanes{preferred_lanes},
@@ -59,12 +61,13 @@ struct CoreData
   CoreData(
     const std::shared_ptr<TrajectoryPoints> & original,
     const std::shared_ptr<TrajectoryPoints> & points,
+    const std::shared_ptr<TrajectoryPoints> & previous_points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const Header & header,
     const UUID & generator_id)
   : original{original},
     points{points},
-    previous_points{points},  // TODO(satoshi-ota): fix this line.
+    previous_points{previous_points},
     objects{objects},
     odometry{odometry},
     preferred_lanes{preferred_lanes},

@@ -100,12 +100,10 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
-      objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
+      previous_points_, objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
 
     evaluator_->add(core_data);
   }
-
-  evaluator_->setup(previous_points_);
 
   const auto best_data = evaluator_->best(parameters());
   previous_points_ = best_data == nullptr ? nullptr : best_data->points();
