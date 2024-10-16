@@ -24,6 +24,9 @@
 namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
 
+namespace
+{
+
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
 {
   return autoware::universe_utils::createPoint(v.x, v.y, v.z);
@@ -43,15 +46,6 @@ tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & 
   return from_msg(v_world) - from_msg(pose.position);
 }
 
-tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry)
-{
-  const auto pose = odometry.pose.pose;
-  const auto v_local = odometry.twist.twist.linear;
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
-
-  return from_msg(v_world) - from_msg(pose.position);
-}
-
 tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
 {
   const auto pose = point.pose;
@@ -61,6 +55,76 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
 
   return from_msg(v_world) - from_msg(pose.position);
 }
+
+double calcDistSquared2D(const geometry_msgs::msg::Point & p, const geometry_msgs::msg::Point & q)
+{
+  const double dx = p.x - q.x;
+  const double dy = p.y - q.y;
+  return dx * dx + dy * dy;
+}
+
+geometry_msgs::msg::Point transformToRelativeCoordinate2D(
+  const geometry_msgs::msg::Point & point, const geometry_msgs::msg::Pose & origin)
+{
+  // translation
+  geometry_msgs::msg::Point trans_p;
+  trans_p.x = point.x - origin.position.x;
+  trans_p.y = point.y - origin.position.y;
+
+  // rotation (use inverse matrix of rotation)
+  double yaw = tf2::getYaw(origin.orientation);
+
+  geometry_msgs::msg::Point res;
+  res.x = (cos(yaw) * trans_p.x) + (sin(yaw) * trans_p.y);
+  res.y = ((-1) * sin(yaw) * trans_p.x) + (cos(yaw) * trans_p.y);
+  res.z = origin.position.z;
+
+  return res;
+}
+
+double calcRadius(
+  const geometry_msgs::msg::Point & target, const geometry_msgs::msg::Pose & current_pose)
+{
+  constexpr double RADIUS_MAX = 1e9;
+  const double denominator = 2 * transformToRelativeCoordinate2D(target, current_pose).y;
+  const double numerator = calcDistSquared2D(target, current_pose.position);
+
+  if (fabs(denominator) > 0) {
+    return numerator / denominator;
+  } else {
+    return RADIUS_MAX;
+  }
+}
+
+double curvature(
+  const geometry_msgs::msg::Point & target, const geometry_msgs::msg::Pose & current_pose)
+{
+  constexpr double KAPPA_MAX = 1e9;
+  const double radius = calcRadius(target, current_pose);
+
+  if (fabs(radius) > 0) {
+    return 1 / radius;
+  } else {
+    return KAPPA_MAX;
+  }
+}
+
+auto pure_pursuit(const std::shared_ptr<TrajectoryPoints> & points, const Pose & ego_pose) -> double
+{
+  const auto target_point = [&points, ego_pose]() {
+    constexpr double lookahead_distance = 10.0;
+    const auto p = autoware::motion_utils::calcLongitudinalOffsetPoint(
+      *points, ego_pose.position, lookahead_distance);
+
+    if (p.has_value()) return p.value();
+
+    return autoware::universe_utils::getPoint(points->back());
+  }();
+
+  return curvature(target_point, ego_pose);
+}
+
+}  // namespace
 
 auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
@@ -152,6 +216,13 @@ auto time_to_collision(
   }
 
   return std::vector<double>(20, 10000.0);
+}
+
+auto steer_command(
+  const std::shared_ptr<TrajectoryPoints> & points, const Pose & ego_pose,
+  const double wheel_base) -> double
+{
+  return std::atan(wheel_base * pure_pursuit(points, ego_pose));
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_metrics::utils

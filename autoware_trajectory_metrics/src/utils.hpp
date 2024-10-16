@@ -31,6 +31,10 @@ auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
   const std::shared_ptr<PredictedObjects> & objects,
   const std::shared_ptr<VehicleInfo> & vehicle_info) -> std::vector<double>;
+
+auto steer_command(
+  const std::shared_ptr<TrajectoryPoints> & points, const Pose & ego_pose,
+  const double wheel_base) -> double;
 }  // namespace autoware::trajectory_selector::trajectory_metrics::utils
 
 #endif  // UTILS_HPP_
