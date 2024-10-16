@@ -106,6 +106,8 @@ public:
 
   auto objects() const -> std::shared_ptr<PredictedObjects> { return core_data_->objects; }
 
+  auto odometry() const -> std::shared_ptr<Odometry> { return core_data_->odometry; }
+
   auto preferred_lanes() const -> std::shared_ptr<lanelet::ConstLanelets>
   {
     return core_data_->preferred_lanes;

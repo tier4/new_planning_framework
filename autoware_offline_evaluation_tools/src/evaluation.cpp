@@ -60,20 +60,21 @@ void BagEvaluator::setup(
   // add actual driving data
   {
     const auto core_data = std::make_shared<CoreData>(
-      ground_truth(bag_data, parameters_), objects_, odometry_, preferred_lanes_, "ground_truth");
+      ground_truth(bag_data, parameters_), previous_points, objects_, odometry_, preferred_lanes_,
+      "ground_truth");
 
     add(core_data);
   }
 
   // data augmentation
   for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
-    const auto core_data =
-      std::make_shared<CoreData>(points, objects_, odometry_, preferred_lanes_, "candidates");
+    const auto core_data = std::make_shared<CoreData>(
+      points, previous_points, objects_, odometry_, preferred_lanes_, "candidates");
 
     add(core_data);
   }
 
-  Evaluator::setup(previous_points);
+  // Evaluator::setup(previous_points);
 }
 
 auto BagEvaluator::preferred_lanes(
