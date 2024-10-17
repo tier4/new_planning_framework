@@ -23,6 +23,7 @@
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
 #include "autoware_perception_msgs/msg/predicted_objects.hpp"
+#include "autoware_perception_msgs/msg/predicted_path.hpp"
 #include "autoware_planning_msgs/msg/lanelet_route.hpp"
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
 #include "autoware_vehicle_msgs/msg/steering_report.hpp"
@@ -48,6 +49,7 @@ using std::chrono::seconds;
 using autoware_map_msgs::msg::LaneletMapBin;
 using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo;
+using autoware_perception_msgs::msg::PredictedObject;
 using autoware_perception_msgs::msg::PredictedObjectKinematics;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
