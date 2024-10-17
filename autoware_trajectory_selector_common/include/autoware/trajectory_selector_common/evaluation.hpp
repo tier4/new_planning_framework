@@ -37,7 +37,7 @@ public:
     const std::shared_ptr<RouteHandler> & route_handler,
     const std::shared_ptr<VehicleInfo> & vehicle_info)
   : plugin_loader_(
-      "autoware_trajectory_evaluator", "autoware::trajectory_selector::MetricInterface"),
+      "autoware_trajectory_selector_common", "autoware::trajectory_selector::MetricInterface"),
     route_handler_{route_handler},
     vehicle_info_{vehicle_info}
   {

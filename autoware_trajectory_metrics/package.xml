@@ -3,7 +3,7 @@
 <package format="3">
   <name>autoware_trajectory_metrics</name>
   <version>0.1.0</version>
-  <description>The autoware_trajectory_evaluator package</description>
+  <description>The autoware_trajectory_metrics package</description>
   <maintainer email="satoshi.ota@tier4.jp">Satoshi Ota</maintainer>
   <license>Apache License 2.0</license>
 
@@ -16,7 +16,6 @@
   <depend>autoware_new_planning_msgs</depend>
   <depend>autoware_planning_msgs</depend>
   <depend>autoware_route_handler</depend>
-  <depend>autoware_trajectory_evaluator</depend>
   <depend>autoware_trajectory_selector_common</depend>
   <depend>autoware_universe_utils</depend>
   <depend>autoware_vehicle_info_utils</depend>
@@ -24,6 +23,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
 
+  <test_depend>ament_cmake_ros</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>autoware_lint_common</test_depend>
 
