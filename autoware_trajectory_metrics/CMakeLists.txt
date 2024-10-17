@@ -3,7 +3,7 @@ project(autoware_trajectory_metrics)
 
 find_package(autoware_cmake REQUIRED)
 autoware_package()
-pluginlib_export_plugin_description_file(autoware_trajectory_evaluator plugins.xml)
+pluginlib_export_plugin_description_file(autoware_trajectory_selector_common plugins.xml)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/metrics.cpp
