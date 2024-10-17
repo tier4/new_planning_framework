@@ -18,7 +18,8 @@
               "autoware::trajectory_selector::trajectory_metrics::TravelDistance",
               "autoware::trajectory_selector::trajectory_metrics::TimeToCollision",
               "autoware::trajectory_selector::trajectory_metrics::LateralDeviation",
-              "autoware::trajectory_selector::trajectory_metrics::TrajectoryDeviation"]
+              "autoware::trajectory_selector::trajectory_metrics::SteeringConsistency"]
+              # "autoware::trajectory_selector::trajectory_metrics::TrajectoryDeviation"]
 
     score_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     time_decay_weight:
