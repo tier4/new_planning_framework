@@ -17,14 +17,21 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/universe_utils/geometry/boost_polygon_utils.hpp"
 
+#include <autoware/universe_utils/ros/marker_helper.hpp>
+
 #include <boost/geometry/algorithms/disjoint.hpp>
 
 #include <algorithm>
+#include <limits>
 
 namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
 
-namespace
+using autoware::universe_utils::createDefaultMarker;
+using autoware::universe_utils::createMarkerColor;
+using autoware::universe_utils::createMarkerScale;
+
+namespace internal
 {
 
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
@@ -37,20 +44,20 @@ tf2::Vector3 from_msg(const Point & p)
   return tf2::Vector3(p.x, p.y, p.z);
 }
 
-tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & kinematics)
+tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
 {
-  const auto pose = kinematics.initial_pose_with_covariance.pose;
-  const auto v_local = kinematics.initial_twist_with_covariance.twist.linear;
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
+  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), p_world);
 
-  return from_msg(v_world) - from_msg(pose.position);
+  return from_msg(v_world) - from_msg(p_world.position);
 }
 
 tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
 {
   const auto pose = point.pose;
-  const auto v_local =
-    geometry_msgs::build<Vector3>().x(point.longitudinal_velocity_mps).y(0.0).z(0.0);
+  const auto v_local = geometry_msgs::build<Vector3>()
+                         .x(point.longitudinal_velocity_mps)
+                         .y(point.lateral_velocity_mps)
+                         .z(0.0);
   const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
@@ -124,7 +131,7 @@ auto pure_pursuit(const std::shared_ptr<TrajectoryPoints> & points, const Pose &
   return curvature(target_point, ego_pose);
 }
 
-}  // namespace
+}  // namespace internal
 
 auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
@@ -135,9 +142,10 @@ auto time_to_collision(
   }
 
   const auto p_ego = points->at(idx).pose;
-  const auto v_ego = utils::get_velocity_in_world_coordinate(points->at(idx));
+  const auto ego_world_velocity = internal::get_velocity_in_world_coordinate(points->at(idx));
 
-  std::vector<double> time_to_collisions(objects->objects.size());
+  std::vector<double> time_to_collisions;
+  time_to_collisions.reserve(objects->objects.size());
 
   for (const auto & object : objects->objects) {
     const auto max_confidence_path = std::max_element(
@@ -152,17 +160,18 @@ auto time_to_collision(
     const auto v_ego2object =
       autoware::universe_utils::point2tfVector(p_ego.position, p_object.position);
 
-    const auto v_object = get_velocity_in_world_coordinate(object.kinematics);
-    const auto v_relative = tf2::tf2Dot(v_ego2object.normalized(), v_ego) -
-                            tf2::tf2Dot(v_ego2object.normalized(), v_object);
+    const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
+    const auto object_world_velocity =
+      internal::get_velocity_in_world_coordinate(p_object, object_local_velocity);
+    const auto v_relative = tf2::tf2Dot(v_ego2object.normalized(), ego_world_velocity) -
+                            tf2::tf2Dot(v_ego2object.normalized(), object_world_velocity);
 
-    time_to_collisions.push_back(v_ego2object.length() / v_relative);
+    if (v_relative > std::numeric_limits<double>::epsilon()) {
+      time_to_collisions.push_back(v_ego2object.length() / v_relative);
+    } else {
+      time_to_collisions.push_back(10000.0);
+    }
   }
-
-  const auto itr = std::remove_if(
-    time_to_collisions.begin(), time_to_collisions.end(),
-    [](const auto & value) { return value < 1e-3; });
-  time_to_collisions.erase(itr, time_to_collisions.end());
 
   std::sort(time_to_collisions.begin(), time_to_collisions.end());
 
@@ -222,7 +231,7 @@ auto steer_command(
   const std::shared_ptr<TrajectoryPoints> & points, const Pose & ego_pose,
   const double wheel_base) -> double
 {
-  return std::atan(wheel_base * pure_pursuit(points, ego_pose));
+  return std::atan(wheel_base * internal::pure_pursuit(points, ego_pose));
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_metrics::utils
