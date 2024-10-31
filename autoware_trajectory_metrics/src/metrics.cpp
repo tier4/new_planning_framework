@@ -130,6 +130,30 @@ void SteeringConsistency::evaluate(const std::shared_ptr<DataInterface> & result
   result->set_metric(index(), metric);
 }
 
+void AccelerationConsistency::evaluate(const std::shared_ptr<DataInterface> & result) const
+{
+  if (result->previous() == nullptr) return;
+
+  const auto ego_pose = result->odometry()->pose.pose;
+
+  const auto p1 = result->points()->at(
+    autoware::motion_utils::findNearestIndex(*result->points(), ego_pose.position));
+  const auto p2 = result->previous()->at(
+    autoware::motion_utils::findNearestIndex(*result->previous(), ego_pose.position));
+
+  const auto current = p1.acceleration_mps2;
+  const auto previous = p2.acceleration_mps2;
+
+  std::vector<double> metric;
+
+  metric.reserve(result->points()->size());
+  for (size_t i = 0; i < result->points()->size(); i++) {
+    metric.push_back(std::abs(current - previous));
+  }
+
+  result->set_metric(index(), metric);
+}
+
 }  // namespace autoware::trajectory_selector::trajectory_metrics
 
 #include <pluginlib/class_list_macros.hpp>
@@ -159,4 +183,8 @@ PLUGINLIB_EXPORT_CLASS(
 
 PLUGINLIB_EXPORT_CLASS(
   autoware::trajectory_selector::trajectory_metrics::SteeringConsistency,
+  autoware::trajectory_selector::MetricInterface)
+
+PLUGINLIB_EXPORT_CLASS(
+  autoware::trajectory_selector::trajectory_metrics::AccelerationConsistency,
   autoware::trajectory_selector::MetricInterface)

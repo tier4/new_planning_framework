@@ -6,4 +6,5 @@
   <class type="autoware::trajectory_selector::trajectory_metrics::LateralDeviation" base_class_type="autoware::trajectory_selector::MetricInterface"/>
   <class type="autoware::trajectory_selector::trajectory_metrics::TrajectoryDeviation" base_class_type="autoware::trajectory_selector::MetricInterface"/>
   <class type="autoware::trajectory_selector::trajectory_metrics::SteeringConsistency" base_class_type="autoware::trajectory_selector::MetricInterface"/>
+  <class type="autoware::trajectory_selector::trajectory_metrics::AccelerationConsistency" base_class_type="autoware::trajectory_selector::MetricInterface"/>
 </library>
