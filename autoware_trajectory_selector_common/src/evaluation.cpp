@@ -209,7 +209,7 @@ void Evaluator::show() const
     ss << plugin->name() << ":" << " mean:" << mean << " std:" << std::sqrt(dev) << "\n";
   }
   ss << "total:" << best_data->total();
-  RCLCPP_INFO_STREAM(rclcpp::get_logger(__func__), ss.str());
+  RCLCPP_DEBUG_STREAM(rclcpp::get_logger(__func__), ss.str());
 }
 
 auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>

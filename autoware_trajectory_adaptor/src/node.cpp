@@ -47,7 +47,7 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
                                                       : generator_itr->generator_name.data;
   };
 
-  RCLCPP_INFO_STREAM(
+  RCLCPP_DEBUG_STREAM(
     this->get_logger(), "best generator:" << best_generator(trajectory_itr->generator_id)
                                           << " score:" << trajectory_itr->score);
 
