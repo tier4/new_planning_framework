@@ -78,7 +78,15 @@ void Evaluator::evaluate()
 
 void Evaluator::normalize()
 {
-  if (results_.size() < 2) return;
+  if(results_.empty()) return;
+
+  if (results_.size() < 2) {
+    const auto data = results_.front();
+    for(const auto & plugin : plugins_) {
+      data->normalize(0.0, data->score(plugin->index()), plugin->index());
+    }
+    return;
+  }
 
   const auto range = [this](const size_t index) {
     double min = std::numeric_limits<double>::max();
