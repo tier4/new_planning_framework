@@ -49,7 +49,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 
   const auto metrics = listener_->get_params().metrics;
   for (size_t i = 0; i < metrics.size(); i++) {
-    evaluator_->load_metric(metrics.at(i), i);
+    evaluator_->load_metric(metrics.at(i), i, listener_->get_params().resolution);
   }
 
   sub_map_ = create_subscription<LaneletMapBin>(
@@ -97,7 +97,8 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
     const auto points = [&t, &msg, &odometry_ptr, &params]() {
       return generator_name(t.generator_id, msg->generator_info) == "frenet_planner"
                ? t.points
-               : utils::sampling(t.points, odometry_ptr->pose.pose, params->sample_num, params->resolution);
+               : utils::sampling(
+                   t.points, odometry_ptr->pose.pose, params->sample_num, params->resolution);
     }();
 
     const auto core_data = std::make_shared<CoreData>(
