@@ -23,12 +23,13 @@
 
 namespace autoware::trajectory_selector
 {
-void Evaluator::load_metric(const std::string & name, const size_t index)
+void Evaluator::load_metric(
+  const std::string & name, const size_t index, const double time_resolution)
 {
   if (plugin_loader_.isClassAvailable(name)) {
     const auto plugin = plugin_loader_.createSharedInstance(name);
 
-    plugin->init(vehicle_info_);
+    plugin->init(vehicle_info_, time_resolution);
     plugin->set_index(index);
 
     // Check if the plugin is already registered.
@@ -78,11 +79,11 @@ void Evaluator::evaluate()
 
 void Evaluator::normalize()
 {
-  if(results_.empty()) return;
+  if (results_.empty()) return;
 
   if (results_.size() < 2) {
     const auto data = results_.front();
-    for(const auto & plugin : plugins_) {
+    for (const auto & plugin : plugins_) {
       data->normalize(0.0, data->score(plugin->index()), plugin->index());
     }
     return;

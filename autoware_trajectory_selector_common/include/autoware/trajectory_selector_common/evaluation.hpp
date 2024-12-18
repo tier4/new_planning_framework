@@ -43,7 +43,7 @@ public:
   {
   }
 
-  void load_metric(const std::string & name, const size_t index);
+  void load_metric(const std::string & name, const size_t index, const double time_resolution);
 
   void unload_metric(const std::string & name);
 

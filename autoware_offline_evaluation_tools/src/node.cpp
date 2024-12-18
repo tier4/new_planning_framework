@@ -230,7 +230,7 @@ void OfflineEvaluatorNode::play(
 
   const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
-    bag_evaluator->load_metric(metrics.at(i), i);
+    bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
   const auto parameters = evaluator_parameters();
@@ -355,7 +355,7 @@ void OfflineEvaluatorNode::weight(
 
   const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
-    bag_evaluator->load_metric(metrics.at(i), i);
+    bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
   // start grid search
