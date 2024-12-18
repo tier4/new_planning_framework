@@ -43,7 +43,11 @@ public:
 
   virtual bool is_deviation() const = 0;
 
-  void init(const std::shared_ptr<VehicleInfo> & vehicle_info) { vehicle_info_ = vehicle_info; }
+  void init(const std::shared_ptr<VehicleInfo> & vehicle_info, const double resolution)
+  {
+    vehicle_info_ = vehicle_info;
+    resolution_ = resolution;
+  }
 
   void set_index(const size_t index) { index_ = index; }
 
@@ -53,6 +57,7 @@ public:
 
 protected:
   auto vehicle_info() const -> std::shared_ptr<VehicleInfo> { return vehicle_info_; }
+  double resolution() const { return resolution_; }
 
 private:
   std::shared_ptr<VehicleInfo> vehicle_info_;
@@ -60,6 +65,8 @@ private:
   std::string name_;
 
   size_t index_;
+
+  double resolution_;
 };
 
 }  // namespace autoware::trajectory_selector

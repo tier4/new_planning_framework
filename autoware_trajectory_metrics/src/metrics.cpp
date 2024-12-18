@@ -43,12 +43,14 @@ void LongitudinalJerk::evaluate(const std::shared_ptr<DataInterface> & result) c
   if (result->points()->size() < 2) return;
 
   std::vector<double> metric;
+  constexpr double epsilon = 1.0e-3;
+  const double time_resolution = resolution() > epsilon ? resolution() : epsilon;
 
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size() - 1; i++) {
     const auto jerk =
       (result->points()->at(i + 1).acceleration_mps2 - result->points()->at(i).acceleration_mps2) /
-      0.5;
+      time_resolution;
     metric.push_back(std::abs(jerk));
   }
   metric.push_back(metric.back());
