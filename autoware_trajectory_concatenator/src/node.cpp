@@ -16,21 +16,21 @@
 
 #include <autoware/universe_utils/ros/uuid_helper.hpp>
 
-namespace autoware::trajectory_selector::trajectory_concatenater
+namespace autoware::trajectory_selector::trajectory_concatenator
 {
 
-TrajectoryConcatenaterNode::TrajectoryConcatenaterNode(const rclcpp::NodeOptions & node_options)
-: Node{"trajectory_concatenater_node", node_options},
+TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions & node_options)
+: Node{"trajectory_concatenator_node", node_options},
   timer_{rclcpp::create_timer(
-    this, get_clock(), 100ms, std::bind(&TrajectoryConcatenaterNode::publish, this))},
+    this, get_clock(), 100ms, std::bind(&TrajectoryConcatenatorNode::publish, this))},
   subs_trajectories_{this->create_subscription<Trajectories>(
     "~/input/trajectories", 1,
-    std::bind(&TrajectoryConcatenaterNode::on_trajectories, this, std::placeholders::_1))},
+    std::bind(&TrajectoryConcatenatorNode::on_trajectories, this, std::placeholders::_1))},
   pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)}
 {
 }
 
-void TrajectoryConcatenaterNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
+void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
@@ -56,7 +56,7 @@ void TrajectoryConcatenaterNode::on_trajectories(const Trajectories::ConstShared
   }
 }
 
-void TrajectoryConcatenaterNode::publish()
+void TrajectoryConcatenatorNode::publish()
 {
   std::vector<Trajectory> trajectories{};
   std::vector<TrajectoryGeneratorInfo> generator_info{};
@@ -85,8 +85,8 @@ void TrajectoryConcatenaterNode::publish()
   pub_trajectores_->publish(output);
 }
 
-}  // namespace autoware::trajectory_selector::trajectory_concatenater
+}  // namespace autoware::trajectory_selector::trajectory_concatenator
 
 #include <rclcpp_components/register_node_macro.hpp>
 RCLCPP_COMPONENTS_REGISTER_NODE(
-  autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode)
+  autoware::trajectory_selector::trajectory_concatenator::TrajectoryConcatenatorNode)

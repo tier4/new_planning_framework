@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-namespace autoware::trajectory_selector::trajectory_concatenater
+namespace autoware::trajectory_selector::trajectory_concatenator
 {
 
 using namespace std::literals::chrono_literals;
@@ -33,10 +33,10 @@ using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_new_planning_msgs::msg::Trajectory;
 using autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo;
 
-class TrajectoryConcatenaterNode : public rclcpp::Node
+class TrajectoryConcatenatorNode : public rclcpp::Node
 {
 public:
-  explicit TrajectoryConcatenaterNode(const rclcpp::NodeOptions & node_options);
+  explicit TrajectoryConcatenatorNode(const rclcpp::NodeOptions & node_options);
 
 private:
   void on_trajectories(const Trajectories::ConstSharedPtr msg);
@@ -54,6 +54,6 @@ private:
   mutable std::mutex mutex_;
 };
 
-}  // namespace autoware::trajectory_selector::trajectory_concatenater
+}  // namespace autoware::trajectory_selector::trajectory_concatenator
 
 #endif  // NODE_HPP_
