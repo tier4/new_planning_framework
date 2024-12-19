@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(autoware_trajectory_concatenater)
+project(autoware_trajectory_concatenator)
 
 find_package(autoware_cmake REQUIRED)
 autoware_package()
@@ -13,7 +13,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode"
+  PLUGIN "autoware::trajectory_selector::trajectory_concatenator::TrajectoryconcatenatorNode"
   EXECUTABLE ${PROJECT_NAME}_node
 )
 

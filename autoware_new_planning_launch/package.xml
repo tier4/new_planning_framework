@@ -16,7 +16,7 @@
   <exec_depend>autoware_feasible_trajectory_filter</exec_depend>
   <exec_depend>autoware_new_planning_msgs_converter</exec_depend>
   <exec_depend>autoware_trajectory_adaptor</exec_depend>
-  <exec_depend>autoware_trajectory_concatenater</exec_depend>
+  <exec_depend>autoware_trajectory_concatenator</exec_depend>
   <exec_depend>autoware_trajectory_ranker</exec_depend>
   <exec_depend>autoware_valid_trajectory_filter</exec_depend>
   <exec_depend>autoware_glog_component</exec_depend>

@@ -25,7 +25,7 @@
 
   <node_container pkg="rclcpp_components" exec="$(var container_type)" name="trajectory_selector_container" namespace="" output="both">
     <!-- concatenate multiple topics -->
-    <composable_node pkg="autoware_trajectory_concatenater" plugin="autoware::trajectory_selector::trajectory_concatenater::TrajectoryConcatenaterNode" name="trajectory_concatenater" namespace="">
+    <composable_node pkg="autoware_trajectory_concatenator" plugin="autoware::trajectory_selector::trajectory_concatenator::TrajectoryconcatenatorNode" name="trajectory_concatenator" namespace="">
       <remap from="~/input/trajectories" to="$(var selector_component_input)"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
       <!-- composable node config -->
