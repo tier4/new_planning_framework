@@ -14,8 +14,16 @@
 
 #include "node.hpp"
 
+#include "autoware_trajectory_concatenator_param.hpp"
+#include "structs.hpp"
+
 #include <autoware/universe_utils/ros/uuid_helper.hpp>
 #include <rclcpp/duration.hpp>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
+
+#include <chrono>
+#include <memory>
 
 namespace autoware::trajectory_selector::trajectory_concatenator
 {
@@ -27,7 +35,8 @@ TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions
   subs_trajectories_{this->create_subscription<Trajectories>(
     "~/input/trajectories", 1,
     std::bind(&TrajectoryConcatenatorNode::on_trajectories, this, std::placeholders::_1))},
-  pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)}
+  pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)},
+  listener_{std::make_unique<concatenator::ParamListener>(get_node_parameters_interface())}
 {
 }
 
@@ -68,11 +77,12 @@ void TrajectoryConcatenatorNode::publish()
     if (buffer_.empty()) return;
 
     const auto current_time = this->now();
-    const auto expiration_time = rclcpp::Duration(1.0,0);
+    const rclcpp::Duration expiration_time(
+      std::chrono::nanoseconds(static_cast<int64_t>(parameters()->duration_time * 1e9)));
 
     for (auto it = buffer_.begin(); it != buffer_.end();) {
       const auto & [uuid, pre_combine] = *it;
-      if(!pre_combine->trajectories.empty()) {
+      if (!pre_combine->trajectories.empty()) {
         const auto elapsed_time = (current_time - pre_combine->trajectories.begin()->header.stamp);
         if (elapsed_time > expiration_time) {
           it = buffer_.erase(it);
@@ -97,6 +107,16 @@ void TrajectoryConcatenatorNode::publish()
       .generator_info(generator_info);
 
   pub_trajectores_->publish(output);
+}
+
+auto TrajectoryConcatenatorNode::parameters() const -> std::shared_ptr<ConcatenatorParam>
+{
+  const auto node_params = listener_->get_params();
+  const auto parameters = std::make_shared<ConcatenatorParam>();
+
+  parameters->duration_time = node_params.duration_time;
+
+  return parameters;
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_concatenator

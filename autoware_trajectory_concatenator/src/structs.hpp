@@ -19,8 +19,6 @@ namespace autoware::trajectory_selector::trajectory_concatenator
 {
 struct ConcatenatorParam
 {
-  explicit ConcatenatorParam(const double duration_time) : duration_time{duration_time} {}
-
   double duration_time;
 };
 }  // namespace autoware::trajectory_selector::trajectory_concatenator
