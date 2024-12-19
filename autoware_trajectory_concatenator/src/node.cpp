@@ -15,6 +15,7 @@
 #include "node.hpp"
 
 #include <autoware/universe_utils/ros/uuid_helper.hpp>
+#include <rclcpp/duration.hpp>
 
 namespace autoware::trajectory_selector::trajectory_concatenator
 {
@@ -66,6 +67,21 @@ void TrajectoryConcatenatorNode::publish()
 
     if (buffer_.empty()) return;
 
+    const auto current_time = this->now();
+    const auto expiration_time = rclcpp::Duration(1.0,0);
+
+    for (auto it = buffer_.begin(); it != buffer_.end();) {
+      const auto & [uuid, pre_combine] = *it;
+      if(!pre_combine->trajectories.empty()) {
+        const auto elapsed_time = (current_time - pre_combine->trajectories.begin()->header.stamp);
+        if (elapsed_time > expiration_time) {
+          it = buffer_.erase(it);
+          continue;
+        }
+      }
+      it++;
+    }
+
     for (const auto & [uuid, pre_combine] : buffer_) {
       trajectories.insert(
         trajectories.end(), pre_combine->trajectories.begin(), pre_combine->trajectories.end());
@@ -73,8 +89,6 @@ void TrajectoryConcatenatorNode::publish()
         generator_info.end(), pre_combine->generator_info.begin(),
         pre_combine->generator_info.end());
     }
-
-    buffer_.clear();
   }
 
   const auto output =
