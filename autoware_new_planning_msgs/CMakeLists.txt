@@ -8,7 +8,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TrajectoryGeneratorInfo.msg"
   "msg/Trajectories.msg"
   "msg/Trajectory.msg"
-  # "msg/TrajectoryPoint.msg"
   DEPENDENCIES
   geometry_msgs
   std_msgs
