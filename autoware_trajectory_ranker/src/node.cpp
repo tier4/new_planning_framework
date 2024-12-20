@@ -19,6 +19,8 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
+#include <autoware_new_planning_msgs/msg/detail/score__struct.hpp>
+
 #include <algorithm>
 #include <limits>
 #include <string>
@@ -38,6 +40,7 @@ auto generator_name(const UUID & uuid, const std::vector<TrajectoryGeneratorInfo
 TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)},
+  pub_score_{this->create_publisher<autoware_new_planning_msgs::msg::Score>("~/output/score", 1)},
   listener_{std::make_unique<evaluation::ParamListener>(get_node_parameters_interface())},
   route_handler_{std::make_shared<RouteHandler>()},
   previous_points_{nullptr}
@@ -113,6 +116,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
   evaluator_->show();
 
+  pub_score_->publish(*evaluator_->score(params));
   pub_marker_->publish(*evaluator_->marker());
 
   for (const auto & result : evaluator_->results()) {

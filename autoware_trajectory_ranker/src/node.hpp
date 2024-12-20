@@ -20,7 +20,11 @@
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
 
+#include <rclcpp/publisher.hpp>
+
+#include "autoware_new_planning_msgs/msg/score.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
+#include <autoware_new_planning_msgs/msg/detail/score__struct.hpp>
 
 #include <memory>
 #include <vector>
@@ -28,6 +32,7 @@
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
+using autoware_new_planning_msgs::msg::Score;
 using autoware_new_planning_msgs::msg::Trajectory;
 
 class TrajectoryRankerNode : public TrajectoryFilterInterface
@@ -53,6 +58,7 @@ private:
   rclcpp::Subscription<LaneletRoute>::SharedPtr sub_route_;
 
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
+  rclcpp::Publisher<Score>::SharedPtr pub_score_;
 
   std::shared_ptr<Evaluator> evaluator_;
 

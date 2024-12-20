@@ -21,6 +21,7 @@
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <pluginlib/class_loader.hpp>
+#include "autoware_new_planning_msgs/msg/score.hpp"
 
 #include <memory>
 #include <string>
@@ -66,6 +67,8 @@ public:
   void show() const;
 
   auto marker() const -> std::shared_ptr<MarkerArray>;
+
+  auto score(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<autoware_new_planning_msgs::msg::Score>;
 
 protected:
   void pruning();

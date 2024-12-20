@@ -20,6 +20,8 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <autoware_new_planning_msgs/msg/detail/score__struct.hpp>
+#include <memory>
 
 namespace autoware::trajectory_selector
 {
@@ -211,6 +213,25 @@ void Evaluator::show() const
   }
   ss << "total:" << best_data->total();
   RCLCPP_DEBUG_STREAM(rclcpp::get_logger(__func__), ss.str());
+}
+
+auto Evaluator::score(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<autoware_new_planning_msgs::msg::Score>
+{
+  autoware_new_planning_msgs::msg::Score msg;
+
+  const auto best_data = best();
+
+  if(best_data != nullptr)
+  {
+    for (const auto & plugin :plugins_) {
+      msg.metrics_name.push_back(plugin->name());
+      msg.metrics.push_back(best_data->score(plugin->index()));
+      msg.weight.push_back(parameters->score_weight.at(plugin->index()));
+    }
+  }
+
+
+  return std::make_shared<autoware_new_planning_msgs::msg::Score>(msg);
 }
 
 auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
