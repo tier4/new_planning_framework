@@ -7,10 +7,12 @@
   <maintainer email="satoshi.ota@tier4.jp">Satoshi OTA</maintainer>
   <maintainer email="shumpei.wakabayashi@tier4.jp">Shumpei Wakabayashi</maintainer>
   <maintainer email="kosuke.takeuchi@tier4.jp">Kosuke Takeuchi</maintainer>
+  <maintainer email="go.sakayori@tier4.jp">Go Sakayori</maintainer>
 
   <license>Apache License 2.0</license>
 
   <author email="satoshi.ota@tier4.jp">Satoshi OTA</author>
+  <author email="go.sakayori@tier4.jp">Go Sakayori</author>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 

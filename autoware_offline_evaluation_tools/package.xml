@@ -9,6 +9,7 @@
   <license>Apache License 2.0</license>
 
   <author email="satoshi.ota@tier4.jp">Satoshi Ota</author>
+  <author email="go.sakayori@tier4.jp">Go Sakayori</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>autoware_cmake</buildtool_depend>
