@@ -66,7 +66,7 @@ void Buffer<SteeringReport>::remove_old_data(const rcutils_time_point_value_t no
     return;
   }
 
-  const auto itr = std::remove_if(msgs.begin(), msgs.end(), [&now, this](const auto & msg) {
+  const auto itr = std::remove_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
     return rclcpp::Time(msg.stamp).nanoseconds() < now;
   });
   msgs.erase(itr, msgs.end());
@@ -79,7 +79,7 @@ void Buffer<TFMessage>::remove_old_data(const rcutils_time_point_value_t now)
     return;
   }
 
-  const auto itr = std::remove_if(msgs.begin(), msgs.end(), [&now, this](const auto & msg) {
+  const auto itr = std::remove_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
     return rclcpp::Time(msg.transforms.front().header.stamp).nanoseconds() < now;
   });
   msgs.erase(itr, msgs.end());
@@ -89,7 +89,7 @@ template <>
 auto Buffer<SteeringReport>::get(const rcutils_time_point_value_t now) const
   -> SteeringReport::SharedPtr
 {
-  const auto itr = std::find_if(msgs.begin(), msgs.end(), [&now, this](const auto & msg) {
+  const auto itr = std::find_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
     return rclcpp::Time(msg.stamp).nanoseconds() > now;
   });
 
@@ -103,7 +103,7 @@ auto Buffer<SteeringReport>::get(const rcutils_time_point_value_t now) const
 template <>
 auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMessage::SharedPtr
 {
-  const auto itr = std::find_if(msgs.begin(), msgs.end(), [&now, this](const auto & msg) {
+  const auto itr = std::find_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
     return rclcpp::Time(msg.transforms.front().header.stamp).nanoseconds() > now;
   });
 
