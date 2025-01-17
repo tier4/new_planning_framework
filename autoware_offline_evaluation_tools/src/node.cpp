@@ -23,11 +23,8 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-using autoware::universe_utils::createDefaultMarker;
 using autoware::universe_utils::createMarkerColor;
-using autoware::universe_utils::createMarkerScale;
 using autoware::universe_utils::getOrDeclareParameter;
-using autoware::universe_utils::Point2d;
 using autoware::universe_utils::Polygon2d;
 
 OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options)
