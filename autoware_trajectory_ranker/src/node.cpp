@@ -38,6 +38,7 @@ auto generator_name(const UUID & uuid, const std::vector<TrajectoryGeneratorInfo
 TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)},
+  pub_score_debug_{this->create_publisher<ScoreDebug>("~/output/score_debug", 1)},
   listener_{std::make_unique<evaluation::ParamListener>(get_node_parameters_interface())},
   route_handler_{std::make_shared<RouteHandler>()},
   previous_points_{nullptr}
@@ -114,6 +115,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   evaluator_->show();
 
   pub_marker_->publish(*evaluator_->marker());
+  pub_score_debug_->publish(*evaluator_->score_debug(params));
 
   for (const auto & result : evaluator_->results()) {
     const auto scored_trajectory = autoware_new_planning_msgs::build<Trajectory>()
