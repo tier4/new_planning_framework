@@ -19,7 +19,7 @@
 #include "autoware/trajectory_selector_common/interface/metrics_interface.hpp"
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
+#include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
 
 #include <pluginlib/class_loader.hpp>
 
@@ -30,7 +30,7 @@
 
 namespace autoware::trajectory_selector
 {
-using autoware_new_planning_msgs::msg::EvaluationInfo;
+using autoware_new_planning_msgs::msg::TrajectoriesDebug;
 class Evaluator
 {
 public:
@@ -68,7 +68,7 @@ public:
 
   auto marker() const -> std::shared_ptr<MarkerArray>;
 
-  auto score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<EvaluationInfo>;
+  auto score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<TrajectoriesDebug>;
 
 protected:
   void pruning();
