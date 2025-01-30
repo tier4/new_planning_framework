@@ -20,7 +20,6 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
-#include <autoware_new_planning_msgs/msg/detail/score_debug__struct.hpp>
 #include <memory>
 
 namespace autoware::trajectory_selector
@@ -278,9 +277,9 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
   return std::make_shared<MarkerArray>(msg);
 }
 
-auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<ScoreDebug>
+auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<EvaluationInfo>
 {
-  ScoreDebug msg;
+  EvaluationInfo msg;
 
   const auto best_data = best();
 
@@ -295,6 +294,6 @@ auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & paramet
 
     }
   }
-  return std::make_shared<ScoreDebug>(msg);
+  return std::make_shared<EvaluationInfo>(msg);
 }
 }  // namespace autoware::trajectory_selector
