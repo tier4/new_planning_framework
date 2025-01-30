@@ -21,8 +21,7 @@
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
 
-#include <autoware_new_planning_msgs/msg/detail/evaluation_info__struct.hpp>
-#include <autoware_new_planning_msgs/msg/detail/trajectories_debug__struct.hpp>
+#include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
 
 #include <memory>
 
