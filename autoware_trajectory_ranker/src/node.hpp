@@ -21,7 +21,7 @@
 #include "autoware_trajectory_ranker_param.hpp"
 
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
-#include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
+#include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
 
 #include <memory>
 #include <vector>
@@ -30,7 +30,7 @@ namespace autoware::trajectory_selector::trajectory_ranker
 {
 
 using autoware_new_planning_msgs::msg::Trajectory;
-using autoware_new_planning_msgs::msg::EvaluationInfo;
+using autoware_new_planning_msgs::msg::TrajectoriesDebug;
 
 class TrajectoryRankerNode : public TrajectoryFilterInterface
 {
@@ -55,7 +55,7 @@ private:
   rclcpp::Subscription<LaneletRoute>::SharedPtr sub_route_;
 
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
-  rclcpp::Publisher<EvaluationInfo>::SharedPtr pub_score_debug_;
+  rclcpp::Publisher<TrajectoriesDebug>::SharedPtr pub_trajectories_debug_;
 
   std::shared_ptr<Evaluator> evaluator_;
 

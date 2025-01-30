@@ -20,6 +20,9 @@
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+
+#include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
+
 #include <memory>
 
 namespace autoware::trajectory_selector
@@ -277,23 +280,30 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
   return std::make_shared<MarkerArray>(msg);
 }
 
-auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<EvaluationInfo>
+auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const
+  -> std::shared_ptr<TrajectoriesDebug>
 {
-  EvaluationInfo msg;
+  TrajectoriesDebug msg;
 
-  const auto best_data = best();
+  msg.header = best()->header();
 
-  if(best_data != nullptr){
-    msg.generator_info.generator_name.data = best_data->tag();
-    msg.generator_info.generator_id = best_data->uuid();
-    msg.score = best_data->total();
-    for(const auto & plugin : plugins_) {
-      msg.metrics.push_back(plugin->name());
-      msg.metrics_value.push_back(best_data->score(plugin->index()));
-      msg.weights.push_back(parameters->score_weight.at(plugin->index()));
+  for (size_t i = 0; i < results_.size(); i++) {
+    autoware_new_planning_msgs::msg::EvaluationInfo eval_info;
 
+    const auto result = results_.at(i);
+    if (result == nullptr) continue;
+    eval_info.generator_info.generator_name.data = result->tag();
+    eval_info.generator_info.generator_id = result->uuid();
+    eval_info.score = result->total();
+
+    for (const auto & plugin : plugins_) {
+      eval_info.metrics.push_back(plugin->name());
+      eval_info.metrics_value.push_back(result->score(plugin->index()));
+      eval_info.weights.push_back(parameters->score_weight.at(plugin->index()));
     }
+    msg.scores.push_back(eval_info);
   }
-  return std::make_shared<EvaluationInfo>(msg);
+
+  return std::make_shared<TrajectoriesDebug>(msg);
 }
 }  // namespace autoware::trajectory_selector
