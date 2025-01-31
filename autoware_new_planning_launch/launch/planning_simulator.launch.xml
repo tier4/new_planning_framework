@@ -9,7 +9,6 @@
   <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
 
   <!-- option -->
-  <arg name="launch_single_planner" default="true" description="use one planning module of autoware for generator."/>
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
   <arg name="rviz_config" default="$(find-pkg-share autoware_new_planning_launch)/rviz/autoware.rviz" description="rviz config"/>
 
@@ -18,22 +17,12 @@
 
   <group scoped="false">
     <include file="$(find-pkg-share autoware_launch)/launch/planning_simulator.launch.xml">
-      <arg name="launch_planning" value="$(var launch_single_planner)"/>
+      <arg name="launch_planning" value="false"/>
       <arg name="rviz_config" value="$(var rviz_config)"/>
       <arg name="map_path" value="$(var map_path)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
       <arg name="sensor_model" value="$(var sensor_model)"/>
     </include>
-
-    <group if="$(var launch_single_planner)">
-      <!-- convert topic type -->
-      <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="">
-        <!-- params -->
-        <param name="input_topic" value="/planning/autoware/trajectory"/>
-        <param name="output_topic" value="$(var selector_component_input)"/>
-        <param name="generator_name" value="autoware"/>
-      </node>
-    </group>
 
     <!-- mission planning module -->
     <group unless="$(var launch_single_planner)">
@@ -44,42 +33,9 @@
       </include>
     </group>
 
-    <!-- alpha planner -->
-    <group unless="$(var launch_single_planner)">
-      <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_planning_component.launch.xml">
-        <arg name="scenario_planning_namespace" value="scenario_planning_alpha"/>
-        <arg name="launch_mission" value="false"/>
-        <arg name="module_preset" value="alpha"/>
-        <arg name="enable_all_modules_auto_mode" value="$(var enable_all_modules_auto_mode)"/>
-        <arg name="is_simulation" value="$(var is_simulation)"/>
-      </include>
+    <!-- <include file="$(find-pkg-share autoware_mtr_python)/launch/mtr_ego_python.launch.xml">
+      <arg name="output/trajectories" value= "/planning/candidate/trajectories"/>
+    </include> -->
 
-      <!-- convert topic type -->
-      <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="alpha">
-        <!-- params -->
-        <param name="input_topic" value="/planning/scenario_planning_alpha/trajectory"/>
-        <param name="output_topic" value="$(var selector_component_input)"/>
-        <param name="generator_name" value="alpha_planner"/>
-      </node>
-    </group>
-
-    <!-- beta planner -->
-    <group unless="$(var launch_single_planner)">
-      <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_planning_component.launch.xml">
-        <arg name="scenario_planning_namespace" value="scenario_planning_beta"/>
-        <arg name="launch_mission" value="false"/>
-        <arg name="module_preset" value="beta"/>
-        <arg name="enable_all_modules_auto_mode" value="$(var enable_all_modules_auto_mode)"/>
-        <arg name="is_simulation" value="$(var is_simulation)"/>
-      </include>
-
-      <!-- convert topic type -->
-      <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="beta">
-        <!-- params -->
-        <param name="input_topic" value="/planning/scenario_planning_beta/trajectory"/>
-        <param name="output_topic" value="$(var selector_component_input)"/>
-        <param name="generator_name" value="beta_planner"/>
-      </node>
-    </group>
   </group>
 </launch>
