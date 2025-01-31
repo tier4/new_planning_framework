@@ -284,8 +284,8 @@ auto Evaluator::score_debug(const std::shared_ptr<EvaluatorParameters> & paramet
   -> std::shared_ptr<TrajectoriesDebug>
 {
   TrajectoriesDebug msg;
-
-  msg.header = best()->header();
+  msg.header.frame_id = "map";
+  msg.header.stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
 
   for (size_t i = 0; i < results_.size(); i++) {
     autoware_new_planning_msgs::msg::EvaluationInfo eval_info;
