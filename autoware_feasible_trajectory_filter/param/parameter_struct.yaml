@@ -1,0 +1,6 @@
+feasible:
+  max_velocity:
+    type: double
+    default_value: 16.667
+    description: Max velocity allowance.
+    read_only: false
