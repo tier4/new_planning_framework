@@ -1,0 +1,6 @@
+<launch>
+  <include file="$(find-pkg-share autoware_mtr_python)/launch/mtr_ego_python.launch.xml">
+    <arg name="data_path" value="$(find-pkg-share autoware_mtr_python)/data"/>
+    <arg name="output_trajectories" value="/planning/candidate/trajectories"/>
+  </include>
+</launch>

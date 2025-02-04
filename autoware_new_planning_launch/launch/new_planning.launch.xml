@@ -32,4 +32,9 @@
       <arg name="stand_alone" value="false"/>
     </include>
   </group>
+
+  <group>
+    <include file="$(find-pkg-share autoware_new_planning_launch)/launch/generator.launch.xml">
+    </include>
+  </group>
 </launch>

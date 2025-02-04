@@ -22,6 +22,7 @@
       <arg name="map_path" value="$(var map_path)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
       <arg name="sensor_model" value="$(var sensor_model)"/>
+      <arg name="node_max_velocity" value="/feasible_trajectory_filter"/>
     </include>
 
     <!-- mission planning module -->
@@ -32,10 +33,5 @@
         <arg name="mission_planner_param_path" value="$(var mission_planner_param_path)"/>
       </include>
     </group>
-
-    <!-- <include file="$(find-pkg-share autoware_mtr_python)/launch/mtr_ego_python.launch.xml">
-      <arg name="output/trajectories" value= "/planning/candidate/trajectories"/>
-    </include> -->
-
   </group>
 </launch>
