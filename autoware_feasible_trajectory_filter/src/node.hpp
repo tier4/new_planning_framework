@@ -15,7 +15,9 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
+#include "autoware_feasible_trajectory_filter_param.hpp"
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
+#include <memory>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
@@ -27,6 +29,8 @@ public:
 
 private:
   void process(const Trajectories::ConstSharedPtr msg) override;
+
+  std::unique_ptr<feasible::ParamListener> listener_;
 };
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter

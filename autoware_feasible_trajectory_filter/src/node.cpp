@@ -18,7 +18,8 @@ namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
 
 FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOptions & node_options)
-: TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options}
+: TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options},
+  listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())}
 {
 }
 
