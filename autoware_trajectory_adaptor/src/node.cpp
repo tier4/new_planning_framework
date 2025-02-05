@@ -14,6 +14,8 @@
 
 #include "node.hpp"
 
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
+
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
 
@@ -51,9 +53,11 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
     this->get_logger(), "best generator:" << best_generator(trajectory_itr->generator_id)
                                           << " score:" << trajectory_itr->score);
 
+  const auto traj_points = autoware::motion_utils::removeOverlapPoints(trajectory_itr->points);
   const auto trajectory = autoware_planning_msgs::build<OutputMsgType>()
                             .header(trajectory_itr->header)
-                            .points(trajectory_itr->points);
+                            .points(traj_points);
+
   pub_trajectory_->publish(trajectory);
 }
 
