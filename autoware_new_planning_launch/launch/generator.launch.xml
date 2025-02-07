@@ -1,5 +1,4 @@
 <launch>
-  <arg name="param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/trajectory_interpolator.param.yaml"/>
   <arg name="smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
   <arg name="jerk_filtered_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/JerkFiltered.param.yaml"/>
   <arg name="velocity_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
@@ -15,7 +14,7 @@
 
 
   <node pkg="autoware_trajectory_interpolator" exec="autoware_trajectory_interpolator_node" name="trajectory_interpolator_node" output="screen">
-   <param from="$(var param_path)" allow_substs="true"/>
+   <param from="$(find-pkg-share autoware_trajectory_interpolator)/config/trajectory_interpolator.param.yaml" allow_substs="true"/>
    <param from="$(var smoother_param_path)" allow_substs="true"/>
    <param from="$(var jerk_filtered_smoother_param_path)" allow_substs="true"/>
    <param from="$(var velocity_smoother_param_path)" allow_substs="true"/>
