@@ -3,20 +3,26 @@
   <arg name="jerk_filtered_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/JerkFiltered.param.yaml"/>
   <arg name="velocity_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
   <arg name="common_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_common.param.yaml"/>
-  
+
+  <arg name="input_traj" default="mtr/trajectory"/>
+  <arg name="output_traj" default="smoothed/mtr/trajectory"/>
+  <arg name="output_trajectories" default="/planning/candidate/trajectories"/>
+
   <include file="$(find-pkg-share autoware_mtr_python)/launch/mtr_ego_python.launch.xml">
     <arg name="data_path" value="$(find-pkg-share autoware_mtr_python)/data"/>
   </include>
 
-  
+
   <node pkg="autoware_trajectory_interpolator" exec="autoware_trajectory_interpolator_node" name="trajectory_interpolator_node" output="screen">
-    <param from="$(find-pkg-share autoware_trajectory_interpolator)/config/trajectory_interpolator.param.yaml" allow_substs="true"/>
-    <param from="$(var param_path)" allow_substs="true"/>
-    <param from="$(var smoother_param_path)" allow_substs="true"/>
-    <param from="$(var jerk_filtered_smoother_param_path)" allow_substs="true"/>
-    <param from="$(var velocity_smoother_param_path)" allow_substs="true"/>
-    <param from="$(var common_smoother_param_path)" allow_substs="true"/>
-    <remap from="smoothed/mtr/trajectories" to="/planning/candidate/trajectories"/>
-    <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+   <param from="$(find-pkg-share autoware_trajectory_interpolator)/config/trajectory_interpolator.param.yaml" allow_substs="true"/>
+   <param from="$(var smoother_param_path)" allow_substs="true"/>
+   <param from="$(var jerk_filtered_smoother_param_path)" allow_substs="true"/>
+   <param from="$(var velocity_smoother_param_path)" allow_substs="true"/>
+   <param from="$(var common_smoother_param_path)" allow_substs="true"/>
+   <remap from="~/output/trajectory" to="$(var output_traj)"/>
+   <remap from="~/output/trajectories" to="$(var output_trajectories)"/>
+   <remap from="~/input/traj" to="$(var input_traj)"/>
+   <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+   <remap from="~/input/acceleration" to="/localization/acceleration"/>
   </node>
 </launch>
