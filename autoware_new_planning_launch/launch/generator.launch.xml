@@ -24,5 +24,6 @@
    <remap from="~/input/traj" to="$(var input_traj)"/>
    <remap from="~/input/odometry" to="/localization/kinematic_state"/>
    <remap from="~/input/acceleration" to="/localization/acceleration"/>
+   <remap from="~/input/previous_trajectory" to="/planning/scenario_planning/trajectory"/>
   </node>
 </launch>
