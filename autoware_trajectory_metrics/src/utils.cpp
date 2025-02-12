@@ -26,11 +26,6 @@
 
 namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
-
-using autoware::universe_utils::createDefaultMarker;
-using autoware::universe_utils::createMarkerColor;
-using autoware::universe_utils::createMarkerScale;
-
 namespace internal
 {
 
@@ -98,9 +93,8 @@ double calcRadius(
 
   if (fabs(denominator) > 0) {
     return numerator / denominator;
-  } else {
-    return RADIUS_MAX;
   }
+  return RADIUS_MAX;
 }
 
 double curvature(
@@ -111,9 +105,8 @@ double curvature(
 
   if (fabs(radius) > 0) {
     return 1 / radius;
-  } else {
-    return KAPPA_MAX;
   }
+  return KAPPA_MAX;
 }
 
 auto pure_pursuit(const std::shared_ptr<TrajectoryPoints> & points, const Pose & ego_pose) -> double
