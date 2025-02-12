@@ -183,8 +183,7 @@ auto sampling(
   const auto timestamp_increasing = interpolation::isIncreasing(timestamps);
 
   if (timestamp_increasing) {
-    const auto start_time = rclcpp::Duration(points.at(ego_seg_idx).time_from_start).seconds();
-    return sampling_with_time(points, sample_num, resolution, start_time);
+    return sampling_with_time(points, sample_num, resolution, ego_seg_idx);
   }
 
   TrajectoryPoints output;
