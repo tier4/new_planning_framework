@@ -222,13 +222,13 @@ auto sampling_with_time(
   const double start_time = rclcpp::Duration(points.at(start_idx).time_from_start).seconds();
 
   for (size_t i = 0; i < sample_num; i++) {
-    const auto elapsed_time = sample_num * resolution + start_time;
+    const auto elapsed_time = static_cast<double>(i) * resolution + start_time;
     const auto index = find_nearest_timestamp(points, elapsed_time, start_idx);
     if (!index.has_value()) {
-      output.push_back(points.at(start_idx));
+      output.push_back(points.back());
       continue;
     }
-    if (index.value() >= sample_num - 1) {
+    if (index.value() >= points.size() - 1) {
       output.push_back(points.back());
       continue;
     }

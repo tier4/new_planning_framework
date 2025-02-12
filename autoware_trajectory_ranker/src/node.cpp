@@ -39,6 +39,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   pub_marker_{this->create_publisher<MarkerArray>("~/output/markers", 1)},
   pub_trajectories_debug_{this->create_publisher<TrajectoriesDebug>("~/output/score_debug", 1)},
+  pub_resampled_trajectories_{this->create_publisher<Trajectories>("~/output/resampled_trajectories", 1)},
   listener_{std::make_unique<evaluation::ParamListener>(get_node_parameters_interface())},
   route_handler_{std::make_shared<RouteHandler>()},
   previous_points_{nullptr}
@@ -65,6 +66,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 {
   publish(score(msg));
+  publish_resampled_trajectory(msg);
 }
 
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
@@ -126,6 +128,18 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
                                   .generator_info(msg->generator_info);
 
   return std::make_shared<Trajectories>(new_trajectories);
+}
+
+void TrajectoryRankerNode::publish_resampled_trajectory(const Trajectories::ConstSharedPtr msg)
+{
+  std::vector<Trajectory> trajectories;
+
+  for(const auto & result : evaluator_->results()) {
+    const auto resampled_trajectory = autoware_new_planning_msgs::build<Trajectory>().header(result->header()).generator_id(result->uuid()).points(*result->points()).score(result->total());
+    trajectories.push_back(resampled_trajectory);  
+  }
+  const auto resampled_trajectories = autoware_new_planning_msgs::build<Trajectories>().trajectories(trajectories).generator_info(msg->generator_info);
+  pub_resampled_trajectories_->publish(resampled_trajectories);
 }
 
 auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParameters>
