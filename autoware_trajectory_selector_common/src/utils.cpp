@@ -214,6 +214,11 @@ auto sampling_with_time(
   TrajectoryPoints output;
   output.reserve(sample_num);
 
+  if (points.empty() || start_idx >= points.size()) {
+    std::cerr << "Error: points is empty or start_idx is out of range!" << std::endl;
+    return output;
+  }
+
   const double start_time = rclcpp::Duration(points.at(start_idx).time_from_start).seconds();
 
   for (size_t i = 0; i < sample_num; i++) {
@@ -223,12 +228,18 @@ auto sampling_with_time(
       output.push_back(points.at(start_idx));
       continue;
     }
-    if (index == sample_num - 1) {
+    if (index.value() >= sample_num - 1) {
       output.push_back(points.back());
       continue;
     }
     const double t1 = rclcpp::Duration(points.at(index.value()).time_from_start).seconds();
     const double t2 = rclcpp::Duration(points.at(index.value() + 1).time_from_start).seconds();
+
+    if (t2 == t1) {
+      output.push_back(points.at(index.value()));
+      continue;
+    }
+
     const double ratio = (elapsed_time - t1) / (t2 - t1);
     const double clamped_ratio = std::clamp(ratio, 0.0, 1.0);
     output.push_back(calcInterpolatedPoint(
