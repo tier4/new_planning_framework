@@ -77,6 +77,7 @@ public:
 
   bool feasible() const
   {
+    constexpr double epsilon = -1e-06;
     const auto idx = autoware::motion_utils::findNearestIndex(
       *core_data_->points, core_data_->odometry->pose.pose.position);
     const auto & p1 = core_data_->points->at(idx).pose.position;
@@ -85,7 +86,7 @@ public:
       return false;
     }
 
-    const auto condition = [](const auto & p) { return p.longitudinal_velocity_mps >= 0.0; };
+    const auto condition = [&epsilon](const auto & p) { return p.longitudinal_velocity_mps >= epsilon; };
     return std::all_of(core_data_->points->begin(), core_data_->points->end(), condition);
   }
 

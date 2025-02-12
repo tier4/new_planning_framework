@@ -21,8 +21,12 @@
 
 #include <autoware/universe_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+#include <rclcpp/duration.hpp>
 
 #include <boost/geometry/algorithms/disjoint.hpp>
+
+#include <optional>
+#include <vector>
 
 namespace autoware::trajectory_selector::utils
 {
@@ -36,6 +40,48 @@ struct FrenetPoint
   double length{0.0};    // longitudinal
   double distance{0.0};  // lateral
 };
+
+TrajectoryPoint calcInterpolatedPoint(
+  const TrajectoryPoint & curr_pt, const TrajectoryPoint & next_pt, const double ratio,
+  const bool use_zero_order_hold_for_twist)
+{
+  TrajectoryPoint interpolated_point{};
+
+  // pose interpolation
+  interpolated_point.pose = autoware::universe_utils::calcInterpolatedPose(curr_pt, next_pt, ratio);
+
+  // twist interpolation
+  if (use_zero_order_hold_for_twist) {
+    interpolated_point.longitudinal_velocity_mps = curr_pt.longitudinal_velocity_mps;
+    interpolated_point.lateral_velocity_mps = curr_pt.lateral_velocity_mps;
+    interpolated_point.acceleration_mps2 = curr_pt.acceleration_mps2;
+  } else {
+    interpolated_point.longitudinal_velocity_mps = autoware::interpolation::lerp(
+      curr_pt.longitudinal_velocity_mps, next_pt.longitudinal_velocity_mps, ratio);
+    interpolated_point.lateral_velocity_mps = autoware::interpolation::lerp(
+      curr_pt.lateral_velocity_mps, next_pt.lateral_velocity_mps, ratio);
+    interpolated_point.acceleration_mps2 =
+      autoware::interpolation::lerp(curr_pt.acceleration_mps2, next_pt.acceleration_mps2, ratio);
+  }
+
+  // heading rate interpolation
+  interpolated_point.heading_rate_rps =
+    autoware::interpolation::lerp(curr_pt.heading_rate_rps, next_pt.heading_rate_rps, ratio);
+
+  // wheel interpolation
+  interpolated_point.front_wheel_angle_rad = autoware::interpolation::lerp(
+    curr_pt.front_wheel_angle_rad, next_pt.front_wheel_angle_rad, ratio);
+  interpolated_point.rear_wheel_angle_rad = autoware::interpolation::lerp(
+    curr_pt.rear_wheel_angle_rad, next_pt.rear_wheel_angle_rad, ratio);
+
+  // time interpolation
+  const double interpolated_time = autoware::interpolation::lerp(
+    rclcpp::Duration(curr_pt.time_from_start).seconds(),
+    rclcpp::Duration(next_pt.time_from_start).seconds(), ratio);
+  interpolated_point.time_from_start = rclcpp::Duration::from_seconds(interpolated_time);
+
+  return interpolated_point;
+}
 
 TrajectoryPoint calcInterpolatedPoint(
   const TrajectoryPoints & points, const geometry_msgs::msg::Pose & target_pose,
@@ -66,44 +112,7 @@ TrajectoryPoint calcInterpolatedPoint(
   const double ratio = v1.dot(v2) / v1.length2();
   const double clamped_ratio = std::clamp(ratio, 0.0, 1.0);
 
-  // Interpolate
-  TrajectoryPoint interpolated_point{};
-
-  // pose interpolation
-  interpolated_point.pose =
-    autoware::universe_utils::calcInterpolatedPose(curr_pt, next_pt, clamped_ratio);
-
-  // twist interpolation
-  if (use_zero_order_hold_for_twist) {
-    interpolated_point.longitudinal_velocity_mps = curr_pt.longitudinal_velocity_mps;
-    interpolated_point.lateral_velocity_mps = curr_pt.lateral_velocity_mps;
-    interpolated_point.acceleration_mps2 = curr_pt.acceleration_mps2;
-  } else {
-    interpolated_point.longitudinal_velocity_mps = autoware::interpolation::lerp(
-      curr_pt.longitudinal_velocity_mps, next_pt.longitudinal_velocity_mps, clamped_ratio);
-    interpolated_point.lateral_velocity_mps = autoware::interpolation::lerp(
-      curr_pt.lateral_velocity_mps, next_pt.lateral_velocity_mps, clamped_ratio);
-    interpolated_point.acceleration_mps2 = autoware::interpolation::lerp(
-      curr_pt.acceleration_mps2, next_pt.acceleration_mps2, clamped_ratio);
-  }
-
-  // heading rate interpolation
-  interpolated_point.heading_rate_rps = autoware::interpolation::lerp(
-    curr_pt.heading_rate_rps, next_pt.heading_rate_rps, clamped_ratio);
-
-  // wheel interpolation
-  interpolated_point.front_wheel_angle_rad = autoware::interpolation::lerp(
-    curr_pt.front_wheel_angle_rad, next_pt.front_wheel_angle_rad, clamped_ratio);
-  interpolated_point.rear_wheel_angle_rad = autoware::interpolation::lerp(
-    curr_pt.rear_wheel_angle_rad, next_pt.rear_wheel_angle_rad, clamped_ratio);
-
-  // time interpolation
-  const double interpolated_time = autoware::interpolation::lerp(
-    rclcpp::Duration(curr_pt.time_from_start).seconds(),
-    rclcpp::Duration(next_pt.time_from_start).seconds(), clamped_ratio);
-  interpolated_point.time_from_start = rclcpp::Duration::from_seconds(interpolated_time);
-
-  return interpolated_point;
+  return calcInterpolatedPoint(curr_pt, next_pt, clamped_ratio, use_zero_order_hold_for_twist);
 }
 
 template <class T>
@@ -167,6 +176,17 @@ auto sampling(
   const auto ego_seg_idx = autoware::motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
     points, p_ego, 10.0, M_PI_2);
 
+  std::vector<double> timestamps;
+  for (const auto & point : points) {
+    timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
+  }
+  const auto timestamp_increasing = interpolation::isIncreasing(timestamps);
+
+  if (timestamp_increasing) {
+    const auto start_time = rclcpp::Duration(points.at(ego_seg_idx).time_from_start).seconds();
+    return sampling_with_time(points, sample_num, resolution, start_time);
+  }
+
   TrajectoryPoints output;
   const auto vehicle_pose_frenet = convertToFrenetPoint(points, p_ego.position, ego_seg_idx);
 
@@ -185,6 +205,59 @@ auto sampling(
   }
 
   return output;
+}
+
+auto sampling_with_time(
+  const TrajectoryPoints & points, const size_t sample_num, const double resolution,
+  const size_t start_idx) -> TrajectoryPoints
+{
+  TrajectoryPoints output;
+  output.reserve(sample_num);
+
+  if (points.empty() || start_idx >= points.size()) {
+    std::cerr << "Error: points is empty or start_idx is out of range!" << std::endl;
+    return output;
+  }
+
+  const double start_time = rclcpp::Duration(points.at(start_idx).time_from_start).seconds();
+
+  for (size_t i = 0; i < sample_num; i++) {
+    const auto elapsed_time = static_cast<double>(i) * resolution + start_time;
+    const auto index = find_nearest_timestamp(points, elapsed_time, start_idx);
+    if (!index.has_value()) {
+      output.push_back(points.back());
+      continue;
+    }
+    if (index.value() >= points.size() - 1) {
+      output.push_back(points.back());
+      continue;
+    }
+    const double t1 = rclcpp::Duration(points.at(index.value()).time_from_start).seconds();
+    const double t2 = rclcpp::Duration(points.at(index.value() + 1).time_from_start).seconds();
+
+    if (t2 == t1) {
+      output.push_back(points.at(index.value()));
+      continue;
+    }
+
+    const double ratio = (elapsed_time - t1) / (t2 - t1);
+    const double clamped_ratio = std::clamp(ratio, 0.0, 1.0);
+    output.push_back(calcInterpolatedPoint(
+      points.at(index.value()), points.at(index.value() + 1), clamped_ratio, false));
+  }
+  return output;
+}
+
+auto find_nearest_timestamp(
+  const TrajectoryPoints & points, const double target_timestamp,
+  const size_t start_index) -> std::optional<size_t>
+{
+  auto start_idx = start_index > 0 ? start_index : 1;
+  for (size_t i = start_idx; i < points.size(); i++) {
+    const auto time = rclcpp::Duration(points.at(i).time_from_start).seconds();
+    if (time > target_timestamp) return (i - 1);
+  }
+  return std::nullopt;
 }
 
 auto to_marker(

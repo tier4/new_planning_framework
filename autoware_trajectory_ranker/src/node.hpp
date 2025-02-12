@@ -20,8 +20,8 @@
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
 
-#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 #include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
+#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 
 #include <memory>
 #include <vector>
@@ -29,8 +29,8 @@
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
-using autoware_new_planning_msgs::msg::Trajectory;
 using autoware_new_planning_msgs::msg::TrajectoriesDebug;
+using autoware_new_planning_msgs::msg::Trajectory;
 
 class TrajectoryRankerNode : public TrajectoryFilterInterface
 {
@@ -41,6 +41,8 @@ private:
   void process(const Trajectories::ConstSharedPtr msg) override;
 
   auto score(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
+  
+  void publish_resampled_trajectory(const Trajectories::ConstSharedPtr msg);
 
   auto parameters() const -> std::shared_ptr<EvaluatorParameters>;
 
@@ -56,6 +58,7 @@ private:
 
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
   rclcpp::Publisher<TrajectoriesDebug>::SharedPtr pub_trajectories_debug_;
+  rclcpp::Publisher<Trajectories>::SharedPtr pub_resampled_trajectories_;
 
   std::shared_ptr<Evaluator> evaluator_;
 
