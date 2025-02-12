@@ -18,6 +18,7 @@
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,14 @@ namespace autoware::trajectory_selector::utils
   auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double time_resolution) -> TrajectoryPoints;
+
+auto sampling_with_time(
+  const TrajectoryPoints & points, const size_t sample_num, const double resolution,
+  const size_t start_idx) -> TrajectoryPoints;
+
+auto find_nearest_timestamp(
+  const TrajectoryPoints & points, const double target_timestamp,
+  const size_t start_index) -> std::optional<size_t>;
 
 auto to_marker(
   const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,

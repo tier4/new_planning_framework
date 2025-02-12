@@ -20,8 +20,8 @@
 #include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
 
-#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 #include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
+#include "autoware_new_planning_msgs/msg/trajectory.hpp"
 
 #include <memory>
 #include <vector>
@@ -29,8 +29,8 @@
 namespace autoware::trajectory_selector::trajectory_ranker
 {
 
-using autoware_new_planning_msgs::msg::Trajectory;
 using autoware_new_planning_msgs::msg::TrajectoriesDebug;
+using autoware_new_planning_msgs::msg::Trajectory;
 
 class TrajectoryRankerNode : public TrajectoryFilterInterface
 {

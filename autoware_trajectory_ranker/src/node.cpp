@@ -94,13 +94,8 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   const auto params = parameters();
 
   for (const auto & t : msg->trajectories) {
-    // TODO(satoshi-ota): remove this lambda.
-    const auto points = [&t, &msg, &odometry_ptr, &params]() {
-      return generator_name(t.generator_id, msg->generator_info) == "frenet_planner"
-               ? t.points
-               : utils::sampling(
-                   t.points, odometry_ptr->pose.pose, params->sample_num, params->resolution);
-    }();
+    const auto points =
+      utils::sampling(t.points, odometry_ptr->pose.pose, params->sample_num, params->resolution);
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
