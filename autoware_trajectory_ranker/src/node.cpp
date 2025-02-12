@@ -66,7 +66,7 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 {
   publish(score(msg));
-  publish_resampled_trajectory(msg);
+  publish_resampled_trajectory(msg); //// TODO(go-sakayori): remove this function when the ranker is stable
 }
 
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
