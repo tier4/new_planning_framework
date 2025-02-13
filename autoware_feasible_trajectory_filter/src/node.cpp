@@ -14,18 +14,24 @@
 
 #include "node.hpp"
 
+#include <lanelet2_core/geometry/LaneletMap.h>
+
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
 
 FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options},
-  listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())}
+  listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())},
+  route_handler_{std::make_shared<RouteHandler>()},
 {
   debug_processing_time_detail_pub_ =
     create_publisher<autoware::universe_utils::ProcessingTimeDetail>(
       "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
   time_keeper_ =
     std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  sub_map_ = create_subscription<LaneletMapBin>(
+    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
+    [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
 }
 
 void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
@@ -33,6 +39,22 @@ void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr ms
   autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   publish(msg);
+}
+
+auto FeasibleTrajectoryFilterNode::out_of_lane(const Trajectories::ConstSharedPtr msg)
+  -> Trajectories::ConstSharedPtr
+{
+  if (!route_handler_->isHandlerReady()) {
+    return msg;
+  }
+
+  const auto surrounding_lanelets = lanelet::geometry::findWithin2d(, const GeometryT & geometry)
+
+    for (const auto & trajectory : msg->trajectories)
+  {
+    for (const auto & point : trajectory.points) {
+    }
+  }
 }
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
