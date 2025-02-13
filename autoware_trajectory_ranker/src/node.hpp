@@ -52,6 +52,8 @@ private:
   autoware::universe_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
     this, "~/input/odometry"};
 
+  autoware::universe_utils::InterProcessPollingSubscriber<SteeringReport> sub_steering_{this,"~/input/steering"};
+
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
 
   rclcpp::Subscription<LaneletRoute>::SharedPtr sub_route_;

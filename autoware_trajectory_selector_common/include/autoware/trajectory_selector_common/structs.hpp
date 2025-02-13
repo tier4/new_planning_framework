@@ -47,12 +47,14 @@ struct CoreData
     const std::shared_ptr<TrajectoryPoints> & points,
     const std::shared_ptr<TrajectoryPoints> & previous_points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
+    const std::shared_ptr<SteeringReport> & steering,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const std::string & tag)
   : original{points},
     points{points},
     previous_points{previous_points},
     objects{objects},
     odometry{odometry},
+    steering{steering},
     preferred_lanes{preferred_lanes},
     tag{tag}
   {
@@ -63,6 +65,7 @@ struct CoreData
     const std::shared_ptr<TrajectoryPoints> & points,
     const std::shared_ptr<TrajectoryPoints> & previous_points,
     const std::shared_ptr<PredictedObjects> & objects, const std::shared_ptr<Odometry> & odometry,
+    const std::shared_ptr<SteeringReport> & steering,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes, const Header & header,
     const UUID & generator_id)
   : original{original},
@@ -70,6 +73,7 @@ struct CoreData
     previous_points{previous_points},
     objects{objects},
     odometry{odometry},
+    steering{steering},
     preferred_lanes{preferred_lanes},
     tag{"__anon"},
     header{header},
@@ -86,6 +90,8 @@ struct CoreData
   std::shared_ptr<PredictedObjects> objects;
 
   std::shared_ptr<Odometry> odometry;
+
+  std::shared_ptr<SteeringReport> steering;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes;
 

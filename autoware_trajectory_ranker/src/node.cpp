@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <string>
 
 namespace autoware::trajectory_selector::trajectory_ranker
@@ -85,6 +86,12 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   if (objects_ptr == nullptr) {
     return msg;
   }
+
+  const auto steering_ptr = std::const_pointer_cast<SteeringReport>(sub_steering_.takeData());
+  if(steering_ptr == nullptr) {
+    return msg;
+  }
+
   const auto preferred_lanes =
     std::make_shared<lanelet::ConstLanelets>(route_handler_->getPreferredLanelets());
 
@@ -101,7 +108,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
-      previous_points_, objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
+      previous_points_, objects_ptr, odometry_ptr, steering_ptr, preferred_lanes, t.header, t.generator_id);
 
     evaluator_->add(core_data);
   }
