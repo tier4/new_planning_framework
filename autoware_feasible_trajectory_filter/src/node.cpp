@@ -47,6 +47,8 @@ void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr ms
 
 void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
 {
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(
     *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
@@ -55,6 +57,8 @@ void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstShared
 auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSharedPtr msg)
   -> Trajectories::ConstSharedPtr
 {
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
   auto trajectories = msg->trajectories;
 
   const auto itr = std::remove_if(
@@ -73,6 +77,8 @@ auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSh
 auto FeasibleTrajectoryFilterNode::out_of_lane(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory) -> bool
 {
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
   if (!lanelet_map_ptr_) {
     return false;
   }
