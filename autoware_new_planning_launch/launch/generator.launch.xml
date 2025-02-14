@@ -12,17 +12,6 @@
     <arg name="data_path" value="$(find-pkg-share autoware_mtr_python)/data"/>
   </include>
 
-
-  <node pkg="autoware_trajectory_interpolator" exec="autoware_trajectory_interpolator_node" name="trajectory_interpolator_node" output="screen">
-   <param from="$(find-pkg-share autoware_trajectory_interpolator)/config/trajectory_interpolator.param.yaml" allow_substs="true"/>
-   <param from="$(var smoother_param_path)" allow_substs="true"/>
-   <param from="$(var jerk_filtered_smoother_param_path)" allow_substs="true"/>
-   <param from="$(var velocity_smoother_param_path)" allow_substs="true"/>
-   <param from="$(var common_smoother_param_path)" allow_substs="true"/>
-   <remap from="~/output/trajectory" to="$(var output_traj)"/>
-   <remap from="~/output/trajectories" to="$(var output_trajectories)"/>
-   <remap from="~/input/traj" to="$(var input_traj)"/>
-   <remap from="~/input/odometry" to="/localization/kinematic_state"/>
-   <remap from="~/input/acceleration" to="/localization/acceleration"/>
-  </node>
+  <include file="$(find-pkg-share autoware_trajectory_interpolator)/launch/trajectory_interpolator.launch.xml">
+  </include>
 </launch>
