@@ -28,14 +28,17 @@ namespace autoware::trajectory_selector::trajectory_metrics
 void LateralAcceleration::evaluate(const std::shared_ptr<DataInterface> & result) const
 {
   std::vector<double> metric;
+  constexpr double epsilon = 1.0e-3;
+  const double time_resolution = resolution() > epsilon ? resolution() : epsilon;
 
   metric.reserve(result->points()->size());
-  for (size_t i = 0; i < result->points()->size(); i++) {
-    const auto radius =
-      vehicle_info()->wheel_base_m / std::tan(result->points()->at(i).front_wheel_angle_rad);
-    const auto speed = result->points()->at(i).longitudinal_velocity_mps;
-    metric.push_back(std::abs(speed * speed / radius));
+  for (size_t i = 0; i < result->points()->size() - 1; i++) {
+    const auto lateral_acc = (result->points()->at(i + 1).lateral_velocity_mps -
+                              result->points()->at(i).lateral_velocity_mps) /
+                             time_resolution;
+    metric.push_back(std::abs(lateral_acc));
   }
+  metric.push_back(metric.back());
 
   result->set_metric(index(), metric);
 }
