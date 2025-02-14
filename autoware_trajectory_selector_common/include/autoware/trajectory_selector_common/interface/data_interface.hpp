@@ -86,7 +86,9 @@ public:
       return false;
     }
 
-    const auto condition = [&epsilon](const auto & p) { return p.longitudinal_velocity_mps >= epsilon; };
+    const auto condition = [&epsilon](const auto & p) {
+      return p.longitudinal_velocity_mps >= epsilon;
+    };
     return std::all_of(core_data_->points->begin(), core_data_->points->end(), condition);
   }
 
@@ -108,6 +110,8 @@ public:
   auto objects() const -> std::shared_ptr<PredictedObjects> { return core_data_->objects; }
 
   auto odometry() const -> std::shared_ptr<Odometry> { return core_data_->odometry; }
+
+  auto steering() const -> std::shared_ptr<SteeringReport> { return core_data_->steering; }
 
   auto preferred_lanes() const -> std::shared_ptr<lanelet::ConstLanelets>
   {
