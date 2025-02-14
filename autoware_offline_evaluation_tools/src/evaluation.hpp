@@ -81,6 +81,8 @@ private:
 
   std::shared_ptr<Odometry> odometry_;
 
+  std::shared_ptr<SteeringReport> steering_;
+
   std::shared_ptr<PredictedObjects> objects_;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;

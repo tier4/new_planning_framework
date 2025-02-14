@@ -53,6 +53,8 @@ void BagEvaluator::setup(
   odometry_ = std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
                 ->get(bag_data->timestamp);
 
+  steering_ = std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))->get(bag_data->timestamp);
+
   objects_ = objects(bag_data, parameters_);
 
   preferred_lanes_ = preferred_lanes(bag_data, route_handler());
@@ -60,7 +62,7 @@ void BagEvaluator::setup(
   // add actual driving data
   {
     const auto core_data = std::make_shared<CoreData>(
-      ground_truth(bag_data, parameters_), previous_points, objects_, odometry_, preferred_lanes_,
+      ground_truth(bag_data, parameters_), previous_points, objects_, odometry_, steering_, preferred_lanes_,
       "ground_truth");
 
     add(core_data);
@@ -69,7 +71,7 @@ void BagEvaluator::setup(
   // data augmentation
   for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
     const auto core_data = std::make_shared<CoreData>(
-      points, previous_points, objects_, odometry_, preferred_lanes_, "candidates");
+      points, previous_points, objects_, odometry_, steering_, preferred_lanes_, "candidates");
 
     add(core_data);
   }

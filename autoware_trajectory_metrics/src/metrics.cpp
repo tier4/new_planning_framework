@@ -20,6 +20,8 @@
 
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
+#include <rcl/subscription.h>
+
 namespace autoware::trajectory_selector::trajectory_metrics
 {
 
@@ -114,19 +116,13 @@ void TrajectoryDeviation::evaluate(const std::shared_ptr<DataInterface> & result
 
 void SteeringConsistency::evaluate(const std::shared_ptr<DataInterface> & result) const
 {
-  if (result->previous() == nullptr) return;
-
-  const auto ego_pose = result->odometry()->pose.pose;
-  const auto wheel_base = vehicle_info()->wheel_base_m;
-
-  const auto current = utils::steer_command(result->points(), ego_pose, wheel_base);
-  const auto previous = utils::steer_command(result->previous(), ego_pose, wheel_base);
+  const auto steering_angle = result->steering()->steering_tire_angle;
 
   std::vector<double> metric;
 
   metric.reserve(result->points()->size());
-  for (size_t i = 0; i < result->points()->size(); i++) {
-    metric.push_back(std::abs(current - previous));
+  for (const auto & point : *result->points()) {
+    metric.push_back(std::abs(point.front_wheel_angle_rad - steering_angle));
   }
 
   result->set_metric(index(), metric);
