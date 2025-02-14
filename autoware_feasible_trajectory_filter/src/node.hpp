@@ -16,7 +16,6 @@
 #define NODE_HPP_
 
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
-#include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_feasible_trajectory_filter_param.hpp"
 
 #include <autoware/universe_utils/system/time_keeper.hpp>
@@ -34,7 +33,11 @@ public:
 private:
   void process(const Trajectories::ConstSharedPtr msg) override;
 
-  auto out_of_lane(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
+  void map_callback(const LaneletMapBin::ConstSharedPtr msg);
+
+  auto check_feasibility(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
+
+  auto out_of_lane(const autoware_new_planning_msgs::msg::Trajectory & trajectory) -> bool;
 
   std::unique_ptr<feasible::ParamListener> listener_;
 
@@ -43,6 +46,10 @@ private:
   mutable std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper_{nullptr};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
+
+  std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
+  std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
+  std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
 };
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
