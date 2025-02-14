@@ -21,10 +21,17 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
 : TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options},
   listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())}
 {
+  debug_processing_time_detail_pub_ =
+    create_publisher<autoware::universe_utils::ProcessingTimeDetail>(
+      "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
+  time_keeper_ =
+    std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
   publish(msg);
 }
 

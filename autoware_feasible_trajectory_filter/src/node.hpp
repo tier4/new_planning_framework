@@ -15,8 +15,11 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include "autoware_feasible_trajectory_filter_param.hpp"
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
+#include "autoware_feasible_trajectory_filter_param.hpp"
+
+#include <autoware/universe_utils/system/time_keeper.hpp>
+
 #include <memory>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
@@ -31,6 +34,10 @@ private:
   void process(const Trajectories::ConstSharedPtr msg) override;
 
   std::unique_ptr<feasible::ParamListener> listener_;
+
+  rclcpp::Publisher<autoware::universe_utils::ProcessingTimeDetail>::SharedPtr
+    debug_processing_time_detail_pub_;
+  mutable std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
