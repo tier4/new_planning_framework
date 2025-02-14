@@ -15,6 +15,7 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
+#include <autoware/universe_utils/system/time_keeper.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
@@ -37,6 +38,10 @@ private:
   rclcpp::Subscription<InputMsgType>::SharedPtr sub_trajectories_;
 
   rclcpp::Publisher<OutputMsgType>::SharedPtr pub_trajectory_;
+
+  rclcpp::Publisher<autoware::universe_utils::ProcessingTimeDetail>::SharedPtr
+    debug_processing_time_detail_pub_;
+  mutable std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_adaptor
