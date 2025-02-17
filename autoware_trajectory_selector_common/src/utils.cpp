@@ -174,8 +174,7 @@ auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double resolution) -> TrajectoryPoints
 {
-  const auto ego_seg_idx = autoware::motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
-    points, p_ego, 10.0, M_PI_2);
+  const auto ego_seg_idx = autoware::motion_utils::findNearestIndex(points,p_ego, 10.0,M_PI_2);
 
   std::vector<double> timestamps;
   for (const auto & point : points) {
@@ -188,7 +187,10 @@ auto sampling(
   }
 
   TrajectoryPoints output;
-  const auto vehicle_pose_frenet = convertToFrenetPoint(points, p_ego.position, ego_seg_idx);
+  FrenetPoint vehicle_pose_frenet;
+  if(ego_seg_idx.has_value()) {
+    vehicle_pose_frenet = convertToFrenetPoint(points, p_ego.position, ego_seg_idx.value());
+  }
 
   double length = 0.0;
   for (size_t i = 0; i < sample_num; i++) {
@@ -209,21 +211,21 @@ auto sampling(
 
 auto sampling_with_time(
   const TrajectoryPoints & points, const size_t sample_num, const double resolution,
-  const size_t start_idx) -> TrajectoryPoints
+  const std::optional<size_t> start_idx) -> TrajectoryPoints
 {
   TrajectoryPoints output;
   output.reserve(sample_num);
 
-  if (points.empty() || start_idx >= points.size()) {
+  if (points.empty() || !start_idx.has_value() || start_idx.value() >= points.size()) {
     std::cerr << "Error: points is empty or start_idx is out of range!" << std::endl;
     return output;
   }
 
-  const double start_time = rclcpp::Duration(points.at(start_idx).time_from_start).seconds();
+  const double start_time = rclcpp::Duration(points.at(start_idx.value()).time_from_start).seconds();
 
   for (size_t i = 0; i < sample_num; i++) {
     const auto elapsed_time = static_cast<double>(i) * resolution + start_time;
-    const auto index = find_nearest_timestamp(points, elapsed_time, start_idx);
+    const auto index = find_nearest_timestamp(points, elapsed_time, start_idx.value());
     if (!index.has_value()) {
       output.push_back(points.back());
       continue;

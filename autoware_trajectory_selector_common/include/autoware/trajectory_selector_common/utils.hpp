@@ -30,7 +30,7 @@ namespace autoware::trajectory_selector::utils
 
 auto sampling_with_time(
   const TrajectoryPoints & points, const size_t sample_num, const double resolution,
-  const size_t start_idx) -> TrajectoryPoints;
+  const std::optional<size_t> start_idx) -> TrajectoryPoints;
 
 auto find_nearest_timestamp(
   const TrajectoryPoints & points, const double target_timestamp,
