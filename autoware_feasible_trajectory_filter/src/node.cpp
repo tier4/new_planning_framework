@@ -14,6 +14,13 @@
 
 #include "node.hpp"
 
+#include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+
+#include <boost/geometry/algorithms/detail/within/interface.hpp>
+
+#include <lanelet2_core/LaneletMap.h>
+#include <lanelet2_core/geometry/LaneletMap.h>
+
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
 
@@ -26,13 +33,64 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
       "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
   time_keeper_ =
     std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  sub_map_ = create_subscription<LaneletMapBin>(
+    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
+    std::bind(&FeasibleTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
 }
 
 void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
   autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
-  publish(msg);
+  publish(check_feasibility(msg));
+}
+
+void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
+{
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
+  lanelet::utils::conversion::fromBinMsg(
+    *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
+}
+
+auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSharedPtr msg)
+  -> Trajectories::ConstSharedPtr
+{
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  auto trajectories = msg->trajectories;
+
+  const auto itr = std::remove_if(
+    trajectories.begin(), trajectories.end(),
+    [this](const auto & trajectory) { return out_of_lane(trajectory); });
+
+  trajectories.erase(itr, trajectories.end());
+
+  const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
+                                  .trajectories(trajectories)
+                                  .generator_info(msg->generator_info);
+
+  return std::make_shared<Trajectories>(new_trajectories);
+}
+
+auto FeasibleTrajectoryFilterNode::out_of_lane(
+  const autoware_new_planning_msgs::msg::Trajectory & trajectory) -> bool
+{
+  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  if (!lanelet_map_ptr_) {
+    return false;
+  }
+
+  for (const auto & point : trajectory.points) {
+    const auto nearest_lanelet = lanelet::geometry::findWithin2d(
+      lanelet_map_ptr_->laneletLayer,
+      lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y),
+      1.0);  // Todo (go-sakayori): remove hard code value
+    if (nearest_lanelet.empty()) return true;
+  }
+  return false;
 }
 
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
