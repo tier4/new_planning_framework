@@ -1,0 +1,96 @@
+<launch>
+  <include file="$(find-pkg-share autoware_launch)/config/planning/preset/default_preset.yaml"/>
+
+  <arg name="vehicle_param_file" default="$(find-pkg-share $(var vehicle_model)_description)/config/vehicle_info.param.yaml"/>
+  <arg name="common_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common"/>
+  <arg name="common_param_path" default="$(var common_config_path)/common.param.yaml"/>
+  <arg name="nearest_search_param_path" default="$(var common_config_path)/nearest_search.param.yaml"/>
+  <arg name="costmap_generator_param_path" default="$(var common_config_path)/costmap_generator.param.yaml"/>
+  
+  <!-- behavior path planner -->
+  <arg name="behavior_path_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/lane_driving/behavior_planning/behavior_path_planner"/>
+  <arg name="behavior_path_planner_common_param_path" default="$(var behavior_path_config_path)/behavior_path_planner.param.yaml"/>
+  <arg name="behavior_path_planner_scene_module_manager_param_path" default="$(var behavior_path_config_path)/scene_module_manager.param.yaml"/>
+  <arg name="behavior_path_planner_side_shift_module_param_path" default="$(var behavior_path_config_path)/side_shift/side_shift.param.yaml"/>
+  <arg
+      name="behavior_path_planner_static_obstacle_avoidance_module_param_path"
+      default="$(var behavior_path_config_path)/autoware_behavior_path_static_obstacle_avoidance_module/static_obstacle_avoidance.param.yaml"
+  />
+  <arg name="behavior_path_planner_avoidance_by_lc_module_param_path" default="$(var behavior_path_config_path)/avoidance_by_lane_change/avoidance_by_lane_change.param.yaml"/>
+  <arg name="behavior_path_planner_sampling_planner_module_param_path" default="$(var behavior_path_config_path)/sampling_planner/sampling_planner.param.yaml"/>
+  <arg
+      name="behavior_path_planner_dynamic_obstacle_avoidance_module_param_path"
+      default="$(var behavior_path_config_path)/autoware_behavior_path_dynamic_obstacle_avoidance_module/dynamic_obstacle_avoidance.param.yaml"
+  />
+  <arg name="behavior_path_planner_lane_change_module_param_path" default="$(var behavior_path_config_path)/lane_change/lane_change.param.yaml"/>
+  <arg name="behavior_path_planner_goal_planner_module_param_path" default="$(var behavior_path_config_path)/goal_planner/goal_planner.param.yaml"/>
+  <arg name="behavior_path_planner_start_planner_module_param_path" default="$(var behavior_path_config_path)/start_planner/start_planner.param.yaml"/>
+  <arg name="behavior_path_planner_drivable_area_expansion_param_path" default="$(var behavior_path_config_path)/drivable_area_expansion.param.yaml"/>
+
+  <!-- behavior velocity planner -->
+  <arg name="behavior_velocity_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/lane_driving/behavior_planning/behavior_velocity_planner"/>
+  <arg name="behavior_velocity_smoother_type_param_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common/autoware_velocity_smoother/Analytical.param.yaml"/>
+  <arg name="behavior_velocity_planner_param_path" default="$(var behavior_velocity_config_path)/behavior_velocity_planner.param.yaml"/>
+  <arg name="behavior_velocity_planner_common_param_path" default="$(var behavior_velocity_config_path)/behavior_velocity_planner_common.param.yaml"/>
+  <arg name="behavior_velocity_planner_blind_spot_module_param_path" default="$(var behavior_velocity_config_path)/blind_spot.param.yaml"/>
+  <arg name="behavior_velocity_planner_crosswalk_module_param_path" default="$(var behavior_velocity_config_path)/crosswalk.param.yaml"/>
+  <arg name="behavior_velocity_planner_walkway_module_param_path" default="$(var behavior_velocity_config_path)/walkway.param.yaml"/>
+  <arg name="behavior_velocity_planner_detection_area_module_param_path" default="$(var behavior_velocity_config_path)/detection_area.param.yaml"/>
+  <arg name="behavior_velocity_planner_intersection_module_param_path" default="$(var behavior_velocity_config_path)/intersection.param.yaml"/>
+  <arg name="behavior_velocity_planner_stop_line_module_param_path" default="$(var behavior_velocity_config_path)/stop_line.param.yaml"/>
+  <arg name="behavior_velocity_planner_traffic_light_module_param_path" default="$(var behavior_velocity_config_path)/traffic_light.param.yaml"/>
+  <arg name="behavior_velocity_planner_virtual_traffic_light_module_param_path" default="$(var behavior_velocity_config_path)/virtual_traffic_light.param.yaml"/>
+  <arg name="behavior_velocity_planner_occlusion_spot_module_param_path" default="$(var behavior_velocity_config_path)/occlusion_spot.param.yaml"/>
+  <arg name="behavior_velocity_planner_no_stopping_area_module_param_path" default="$(var behavior_velocity_config_path)/no_stopping_area.param.yaml"/>
+  <arg name="behavior_velocity_planner_run_out_module_param_path" default="$(var behavior_velocity_config_path)/run_out.param.yaml"/>
+  <arg name="behavior_velocity_planner_speed_bump_module_param_path" default="$(var behavior_velocity_config_path)/speed_bump.param.yaml"/>
+  <arg name="behavior_velocity_planner_no_drivable_lane_module_param_path" default="$(var behavior_velocity_config_path)/no_drivable_lane.param.yaml"/>
+  <arg name="compare_map_filter_param_path" default="$(find-pkg-share autoware_launch)/config/perception/object_recognition/detection/pointcloud_filter/pointcloud_map_filter.param.yaml"/>
+
+  <!-- parking -->
+  <arg name="freespace_planner_param_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/parking/freespace_planner/freespace_planner.param.yaml"/>
+
+  <!-- motion -->
+  <arg name="motion_config_path" default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/lane_driving/motion_planning"/>
+  <arg name="elastic_band_smoother_param_path" default="$(var motion_config_path)/path_smoother/elastic_band_smoother.param.yaml"/>
+  <arg name="path_optimizer_param_path" default="$(var motion_config_path)/autoware_path_optimizer/path_optimizer.param.yaml"/>
+  <arg name="path_sampler_param_path" default="$(var motion_config_path)/path_sampler/path_sampler.param.yaml"/>
+  <arg name="surround_obstacle_checker_param_path" default="$(var motion_config_path)/surround_obstacle_checker/surround_obstacle_checker.param.yaml"/>
+  <arg name="obstacle_stop_planner_param_path" default="$(var motion_config_path)/obstacle_stop_planner/obstacle_stop_planner.param.yaml"/>
+  <arg name="obstacle_stop_planner_acc_param_path" default="$(var motion_config_path)/obstacle_stop_planner/adaptive_cruise_control.param.yaml"/>
+  <arg name="obstacle_cruise_planner_param_path" default="$(var motion_config_path)/obstacle_cruise_planner/obstacle_cruise_planner.param.yaml"/>
+  <arg name="motion_velocity_planner_param_path" default="$(var motion_config_path)/motion_velocity_planner/motion_velocity_planner.param.yaml"/>
+  <arg name="motion_velocity_planner_obstacle_stop_module_param_path" default="$(var motion_config_path)/motion_velocity_planner/obstacle_stop.param.yaml"/>
+  <arg name="motion_velocity_planner_obstacle_slow_down_module_param_path" default="$(var motion_config_path)/motion_velocity_planner/obstacle_slow_down.param.yaml"/>
+  <arg name="motion_velocity_planner_obstacle_cruise_module_param_path" default="$(var motion_config_path)/motion_velocity_planner/obstacle_cruise.param.yaml"/>
+  <arg name="motion_velocity_planner_dynamic_obstacle_stop_module_param_path" default="$(var motion_config_path)/motion_velocity_planner/dynamic_obstacle_stop.param.yaml"/>
+  <arg name="motion_velocity_planner_out_of_lane_module_param_path" default="$(var motion_config_path)/motion_velocity_planner/out_of_lane.param.yaml"/>
+  <arg name="motion_velocity_planner_obstacle_velocity_limiter_param_path" default="$(var motion_config_path)/motion_velocity_planner/obstacle_velocity_limiter.param.yaml"/>
+  <arg
+      name="motion_velocity_planner_velocity_smoother_type_param_path"
+      default="$(find-pkg-share autoware_launch)/config/planning/scenario_planning/common/autoware_velocity_smoother/Analytical.param.yaml"
+  />
+  
+  <!-- motion velocity smoother -->
+  <arg name="velocity_smoother_param_path" default="$(var common_config_path)/autoware_velocity_smoother/velocity_smoother.param.yaml"/>
+  <arg name="velocity_smoother_type_param_path" default="$(var common_config_path)/autoware_velocity_smoother/$(var velocity_smoother_type).param.yaml"/>
+
+  <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
+
+  
+  <group>
+    <push-ros-namespace namespace="planning/scenario_planning"/>
+    <include file="$(find-pkg-share tier4_planning_launch)/launch/scenario_planning/scenario_planning.launch.xml">
+      <arg name="enable_all_modules_auto_mode" value="false"/>
+      <arg name="is_simulation" value="false"/>
+    </include>
+  </group>
+
+  <node pkg="autoware_new_planning_msgs_converter" exec="autoware_new_planning_msgs_converter_node" name="trajectory_to_trajectories" namespace="beta">
+        <!-- params -->
+        <param name="input_topic" value="/planning/scenario_planning/velocity_smoother/trajectory"/>
+        <param name="output_topic" value="$(var selector_component_input)"/>
+        <param name="generator_name" value="beta_planner"/>
+  </node>
+
+</launch>

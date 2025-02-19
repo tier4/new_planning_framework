@@ -14,4 +14,7 @@
 
   <include file="$(find-pkg-share autoware_trajectory_interpolator)/launch/trajectory_interpolator.launch.xml">
   </include>
+
+  <include file="$(find-pkg-share autoware_new_planning_launch)/launch/hierarchy_planning.xml">
+  </include>
 </launch>
