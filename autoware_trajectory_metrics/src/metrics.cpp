@@ -22,6 +22,9 @@
 
 #include <rcl/subscription.h>
 
+#include <cstddef>
+#include <vector>
+
 namespace autoware::trajectory_selector::trajectory_metrics
 {
 
@@ -48,14 +51,22 @@ void LongitudinalJerk::evaluate(const std::shared_ptr<DataInterface> & result) c
   if (result->points()->size() < 2) return;
 
   std::vector<double> metric;
+  std::vector<double> acceleration;
   constexpr double epsilon = 1.0e-3;
   const double time_resolution = resolution() > epsilon ? resolution() : epsilon;
 
-  metric.reserve(result->points()->size());
+  acceleration.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size() - 1; i++) {
-    const auto jerk =
-      (result->points()->at(i + 1).acceleration_mps2 - result->points()->at(i).acceleration_mps2) /
-      time_resolution;
+    acceleration.push_back(
+      (result->points()->at(i + 1).longitudinal_velocity_mps -
+       result->points()->at(i).longitudinal_velocity_mps) /
+      time_resolution);
+  }
+  acceleration.push_back(acceleration.back());
+
+  metric.reserve(result->points()->size());
+  for (size_t i = 0; i < acceleration.size() - 1; i++) {
+    const auto jerk = (acceleration.at(i + 1) - acceleration.at(i)) / time_resolution;
     metric.push_back(std::abs(jerk));
   }
   metric.push_back(metric.back());
@@ -119,13 +130,19 @@ void TrajectoryDeviation::evaluate(const std::shared_ptr<DataInterface> & result
 
 void SteeringConsistency::evaluate(const std::shared_ptr<DataInterface> & result) const
 {
-  const auto steering_angle = result->steering()->steering_tire_angle;
-
   std::vector<double> metric;
+  metric.reserve(result->points()->size());
+
+  if (result->previous() == nullptr) return;
+
+  const auto wheel_base = vehicle_info()->wheel_base_m;
 
   metric.reserve(result->points()->size());
   for (const auto & point : *result->points()) {
-    metric.push_back(std::abs(point.front_wheel_angle_rad - steering_angle));
+    const auto current = utils::steer_command(result->points(), point.pose, wheel_base);
+    const auto previous = utils::steer_command(result->previous(), point.pose, wheel_base);
+
+    metric.push_back(std::abs(current - previous));
   }
 
   result->set_metric(index(), metric);
