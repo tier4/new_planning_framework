@@ -14,12 +14,17 @@
 
 #include "node.hpp"
 
+#include "autoware/interpolation/linear_interpolation.hpp"
+
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <rclcpp/duration.hpp>
 
 #include <boost/geometry/algorithms/detail/within/interface.hpp>
 
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/geometry/LaneletMap.h>
+
+#include <algorithm>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
@@ -61,11 +66,18 @@ auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSh
 
   auto trajectories = msg->trajectories;
 
-  const auto itr = std::remove_if(
-    trajectories.begin(), trajectories.end(),
-    [this](const auto & trajectory) { return out_of_lane(trajectory); });
-
+  auto itr = std::remove_if(trajectories.begin(), trajectories.end(), [](const auto & trajectory) {
+    return trajectory.points.size() < 2;
+  });
   trajectories.erase(itr, trajectories.end());
+
+  if (listener_->get_params().out_of_lane.enable) {
+    itr = std::remove_if(trajectories.begin(), trajectories.end(), [this](const auto & trajectory) {
+      return out_of_lane(trajectory);
+    });
+
+    trajectories.erase(itr, trajectories.end());
+  }
 
   const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
                                   .trajectories(trajectories)
@@ -83,7 +95,18 @@ auto FeasibleTrajectoryFilterNode::out_of_lane(
     return false;
   }
 
+  std::vector<double> timestamps;
   for (const auto & point : trajectory.points) {
+    timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
+  }
+  if (!interpolation::isIncreasing(timestamps))
+    return false;  // Todo (go-sakayori): consider how to deal with trajectory without
+                   // time_from_start
+
+  for (const auto & point : trajectory.points) {
+    if (
+      rclcpp::Duration(point.time_from_start).seconds() > listener_->get_params().out_of_lane.time)
+      break;
     const auto nearest_lanelet = lanelet::geometry::findWithin2d(
       lanelet_map_ptr_->laneletLayer,
       lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y),
