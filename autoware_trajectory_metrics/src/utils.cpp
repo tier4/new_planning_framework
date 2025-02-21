@@ -131,8 +131,9 @@ auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
   const std::shared_ptr<PredictedObjects> & objects, const size_t idx) -> double
 {
+  double constexpr max_ttc_value = 10.0;
   if (objects->objects.empty()) {
-    return 10000.0;
+    return max_ttc_value;
   }
 
   const auto p_ego = points->at(idx).pose;
@@ -161,9 +162,9 @@ auto time_to_collision(
                             tf2::tf2Dot(v_ego2object.normalized(), object_world_velocity);
 
     if (v_relative > std::numeric_limits<double>::epsilon()) {
-      time_to_collisions.push_back(v_ego2object.length() / v_relative);
+      time_to_collisions.push_back(std::min(v_ego2object.length() / v_relative, max_ttc_value));
     } else {
-      time_to_collisions.push_back(10000.0);
+      time_to_collisions.push_back(max_ttc_value);
     }
   }
 
