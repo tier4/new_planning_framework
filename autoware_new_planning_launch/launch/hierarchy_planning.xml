@@ -92,5 +92,4 @@
         <param name="output_topic" value="$(var selector_component_input)"/>
         <param name="generator_name" value="beta_planner"/>
   </node>
-
 </launch>
