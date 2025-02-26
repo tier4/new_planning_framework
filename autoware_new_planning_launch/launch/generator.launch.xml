@@ -1,4 +1,5 @@
 <launch>
+  <arg name="launch_hierarchy_planning" default="false"/>
   <arg name="smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
   <arg name="jerk_filtered_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/JerkFiltered.param.yaml"/>
   <arg name="velocity_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
@@ -14,4 +15,9 @@
 
   <include file="$(find-pkg-share autoware_trajectory_interpolator)/launch/trajectory_interpolator.launch.xml">
   </include>
+
+  <group if="$(var launch_hierarchy_planning)">
+    <include file="$(find-pkg-share autoware_new_planning_launch)/launch/hierarchy_planning.xml">
+    </include>
+  </group>
 </launch>
