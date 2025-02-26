@@ -1,6 +1,7 @@
 /**:
   ros__parameters:
-    metrics: ["autoware::trajectory_selector::trajectory_metrics::LateralAcceleration",
+    metrics:
+      name: ["autoware::trajectory_selector::trajectory_metrics::LateralAcceleration",
               "autoware::trajectory_selector::trajectory_metrics::LongitudinalJerk",
               "autoware::trajectory_selector::trajectory_metrics::TravelDistance",
               "autoware::trajectory_selector::trajectory_metrics::TimeToCollision",

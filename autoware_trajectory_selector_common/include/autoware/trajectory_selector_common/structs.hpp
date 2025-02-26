@@ -28,7 +28,8 @@ struct EvaluatorParameters
   explicit EvaluatorParameters(const size_t metrics_num, const size_t sample_num)
   : sample_num{sample_num},
     time_decay_weight(metrics_num, std::vector<double>(sample_num, 0.0)),
-    score_weight(metrics_num, 0.0)
+    score_weight(metrics_num, 0.0),
+    metrics_max_value(metrics_num, 0.0)
   {
   }
 
@@ -39,6 +40,7 @@ struct EvaluatorParameters
   std::vector<std::vector<double>> time_decay_weight;
 
   std::vector<double> score_weight;
+  std::vector<double> metrics_max_value;
 };
 
 struct CoreData

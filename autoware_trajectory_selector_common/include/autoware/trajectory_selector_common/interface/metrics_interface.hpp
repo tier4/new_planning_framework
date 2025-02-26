@@ -39,7 +39,8 @@ public:
 
   virtual ~MetricInterface() = default;
 
-  virtual void evaluate(const std::shared_ptr<DataInterface> & result) const = 0;
+  virtual void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const = 0;
 
   virtual bool is_deviation() const = 0;
 
