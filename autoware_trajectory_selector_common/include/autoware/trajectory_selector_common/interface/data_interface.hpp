@@ -77,6 +77,7 @@ public:
 
   bool feasible() const
   {
+    if (core_data_->points->empty()) return false;
     constexpr double epsilon = -1e-06;
     const auto idx = autoware::motion_utils::findNearestIndex(
       *core_data_->points, core_data_->odometry->pose.pose.position);
