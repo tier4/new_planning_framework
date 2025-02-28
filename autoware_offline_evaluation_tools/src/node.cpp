@@ -15,17 +15,17 @@
 #include "node.hpp"
 
 #include "autoware/trajectory_selector_common/utils.hpp"
-#include "autoware/universe_utils/ros/parameter.hpp"
-#include "autoware/universe_utils/system/stop_watch.hpp"
+#include "autoware_utils/ros/parameter.hpp"
+#include "autoware_utils/system/stop_watch.hpp"
 
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-using autoware::universe_utils::createMarkerColor;
-using autoware::universe_utils::getOrDeclareParameter;
-using autoware::universe_utils::Polygon2d;
+using autoware_utils::create_marker_color;
+using autoware_utils::get_or_declare_parameter;
+using autoware_utils::Polygon2d;
 
 OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options)
 : Node("offline_evaluator_node", node_options),
@@ -64,27 +64,27 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
-  reader_.open(getOrDeclareParameter<std::string>(*this, "bag_path"));
+  reader_.open(get_or_declare_parameter<std::string>(*this, "bag_path"));
 }
 
 auto OfflineEvaluatorNode::evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>
 {
-  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
-  const auto sample_num = getOrDeclareParameter<int>(*this, "sample_num");
+  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
+  const auto sample_num = get_or_declare_parameter<int>(*this, "sample_num");
   const auto parameters = std::make_shared<EvaluatorParameters>(metrics.size(), sample_num);
-  parameters->score_weight = getOrDeclareParameter<std::vector<double>>(*this, "score_weight");
+  parameters->score_weight = get_or_declare_parameter<std::vector<double>>(*this, "score_weight");
   parameters->time_decay_weight.at(0) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s0");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s0");
   parameters->time_decay_weight.at(1) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s1");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s1");
   parameters->time_decay_weight.at(2) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s2");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s2");
   parameters->time_decay_weight.at(3) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s3");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s3");
   parameters->time_decay_weight.at(4) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s4");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s4");
   parameters->time_decay_weight.at(5) =
-    getOrDeclareParameter<std::vector<double>>(*this, "time_decay_weight.s5");
+    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s5");
 
   return parameters;
 }
@@ -93,20 +93,20 @@ auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAug
 {
   const auto parameters = std::make_shared<DataAugmentParameters>();
 
-  parameters->sample_num = getOrDeclareParameter<int>(*this, "sample_num");
-  parameters->resolution = getOrDeclareParameter<double>(*this, "resolution");
+  parameters->sample_num = get_or_declare_parameter<int>(*this, "sample_num");
+  parameters->resolution = get_or_declare_parameter<double>(*this, "resolution");
   parameters->target_state.lat_positions =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_positions");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_positions");
   parameters->target_state.lat_velocities =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_velocities");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_velocities");
   parameters->target_state.lat_accelerations =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.lateral_accelerations");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_accelerations");
   parameters->target_state.lon_positions =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_positions");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_positions");
   parameters->target_state.lon_velocities =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_velocities");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_velocities");
   parameters->target_state.lon_accelerations =
-    getOrDeclareParameter<std::vector<double>>(*this, "target_state.longitudinal_accelerations");
+    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_accelerations");
 
   return parameters;
 }
@@ -216,7 +216,7 @@ void OfflineEvaluatorNode::play(
   const auto bag_data = std::make_shared<BagData>(
     duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
 
-  const auto time_step = getOrDeclareParameter<double>(*this, "play.time_step");
+  const auto time_step = get_or_declare_parameter<double>(*this, "play.time_step");
 
   RCLCPP_INFO(get_logger(), "rosbag play now...");
 
@@ -225,7 +225,7 @@ void OfflineEvaluatorNode::play(
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
 
-  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
+  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
@@ -278,10 +278,10 @@ void OfflineEvaluatorNode::next_route(
 
   MarkerArray msg;
 
-  autoware::universe_utils::appendMarkerArray(
+  autoware_utils::append_marker_array(
     lanelet::visualization::laneletsAsTriangleMarkerArray(
       "preferred_lanes", route_handler_->getPreferredLanelets(),
-      createMarkerColor(0.16, 1.0, 0.69, 0.2)),
+      create_marker_color(0.16, 1.0, 0.69, 0.2)),
     &msg);
 
   pub_marker_->publish(msg);
@@ -297,7 +297,7 @@ void OfflineEvaluatorNode::weight(
   std::lock_guard<std::mutex> lock(mutex_);
   RCLCPP_INFO(get_logger(), "start weight grid seach.");
 
-  autoware::universe_utils::StopWatch<std::chrono::milliseconds> stop_watch;
+  autoware_utils::StopWatch<std::chrono::milliseconds> stop_watch;
 
   stop_watch.tic("total_time");
 
@@ -308,9 +308,9 @@ void OfflineEvaluatorNode::weight(
   std::vector<Result> weight_grid;
 
   const auto resolution =
-    autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.grid_step");
-  const auto min = autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.min");
-  const auto max = autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.max");
+    autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.grid_step");
+  const auto min = autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.min");
+  const auto max = autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.max");
   for (double w0 = min; w0 < max + 0.1 * resolution; w0 += resolution) {
     for (double w1 = min; w1 < max + 0.1 * resolution; w1 += resolution) {
       for (double w2 = min; w2 < max + 0.1 * resolution; w2 += resolution) {
@@ -342,15 +342,13 @@ void OfflineEvaluatorNode::weight(
     RCLCPP_INFO_STREAM(get_logger(), ss.str());
   };
 
-  // const size_t thread_num =
-  //   autoware::universe_utils::getOrDeclareParameter<int>(*this, "grid_seach.thread_num");
   const auto time_step =
-    autoware::universe_utils::getOrDeclareParameter<double>(*this, "grid_seach.time_step");
+    autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.time_step");
 
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
 
-  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
+  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
