@@ -13,27 +13,27 @@
 // limitations under the License.
 
 #include "../src/utils.cpp"  // NOLINT
-#include "autoware/universe_utils/math/unit_conversion.hpp"
+#include "autoware_utils/math/unit_conversion.hpp"
 
-#include <autoware/universe_utils/geometry/geometry.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
 
 #include <gtest/gtest.h>
 
 namespace autoware::trajectory_selector::trajectory_metrics
 {
 
-using autoware::universe_utils::createPoint;
-using autoware::universe_utils::createQuaternionFromRPY;
-using autoware::universe_utils::createVector3;
-using autoware::universe_utils::deg2rad;
+using autoware_utils::create_point;
+using autoware_utils::create_quaternion_from_rpy;
+using autoware_utils::create_vector3;
+using autoware_utils::deg2rad;
 
 TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
 {
   {
     const auto pose = geometry_msgs::build<Pose>()
-                        .position(createPoint(1.0, 1.0, 0.0))
-                        .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(90)));
-    const auto velocity = createVector3(1.0, 0.0, 0.0);
+                        .position(create_point(1.0, 1.0, 0.0))
+                        .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(90)));
+    const auto velocity = create_vector3(1.0, 0.0, 0.0);
 
     const auto output = utils::internal::get_velocity_in_world_coordinate(pose, velocity);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
@@ -43,9 +43,9 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
 
   {
     const auto pose = geometry_msgs::build<Pose>()
-                        .position(createPoint(1.0, 2.0, 0.0))
-                        .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(60)));
-    const auto velocity = createVector3(0.866025403784438647, 0.5, 0.0);
+                        .position(create_point(1.0, 2.0, 0.0))
+                        .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(60)));
+    const auto velocity = create_vector3(0.866025403784438647, 0.5, 0.0);
 
     const auto output = utils::internal::get_velocity_in_world_coordinate(pose, velocity);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
@@ -56,8 +56,8 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto pose = geometry_msgs::build<Pose>()
-                        .position(createPoint(1.0, 1.0, 0.0))
-                        .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(90)));
+                        .position(create_point(1.0, 1.0, 0.0))
+                        .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(90)));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(pose)
@@ -77,8 +77,8 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto pose = geometry_msgs::build<Pose>()
-                        .position(createPoint(1.0, 2.0, 0.0))
-                        .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(60)));
+                        .position(create_point(1.0, 2.0, 0.0))
+                        .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(60)));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(pose)
@@ -101,8 +101,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 0.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, 0.0));
+                            .position(create_point(0.0, 0.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -125,8 +125,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 0.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, 0.0));
+                            .position(create_point(0.0, 0.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -141,8 +141,8 @@ TEST(MetricsUtilsTest, time_to_collision)
     points->push_back(point);
 
     const auto obj_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(1.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(-90)));
+                            .position(create_point(1.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(-90)));
 
     const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
@@ -152,7 +152,7 @@ TEST(MetricsUtilsTest, time_to_collision)
 
     PredictedObject object;
     object.kinematics.initial_pose_with_covariance.pose = obj_pose;
-    object.kinematics.initial_twist_with_covariance.twist.linear = createVector3(1.0, 0.0, 0.0);
+    object.kinematics.initial_twist_with_covariance.twist.linear = create_vector3(1.0, 0.0, 0.0);
     object.kinematics.predicted_paths.push_back(predicted_path);
 
     const auto objects = std::make_shared<PredictedObjects>();
@@ -165,8 +165,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(2.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(60)));
+                            .position(create_point(2.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(60)));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -181,8 +181,8 @@ TEST(MetricsUtilsTest, time_to_collision)
     points->push_back(point);
 
     const auto obj_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(1.0, 2.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(-90)));
+                            .position(create_point(1.0, 2.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(-90)));
 
     const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
@@ -192,7 +192,7 @@ TEST(MetricsUtilsTest, time_to_collision)
 
     PredictedObject object;
     object.kinematics.initial_pose_with_covariance.pose = obj_pose;
-    object.kinematics.initial_twist_with_covariance.twist.linear = createVector3(1.0, 0.0, 0.0);
+    object.kinematics.initial_twist_with_covariance.twist.linear = create_vector3(1.0, 0.0, 0.0);
     object.kinematics.predicted_paths.push_back(predicted_path);
 
     const auto objects = std::make_shared<PredictedObjects>();
@@ -205,8 +205,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(2.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(90)));
+                            .position(create_point(2.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(90)));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -221,8 +221,8 @@ TEST(MetricsUtilsTest, time_to_collision)
     points->push_back(point);
 
     const auto obj_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(1.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(-90)));
+                            .position(create_point(1.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(-90)));
 
     const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
@@ -232,7 +232,7 @@ TEST(MetricsUtilsTest, time_to_collision)
 
     PredictedObject object;
     object.kinematics.initial_pose_with_covariance.pose = obj_pose;
-    object.kinematics.initial_twist_with_covariance.twist.linear = createVector3(1.0, 0.0, 0.0);
+    object.kinematics.initial_twist_with_covariance.twist.linear = create_vector3(1.0, 0.0, 0.0);
     object.kinematics.predicted_paths.push_back(predicted_path);
 
     const auto objects = std::make_shared<PredictedObjects>();
@@ -245,8 +245,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 0.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, 0.0));
+                            .position(create_point(0.0, 0.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -261,8 +261,8 @@ TEST(MetricsUtilsTest, time_to_collision)
     points->push_back(point);
 
     const auto obj_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(225)));
+                            .position(create_point(0.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(225)));
 
     const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
@@ -273,7 +273,7 @@ TEST(MetricsUtilsTest, time_to_collision)
     PredictedObject object;
     object.kinematics.initial_pose_with_covariance.pose = obj_pose;
     object.kinematics.initial_twist_with_covariance.twist.linear =
-      createVector3(1.41421356237309505, 0.0, 0.0);
+      create_vector3(1.41421356237309505, 0.0, 0.0);
     object.kinematics.predicted_paths.push_back(predicted_path);
 
     const auto objects = std::make_shared<PredictedObjects>();
@@ -286,8 +286,8 @@ TEST(MetricsUtilsTest, time_to_collision)
   {
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
     const auto ego_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 0.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, 0.0));
+                            .position(create_point(0.0, 0.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(ego_pose)
@@ -302,8 +302,8 @@ TEST(MetricsUtilsTest, time_to_collision)
     points->push_back(point);
 
     const auto obj_pose = geometry_msgs::build<Pose>()
-                            .position(createPoint(0.0, 1.0, 0.0))
-                            .orientation(createQuaternionFromRPY(0.0, 0.0, deg2rad(135)));
+                            .position(create_point(0.0, 1.0, 0.0))
+                            .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(135)));
 
     const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
@@ -314,7 +314,7 @@ TEST(MetricsUtilsTest, time_to_collision)
     PredictedObject object;
     object.kinematics.initial_pose_with_covariance.pose = obj_pose;
     object.kinematics.initial_twist_with_covariance.twist.linear =
-      createVector3(1.41421356237309505, 0.0, 0.0);
+      create_vector3(1.41421356237309505, 0.0, 0.0);
     object.kinematics.predicted_paths.push_back(predicted_path);
 
     const auto objects = std::make_shared<PredictedObjects>();
