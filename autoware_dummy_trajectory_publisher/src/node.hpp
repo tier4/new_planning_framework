@@ -18,8 +18,8 @@
 #include "autoware/offline_evaluation_tools/data_structs.hpp"
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware/universe_utils/ros/polling_subscriber.hpp"
 #include "autoware_dummy_trajectory_publisher_param.hpp"
+#include "autoware_utils/ros/polling_subscriber.hpp"
 
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -54,11 +54,10 @@ private:
 
   rclcpp::Publisher<OutputMsgType>::SharedPtr pub_trajectories_;
 
-  autoware::universe_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
-    this, "~/input/odometry"};
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
 
-  autoware::universe_utils::InterProcessPollingSubscriber<AccelWithCovarianceStamped>
-    sub_acceleration_{this, "~/input/acceleration"};
+  autoware_utils::InterProcessPollingSubscriber<AccelWithCovarianceStamped> sub_acceleration_{
+    this, "~/input/acceleration"};
 
   std::shared_ptr<augment::ParamListener> listener_;
 

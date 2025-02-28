@@ -16,7 +16,7 @@
 
 #include "autoware/offline_evaluation_tools/utils.hpp"
 
-#include <autoware/universe_utils/ros/uuid_helper.hpp>
+#include <autoware_utils/ros/uuid_helper.hpp>
 
 namespace autoware::trajectory_selector::dummy_trajectory_publisher
 {
@@ -31,18 +31,18 @@ DummyTrajectoryPublisherNode::DummyTrajectoryPublisherNode(const rclcpp::NodeOpt
   vehicle_info_{std::make_shared<VehicleInfo>(
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())},
   generator_name_{"frenet_planner"},
-  generator_uuid_{autoware::universe_utils::generateUUID()}
+  generator_uuid_{autoware_utils::generate_uuid()}
 {
 }
 
 void DummyTrajectoryPublisherNode::process(const InputMsgType::ConstSharedPtr msg)
 {
-  const auto odometry_ptr = sub_odometry_.takeData();
+  const auto odometry_ptr = sub_odometry_.take_data();
   if (odometry_ptr == nullptr) {
     return;
   }
 
-  const auto acceleration_ptr = sub_acceleration_.takeData();
+  const auto acceleration_ptr = sub_acceleration_.take_data();
   if (acceleration_ptr == nullptr) {
     return;
   }
