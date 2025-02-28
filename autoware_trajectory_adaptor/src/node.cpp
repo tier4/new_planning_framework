@@ -15,6 +15,7 @@
 #include "node.hpp"
 
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <builtin_interfaces/msg/detail/duration__builder.hpp>
 
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
@@ -24,13 +25,12 @@ TrajectoryAdaptorNode::TrajectoryAdaptorNode(const rclcpp::NodeOptions & node_op
   sub_trajectories_{this->create_subscription<InputMsgType>(
     "~/input/trajectories", 1,
     std::bind(&TrajectoryAdaptorNode::process, this, std::placeholders::_1))},
-  pub_trajectory_{this->create_publisher<OutputMsgType>("~/output/trajectory", 1)}
+  pub_trajectory_{this->create_publisher<OutputMsgType>("~/output/trajectory", 1)},
+  hazard_signal_publisher_{create_publisher<HazardLightsCommand>("~/output/hazard_lights_cmd", 1)}
 {
-  debug_processing_time_detail_pub_ =
-    create_publisher<autoware_utils::ProcessingTimeDetail>(
-      "~/debug/processing_time_detail_ms/trajectory_adaptor", 1);
-  time_keeper_ =
-    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+    "~/debug/processing_time_detail_ms/trajectory_adaptor", 1);
+  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
@@ -66,6 +66,9 @@ void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
                             .points(traj_points);
 
   pub_trajectory_->publish(trajectory);
+  hazard_signal_publisher_->publish(autoware_vehicle_msgs::build<HazardLightsCommand>()
+                                      .stamp(trajectory_itr->header.stamp)
+                                      .command(0));
 }
 
 }  // namespace autoware::trajectory_selector::trajectory_adaptor
