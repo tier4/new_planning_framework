@@ -20,12 +20,14 @@
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
 
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
 
 using InputMsgType = autoware_new_planning_msgs::msg::Trajectories;
 using OutputMsgType = autoware_planning_msgs::msg::Trajectory;
+using autoware_vehicle_msgs::msg::HazardLightsCommand;
 
 class TrajectoryAdaptorNode : public rclcpp::Node
 {
@@ -38,6 +40,9 @@ private:
   rclcpp::Subscription<InputMsgType>::SharedPtr sub_trajectories_;
 
   rclcpp::Publisher<OutputMsgType>::SharedPtr pub_trajectory_;
+  rclcpp::Publisher<HazardLightsCommand>::SharedPtr
+    hazard_signal_publisher_;  // To-do (go-sakayori): decide where to cope with turn indicator and
+                               // hazard signal
 
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
