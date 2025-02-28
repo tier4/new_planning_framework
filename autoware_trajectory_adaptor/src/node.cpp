@@ -15,7 +15,6 @@
 #include "node.hpp"
 
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
-#include <builtin_interfaces/msg/detail/duration__builder.hpp>
 
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
