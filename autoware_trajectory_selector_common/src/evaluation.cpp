@@ -17,7 +17,7 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
 
@@ -219,17 +219,17 @@ void Evaluator::show() const
 
 auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
 {
-  using autoware::universe_utils::createDefaultMarker;
-  using autoware::universe_utils::createMarkerColor;
-  using autoware::universe_utils::createMarkerScale;
+  using autoware_utils::create_default_marker;
+  using autoware_utils::create_marker_color;
+  using autoware_utils::create_marker_scale;
 
   MarkerArray msg;
 
   const auto best_data = best();
   if (best_data != nullptr) {
-    Marker marker = createDefaultMarker(
+    Marker marker = create_default_marker(
       "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "best_score", 0L, Marker::LINE_STRIP,
-      createMarkerScale(0.2, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
+      create_marker_scale(0.2, 0.0, 0.0), create_marker_color(1.0, 1.0, 1.0, 0.999));
     for (const auto & point : *best_data->points()) {
       marker.points.push_back(point.pose.position);
     }
@@ -271,10 +271,10 @@ auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
     }
   }
 
-  autoware::universe_utils::appendMarkerArray(
+  autoware_utils::append_marker_array(
     lanelet::visualization::laneletsAsTriangleMarkerArray(
       "preferred_lanes", route_handler_->getPreferredLanelets(),
-      createMarkerColor(0.16, 1.0, 0.69, 0.2)),
+      create_marker_color(0.16, 1.0, 0.69, 0.2)),
     &msg);
 
   return std::make_shared<MarkerArray>(msg);

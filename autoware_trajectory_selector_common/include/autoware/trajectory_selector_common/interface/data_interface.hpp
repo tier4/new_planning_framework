@@ -18,7 +18,7 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware/universe_utils/geometry/geometry.hpp"
+#include "autoware_utils/geometry/geometry.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -83,7 +83,7 @@ public:
       *core_data_->points, core_data_->odometry->pose.pose.position);
     const auto & p1 = core_data_->points->at(idx).pose.position;
     const auto & p2 = core_data_->odometry->pose.pose.position;
-    if (autoware::universe_utils::calcSquaredDistance2d(p1, p2) > 10.0) {
+    if (autoware_utils::calc_squared_distance2d(p1, p2) > 10.0) {
       return false;
     }
 

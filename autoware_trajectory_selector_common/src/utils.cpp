@@ -17,10 +17,10 @@
 #include "autoware/interpolation/linear_interpolation.hpp"
 #include "autoware/motion_utils/trajectory/interpolation.hpp"
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware/universe_utils/geometry/boost_polygon_utils.hpp"
+#include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
-#include <autoware/universe_utils/geometry/geometry.hpp>
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/duration.hpp>
 
@@ -32,9 +32,9 @@
 namespace autoware::trajectory_selector::utils
 {
 
-using autoware::universe_utils::createDefaultMarker;
-using autoware::universe_utils::createMarkerColor;
-using autoware::universe_utils::createMarkerScale;
+using autoware_utils::create_default_marker;
+using autoware_utils::create_marker_color;
+using autoware_utils::create_marker_scale;
 
 struct FrenetPoint
 {
@@ -49,7 +49,7 @@ TrajectoryPoint calcInterpolatedPoint(
   TrajectoryPoint interpolated_point{};
 
   // pose interpolation
-  interpolated_point.pose = autoware::universe_utils::calcInterpolatedPose(curr_pt, next_pt, ratio);
+  interpolated_point.pose = autoware_utils::calc_interpolated_pose(curr_pt, next_pt, ratio);
 
   // twist interpolation
   if (use_zero_order_hold_for_twist) {
@@ -104,8 +104,8 @@ TrajectoryPoint calcInterpolatedPoint(
   // Calculate interpolation ratio
   const auto & curr_pt = points.at(segment_idx);
   const auto & next_pt = points.at(segment_idx + 1);
-  const auto v1 = autoware::universe_utils::point2tfVector(curr_pt, next_pt);
-  const auto v2 = autoware::universe_utils::point2tfVector(curr_pt, target_pose);
+  const auto v1 = autoware_utils::point_2_tf_vector(curr_pt, next_pt);
+  const auto v2 = autoware_utils::point_2_tf_vector(curr_pt, target_pose);
   if (v1.length2() < 1e-3) {
     return curr_pt;
   }
@@ -134,7 +134,7 @@ auto convertToFrenetPoint(const T & points, const Point & search_point_geom, con
 
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
 {
-  return autoware::universe_utils::createPoint(v.x, v.y, v.z);
+  return autoware_utils::create_point(v.x, v.y, v.z);
 }
 
 tf2::Vector3 from_msg(const Point & p)
@@ -146,7 +146,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & 
 {
   const auto pose = kinematics.initial_pose_with_covariance.pose;
   const auto v_local = kinematics.initial_twist_with_covariance.twist.linear;
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -155,7 +155,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry)
 {
   const auto pose = odometry.pose.pose;
   const auto v_local = odometry.twist.twist.linear;
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -165,7 +165,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
   const auto pose = point.pose;
   const auto v_local =
     geometry_msgs::build<Vector3>().x(point.longitudinal_velocity_mps).y(0.0).z(0.0);
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -266,20 +266,20 @@ auto to_marker(
   const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,
   const std::string & ns, const size_t id) -> Marker
 {
-  Marker marker = createDefaultMarker(
+  Marker marker = create_default_marker(
     "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
-    createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(1.0, 1.0, 1.0, 0.999));
+    create_marker_scale(0.1, 0.0, 0.0), create_marker_color(1.0, 1.0, 1.0, 0.999));
 
   if (!feasible) {
     for (const auto & point : *points) {
       marker.points.push_back(point.pose.position);
-      marker.colors.push_back(createMarkerColor(0.1, 0.1, 0.1, 0.3));
+      marker.colors.push_back(create_marker_color(0.1, 0.1, 0.1, 0.3));
     }
   } else {
     for (const auto & point : *points) {
       marker.points.push_back(point.pose.position);
       marker.colors.push_back(
-        createMarkerColor(1.0 - score, score, 0.0, std::clamp(score, 0.5, 0.999)));
+        create_marker_color(1.0 - score, score, 0.0, std::clamp(score, 0.5, 0.999)));
     }
   }
 
