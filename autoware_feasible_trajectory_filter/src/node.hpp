@@ -18,7 +18,7 @@
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 #include "autoware_feasible_trajectory_filter_param.hpp"
 
-#include <autoware/universe_utils/system/time_keeper.hpp>
+#include <autoware_utils/system/time_keeper.hpp>
 
 #include <memory>
 
@@ -41,9 +41,9 @@ private:
 
   std::unique_ptr<feasible::ParamListener> listener_;
 
-  rclcpp::Publisher<autoware::universe_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  mutable std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
 
