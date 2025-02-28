@@ -18,8 +18,8 @@
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
 
-#include <autoware/universe_utils/geometry/geometry.hpp>
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <magic_enum.hpp>
 
@@ -252,9 +252,9 @@ auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
 
   double mse = 0.0;
   for (size_t i = 0; i < min_size; i++) {
-    const auto & p1 = autoware::universe_utils::getPose(ground_truth->points()->at(i));
-    const auto & p2 = autoware::universe_utils::getPose(best_data->points()->at(i));
-    mse = (mse * i + autoware::universe_utils::calcSquaredDistance2d(p1, p2)) / (i + 1);
+    const auto & p1 = autoware_utils::get_pose(ground_truth->points()->at(i));
+    const auto & p2 = autoware_utils::get_pose(best_data->points()->at(i));
+    mse = (mse * i + autoware_utils::calc_squared_distance2d(p1, p2)) / (i + 1);
   }
 
   if (!std::isfinite(mse)) {
@@ -266,24 +266,24 @@ auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
 
 auto BagEvaluator::marker() const -> std::shared_ptr<MarkerArray>
 {
-  using autoware::universe_utils::createDefaultMarker;
-  using autoware::universe_utils::createMarkerColor;
-  using autoware::universe_utils::createMarkerScale;
+  using autoware_utils::create_default_marker;
+  using autoware_utils::create_marker_color;
+  using autoware_utils::create_marker_scale;
 
   MarkerArray msg;
 
   const auto ground_truth = get("ground_truth");
   if (ground_truth != nullptr) {
     for (size_t i = 0; i < ground_truth->points()->size(); ++i) {
-      Marker marker = createDefaultMarker(
+      Marker marker = create_default_marker(
         "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "ground_truth", i, Marker::ARROW,
-        createMarkerScale(0.7, 0.3, 0.3), createMarkerColor(1.0, 0.0, 0.0, 0.999));
+        create_marker_scale(0.7, 0.3, 0.3), create_marker_color(1.0, 0.0, 0.0, 0.999));
       marker.pose = ground_truth->points()->at(i).pose;
       msg.markers.push_back(marker);
     }
   }
 
-  autoware::universe_utils::appendMarkerArray(*Evaluator::marker(), &msg);
+  autoware_utils::append_marker_array(*Evaluator::marker(), &msg);
 
   return std::make_shared<MarkerArray>(msg);
 }

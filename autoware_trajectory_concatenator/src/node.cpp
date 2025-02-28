@@ -17,7 +17,7 @@
 #include "autoware_trajectory_concatenator_param.hpp"
 #include "structs.hpp"
 
-#include <autoware/universe_utils/ros/uuid_helper.hpp>
+#include <autoware_utils/ros/uuid_helper.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
@@ -39,20 +39,20 @@ TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions
   listener_{std::make_unique<concatenator::ParamListener>(get_node_parameters_interface())}
 {
   debug_processing_time_detail_pub_ =
-    create_publisher<autoware::universe_utils::ProcessingTimeDetail>(
+    create_publisher<autoware_utils::ProcessingTimeDetail>(
       "~/debug/processing_time_detail_ms/trajectory_concatenator", 1);
   time_keeper_ =
-    std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::lock_guard<std::mutex> lock(mutex_);
 
   for (const auto & generator_info : msg->generator_info) {
-    const auto uuid = autoware::universe_utils::toHexString(generator_info.generator_id);
+    const auto uuid = autoware_utils::to_hex_string(generator_info.generator_id);
 
     auto trajectories = msg->trajectories;
     const auto itr = std::remove_if(
@@ -75,7 +75,7 @@ void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstShared
 
 void TrajectoryConcatenatorNode::publish()
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::vector<Trajectory> trajectories{};
   std::vector<TrajectoryGeneratorInfo> generator_info{};

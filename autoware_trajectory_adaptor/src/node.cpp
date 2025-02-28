@@ -27,15 +27,15 @@ TrajectoryAdaptorNode::TrajectoryAdaptorNode(const rclcpp::NodeOptions & node_op
   pub_trajectory_{this->create_publisher<OutputMsgType>("~/output/trajectory", 1)}
 {
   debug_processing_time_detail_pub_ =
-    create_publisher<autoware::universe_utils::ProcessingTimeDetail>(
+    create_publisher<autoware_utils::ProcessingTimeDetail>(
       "~/debug/processing_time_detail_ms/trajectory_adaptor", 1);
   time_keeper_ =
-    std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryAdaptorNode::process(const InputMsgType::ConstSharedPtr msg)
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (msg->trajectories.empty()) {
     return;

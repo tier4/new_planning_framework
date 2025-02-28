@@ -18,7 +18,7 @@
 #include "autoware/planning_topic_converter/converter_base.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include <autoware/universe_utils/ros/uuid_helper.hpp>
+#include <autoware_utils/ros/uuid_helper.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"

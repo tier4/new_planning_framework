@@ -15,10 +15,10 @@
 #include "utils.hpp"
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware/universe_utils/geometry/boost_polygon_utils.hpp"
+#include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
-#include <autoware/universe_utils/geometry/geometry.hpp>
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 
 #include <boost/geometry/algorithms/disjoint.hpp>
 
@@ -32,7 +32,7 @@ namespace internal
 
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
 {
-  return autoware::universe_utils::createPoint(v.x, v.y, v.z);
+  return autoware_utils::create_point(v.x, v.y, v.z);
 }
 
 tf2::Vector3 from_msg(const Point & p)
@@ -42,7 +42,7 @@ tf2::Vector3 from_msg(const Point & p)
 
 tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
 {
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), p_world);
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), p_world);
 
   return from_msg(v_world) - from_msg(p_world.position);
 }
@@ -54,7 +54,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
                          .x(point.longitudinal_velocity_mps)
                          .y(point.lateral_velocity_mps)
                          .z(0.0);
-  const auto v_world = autoware::universe_utils::transformPoint(vector2point(v_local), pose);
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -119,7 +119,7 @@ auto pure_pursuit(const std::shared_ptr<TrajectoryPoints> & points, const Pose &
 
     if (p.has_value()) return p.value();
 
-    return autoware::universe_utils::getPoint(points->back());
+    return autoware_utils::get_point(points->back());
   }();
 
   return curvature(target_point, ego_pose);
@@ -153,7 +153,7 @@ auto time_to_collision(
 
     const auto & p_object = max_confidence_path->path.at(idx);
     const auto v_ego2object =
-      autoware::universe_utils::point2tfVector(p_ego.position, p_object.position);
+      autoware_utils::point_2_tf_vector(p_ego.position, p_object.position);
 
     const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
     const auto object_world_velocity =
@@ -191,7 +191,7 @@ auto time_to_collision(
   for (size_t i = 0; i < 20; i++) {
     const auto & ego_pose = points->at(i).pose;
     const auto ego_polygon =
-      autoware::universe_utils::toFootprint(ego_pose, base_to_front, base_to_rear, width);
+      autoware_utils::to_footprint(ego_pose, base_to_front, base_to_rear, width);
 
     for (const auto & object : objects->objects) {
       const auto max_confidence_path = std::max_element(
@@ -203,7 +203,7 @@ auto time_to_collision(
       if (max_confidence_path->path.size() < i + 1) continue;
 
       const auto object_pose = max_confidence_path->path.at(i);
-      const auto object_polygon = autoware::universe_utils::toPolygon2d(object_pose, object.shape);
+      const auto object_polygon = autoware_utils::to_polygon2d(object_pose, object.shape);
 
       if (!boost::geometry::disjoint(ego_polygon, object_polygon)) {
         std::reverse(time_to_collisions.begin(), time_to_collisions.end());

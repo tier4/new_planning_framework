@@ -16,7 +16,7 @@
 
 #include "autoware/trajectory_selector_common/utils.hpp"
 
-#include <autoware/universe_utils/ros/marker_helper.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
 #include <algorithm>
@@ -65,15 +65,15 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
     [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
 
   debug_processing_time_detail_pub_ =
-    create_publisher<autoware::universe_utils::ProcessingTimeDetail>(
+    create_publisher<autoware_utils::ProcessingTimeDetail>(
       "~/debug/processing_time_detail_ms/trajectory_ranker", 1);
   time_keeper_ =
-    std::make_shared<autoware::universe_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   publish(score(msg));
   publish_resampled_trajectory(
@@ -83,23 +83,23 @@ void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   -> Trajectories::ConstSharedPtr
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (!route_handler_->isHandlerReady()) {
     return msg;
   }
 
-  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.takeData());
+  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
   if (odometry_ptr == nullptr) {
     return msg;
   }
 
-  const auto objects_ptr = std::const_pointer_cast<PredictedObjects>(sub_objects_.takeData());
+  const auto objects_ptr = std::const_pointer_cast<PredictedObjects>(sub_objects_.take_data());
   if (objects_ptr == nullptr) {
     return msg;
   }
 
-  const auto steering_ptr = std::const_pointer_cast<SteeringReport>(sub_steering_.takeData());
+  const auto steering_ptr = std::const_pointer_cast<SteeringReport>(sub_steering_.take_data());
   if (steering_ptr == nullptr) {
     return msg;
   }
@@ -152,7 +152,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
 void TrajectoryRankerNode::publish_resampled_trajectory(const Trajectories::ConstSharedPtr msg)
 {
-  autoware::universe_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::vector<Trajectory> trajectories;
 
