@@ -13,13 +13,14 @@
 // limitations under the License.
 
 #include "trajectory_to_trajectories.hpp"
+#include <autoware_utils/ros/uuid_helper.hpp>
 
 namespace autoware::trajectory_selector::new_planning_msgs_converter
 {
 TrajectoryToTrajectories::TrajectoryToTrajectories(const rclcpp::NodeOptions & options)
 : ConverterBase("trajectory_to_trajectories", options),
   generator_name_(declare_parameter<std::string>("generator_name")),
-  generator_uuid_(autoware::universe_utils::generateUUID())
+  generator_uuid_(autoware_utils::generate_uuid())
 {
 }
 
