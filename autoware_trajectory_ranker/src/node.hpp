@@ -17,10 +17,10 @@
 
 #include "autoware/trajectory_selector_common/evaluation.hpp"
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
-#include "autoware/universe_utils/ros/polling_subscriber.hpp"
+#include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
 
-#include <autoware/universe_utils/system/time_keeper.hpp>
+#include <autoware_utils/system/time_keeper.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
@@ -48,13 +48,13 @@ private:
 
   auto parameters() const -> std::shared_ptr<EvaluatorParameters>;
 
-  autoware::universe_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
+  autoware_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};
 
-  autoware::universe_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
     this, "~/input/odometry"};
 
-  autoware::universe_utils::InterProcessPollingSubscriber<SteeringReport> sub_steering_{
+  autoware_utils::InterProcessPollingSubscriber<SteeringReport> sub_steering_{
     this, "~/input/steering"};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
@@ -73,9 +73,9 @@ private:
 
   std::shared_ptr<TrajectoryPoints> previous_points_;
 
-  rclcpp::Publisher<autoware::universe_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  mutable std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker
