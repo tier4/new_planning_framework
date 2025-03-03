@@ -24,6 +24,7 @@
 #include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace autoware::trajectory_selector
 {
@@ -72,11 +73,11 @@ void Evaluator::unload_metric(const std::string & name)
   }
 }
 
-void Evaluator::evaluate()
+void Evaluator::evaluate(const std::vector<double> & max_value)
 {
   for (const auto & result : results_) {
     for (const auto & plugin : plugins_) {
-      plugin->evaluate(result);
+      plugin->evaluate(result, max_value.at(plugin->index()));
     }
   }
 }
@@ -155,7 +156,7 @@ auto Evaluator::best(
 {
   pruning();
 
-  evaluate();
+  evaluate(parameters->metrics_max_value);
 
   compress(parameters->time_decay_weight);
 

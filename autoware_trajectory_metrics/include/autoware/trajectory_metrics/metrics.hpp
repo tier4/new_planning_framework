@@ -30,7 +30,8 @@ class LateralAcceleration : public MetricInterface
 public:
   LateralAcceleration() : MetricInterface{"LateralAcceleration"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return true; }
 };
@@ -40,7 +41,8 @@ class LongitudinalJerk : public MetricInterface
 public:
   LongitudinalJerk() : MetricInterface{"LongitudinalJerk"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return true; }
 };
@@ -50,7 +52,8 @@ class TimeToCollision : public MetricInterface
 public:
   TimeToCollision() : MetricInterface{"TimeToCollision"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return false; }
 };
@@ -60,7 +63,8 @@ class TravelDistance : public MetricInterface
 public:
   TravelDistance() : MetricInterface{"TravelDistance"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return false; }
 };
@@ -70,7 +74,8 @@ class LateralDeviation : public MetricInterface
 public:
   LateralDeviation() : MetricInterface{"LateralDeviation"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return true; }
 };
@@ -80,7 +85,8 @@ class TrajectoryDeviation : public MetricInterface
 public:
   TrajectoryDeviation() : MetricInterface{"TrajectoryDeviation"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return true; }
 };
@@ -90,7 +96,8 @@ class SteeringConsistency : public MetricInterface
 public:
   SteeringConsistency() : MetricInterface{"SteeringConsistency"} {}
 
-  void evaluate(const std::shared_ptr<DataInterface> & result) const override;
+  void evaluate(
+    const std::shared_ptr<DataInterface> & result, const double max_value) const override;
 
   bool is_deviation() const override { return true; }
 };

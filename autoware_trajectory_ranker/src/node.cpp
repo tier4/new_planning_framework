@@ -18,6 +18,7 @@
 
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+#include <rclcpp/logging.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -52,8 +53,8 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
   evaluator_ = std::make_shared<Evaluator>(route_handler_, vehicle_info);
 
   const auto metrics = listener_->get_params().metrics;
-  for (size_t i = 0; i < metrics.size(); i++) {
-    evaluator_->load_metric(metrics.at(i), i, listener_->get_params().resolution);
+  for (size_t i = 0; i < metrics.name.size(); i++) {
+    evaluator_->load_metric(metrics.name.at(i), i, listener_->get_params().resolution);
   }
 
   sub_map_ = create_subscription<LaneletMapBin>(
@@ -175,7 +176,7 @@ auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParame
   const auto node_params = listener_->get_params();
 
   const auto parameters =
-    std::make_shared<EvaluatorParameters>(node_params.metrics.size(), node_params.sample_num);
+    std::make_shared<EvaluatorParameters>(node_params.metrics.name.size(), node_params.sample_num);
 
   parameters->resolution = node_params.resolution;
   parameters->score_weight = node_params.score_weight;
@@ -185,6 +186,7 @@ auto TrajectoryRankerNode::parameters() const -> std::shared_ptr<EvaluatorParame
   parameters->time_decay_weight.at(3) = node_params.time_decay_weight.s3;
   parameters->time_decay_weight.at(4) = node_params.time_decay_weight.s4;
   parameters->time_decay_weight.at(5) = node_params.time_decay_weight.s5;
+  parameters->metrics_max_value = node_params.metrics.maximum;
 
   return parameters;
 }

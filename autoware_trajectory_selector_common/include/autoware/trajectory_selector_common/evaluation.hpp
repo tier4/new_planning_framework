@@ -19,9 +19,10 @@
 #include "autoware/trajectory_selector_common/interface/metrics_interface.hpp"
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
 
 #include <pluginlib/class_loader.hpp>
+
+#include "autoware_new_planning_msgs/msg/trajectories_debug.hpp"
 
 #include <memory>
 #include <string>
@@ -68,12 +69,13 @@ public:
 
   auto marker() const -> std::shared_ptr<MarkerArray>;
 
-  auto score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const -> std::shared_ptr<TrajectoriesDebug>;
+  auto score_debug(const std::shared_ptr<EvaluatorParameters> & parameters) const
+    -> std::shared_ptr<TrajectoriesDebug>;
 
 protected:
   void pruning();
 
-  void evaluate();
+  void evaluate(const std::vector<double> & max_value);
 
   void compress(const std::vector<std::vector<double>> & weight);
 
