@@ -1,9 +1,5 @@
 <launch>
   <arg name="launch_hierarchy_planning" default="false"/>
-  <arg name="smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
-  <arg name="jerk_filtered_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/JerkFiltered.param.yaml"/>
-  <arg name="velocity_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_velocity_smoother.param.yaml"/>
-  <arg name="common_smoother_param_path" default="$(find-pkg-share autoware_trajectory_interpolator)/config/default_common.param.yaml"/>
 
   <arg name="input_traj" default="mtr/trajectory"/>
   <arg name="output_traj" default="smoothed/mtr/trajectory"/>
