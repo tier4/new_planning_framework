@@ -20,6 +20,7 @@ namespace autoware::trajectory_selector::trajectory_concatenator
 struct ConcatenatorParam
 {
   double duration_time;
+  double min_end_time;
 };
 }  // namespace autoware::trajectory_selector::trajectory_concatenator
 
