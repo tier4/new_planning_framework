@@ -19,6 +19,7 @@
 #include "structs.hpp"
 
 #include <autoware_utils/ros/uuid_helper.hpp>
+#include <builtin_interfaces/msg/detail/duration__builder.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
@@ -123,7 +124,11 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 
   const auto new_trajectory =
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-      .header(msg->header)
+      .header(
+        std_msgs::build<Header>()
+          .stamp(this->now())
+          .frame_id(msg->header.frame_id))  // To-do(go-sakayori): consider if msg-> header could be
+                                            // used directly. Seems to exceed expiration_time
       .generator_id(uuid)
       .points(trajectory_points)
       .score(0.0);
@@ -166,6 +171,9 @@ void TrajectoryConcatenatorNode::publish()
       if (!pre_combine->trajectories.empty()) {
         const auto elapsed_time = (current_time - pre_combine->trajectories.begin()->header.stamp);
         if (elapsed_time > expiration_time) {
+          RCLCPP_INFO(
+            get_logger(), "Deleted %s because elapsed time is %lf",
+            it->second->generator_info.front().generator_name.data.c_str(), elapsed_time.seconds());
           it = buffer_.erase(it);
           continue;
         }
