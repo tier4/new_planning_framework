@@ -87,7 +87,6 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
-  RCLCPP_INFO(get_logger(), "Received selected trajectory");
   const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
   if (odometry_ptr == nullptr) {
     return;
@@ -95,7 +94,6 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 
   std::lock_guard<std::mutex> lock(mutex_);
 
-  RCLCPP_INFO(get_logger(), "Start extending selected trajectory");
   const auto uuid = autoware_utils::generate_default_uuid();
   const auto hex_uuid = autoware_utils::to_hex_string(uuid);
   const auto ego_seg_idx =
