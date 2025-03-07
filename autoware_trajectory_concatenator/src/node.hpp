@@ -24,6 +24,7 @@
 #include <rclcpp/subscription.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 
 #include <map>
@@ -48,7 +49,7 @@ public:
 private:
   void on_trajectories(const Trajectories::ConstSharedPtr msg);
 
-  void on_selected_trajectory(const Trajectory::ConstSharedPtr msg);
+  void on_selected_trajectory(const autoware_planning_msgs::msg::Trajectory::ConstSharedPtr msg);
 
   void publish();
 
@@ -58,7 +59,7 @@ private:
 
   rclcpp::Subscription<Trajectories>::SharedPtr subs_trajectories_;
 
-  rclcpp::Subscription<Trajectory>::SharedPtr sub_selected_trajectory_;
+  rclcpp::Subscription<autoware_planning_msgs::msg::Trajectory>::SharedPtr sub_selected_trajectory_;
 
   autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
 

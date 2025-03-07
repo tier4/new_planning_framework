@@ -28,7 +28,7 @@
     <composable_node pkg="autoware_trajectory_concatenator" plugin="autoware::trajectory_selector::trajectory_concatenator::TrajectoryConcatenatorNode" name="trajectory_concatenator" namespace="">
       <remap from="~/input/trajectories" to="$(var selector_component_input)"/>
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
-      <remap from="~/input/selected_trajectory" to="/planning/candidate/trajectories"/>
+      <remap from="~/input/selected_trajectory" to="$(var control_component_input)"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
       <!-- composable node config -->
       <extra_arg name="use_intra_process_comms" value="false"/>

@@ -26,6 +26,7 @@
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
 #include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <chrono>
 #include <functional>
@@ -42,7 +43,7 @@ TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions
   subs_trajectories_{this->create_subscription<Trajectories>(
     "~/input/trajectories", 1,
     std::bind(&TrajectoryConcatenatorNode::on_trajectories, this, std::placeholders::_1))},
-  sub_selected_trajectory_{this->create_subscription<Trajectory>(
+  sub_selected_trajectory_{this->create_subscription<autoware_planning_msgs::msg::Trajectory>(
     "~/input/selected_trajectory", 1,
     std::bind(&TrajectoryConcatenatorNode::on_selected_trajectory, this, std::placeholders::_1))},
   pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)},
@@ -81,10 +82,12 @@ void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstShared
   }
 }
 
-void TrajectoryConcatenatorNode::on_selected_trajectory(const Trajectory::ConstSharedPtr msg)
+void TrajectoryConcatenatorNode::on_selected_trajectory(
+  const autoware_planning_msgs::msg::Trajectory::ConstSharedPtr msg)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
+  RCLCPP_INFO(get_logger(), "Received selected trajectory");
   const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
   if (odometry_ptr == nullptr) {
     return;
@@ -92,6 +95,7 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(const Trajectory::ConstS
 
   std::lock_guard<std::mutex> lock(mutex_);
 
+  RCLCPP_INFO(get_logger(), "Start extending selected trajectory");
   const auto uuid = autoware_utils::generate_default_uuid();
   const auto hex_uuid = autoware_utils::to_hex_string(uuid);
   const auto ego_seg_idx =
