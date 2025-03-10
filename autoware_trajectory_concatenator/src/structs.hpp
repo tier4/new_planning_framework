@@ -22,6 +22,7 @@ struct ConcatenatorParam
   double duration_time;
   bool use_feedback;
   double min_end_time;
+  double extension_interval;
 };
 }  // namespace autoware::trajectory_selector::trajectory_concatenator
 
