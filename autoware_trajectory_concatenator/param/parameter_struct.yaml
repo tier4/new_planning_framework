@@ -5,8 +5,15 @@ concatenator:
     description: Duration time to keep the trajectory (it will be deleted once exceeding this value).
     read_only: false
 
-  endpoint_time_min:
-    type: double
-    default_value: 10.0
-    description: The minimum value for time_from_start at the trajectory end point
-    read_only: false
+  selected_trajectory:
+    use:
+      type: bool
+      default_value: false
+      description: Whether to concatenate the previous selected trajectory (make a feedback loop or not)
+      read_only: false
+
+    endpoint_time_min:
+      type: double
+      default_value: 10.0
+      description: The minimum value for time_from_start at the trajectory end point
+      read_only: false

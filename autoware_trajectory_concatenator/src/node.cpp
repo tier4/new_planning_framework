@@ -91,6 +91,8 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
+  if (!parameters()->use_feedback) return;
+
   const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
   if (odometry_ptr == nullptr) {
     return;
@@ -204,7 +206,8 @@ auto TrajectoryConcatenatorNode::parameters() const -> std::shared_ptr<Concatena
   const auto parameters = std::make_shared<ConcatenatorParam>();
 
   parameters->duration_time = node_params.duration_time;
-  parameters->min_end_time = node_params.endpoint_time_min;
+  parameters->use_feedback = node_params.selected_trajectory.use;
+  parameters->min_end_time = node_params.selected_trajectory.endpoint_time_min;
 
   return parameters;
 }
