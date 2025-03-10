@@ -18,11 +18,13 @@
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "structs.hpp"
 
+#include <autoware/trajectory_selector_common/type_alias.hpp>
 #include <autoware_utils/ros/uuid_helper.hpp>
 #include <builtin_interfaces/msg/detail/duration__builder.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
+#include <rclcpp/time.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectory.hpp"
 #include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
@@ -33,6 +35,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace autoware::trajectory_selector::trajectory_concatenator
 {
@@ -103,23 +106,20 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
     return;
   }
 
-  auto end = msg->points.back().time_from_start;
-  auto start = msg->points.at(ego_seg_idx.value()).time_from_start;
+  const auto end = msg->points.back().time_from_start;
+  const auto start = msg->points.at(ego_seg_idx.value()).time_from_start;
 
-  builtin_interfaces::msg::Duration diff_duration;
-  diff_duration.sec = end.sec - start.sec;
-  diff_duration.nanosec = end.nanosec - start.nanosec;
+  auto trajectory_time_duration =
+    (rclcpp::Duration(end.sec, end.nanosec) - rclcpp::Duration(start.sec, start.nanosec)).seconds();
 
-  const auto trajectory_time_duration = rclcpp::Duration(diff_duration).seconds();
-  auto trajectory_points = msg->points;
-  if (trajectory_time_duration < parameters()->min_end_time) {
-    auto last_point = trajectory_points.back();
-    auto last_time = rclcpp::Duration(last_point.time_from_start).seconds();
-    while (last_time < parameters()->min_end_time) {
-      trajectory_points.push_back(
-        autoware::trajectory_selector::utils::calc_extended_point(trajectory_points.back(), 0.1));
-      last_time += 0.1;
-    }
+  TrajectoryPoints trajectory_points;
+  trajectory_points.reserve(msg->points.size() - ego_seg_idx.value());
+  std::copy(
+    msg->points.begin() + ego_seg_idx.value(), msg->points.end(), trajectory_points.begin());
+  while (trajectory_time_duration < parameters()->min_end_time) {
+    trajectory_points.push_back(
+      autoware::trajectory_selector::utils::calc_extended_point(trajectory_points.back(), 0.1));
+    trajectory_time_duration += 0.1;
   }
 
   const auto new_trajectory =
