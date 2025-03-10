@@ -118,9 +118,9 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
   TrajectoryPoints trajectory_points(msg->points.begin() + ego_seg_idx.value(), msg->points.end());
 
   while (trajectory_time_duration < parameters()->min_end_time) {
-    trajectory_points.push_back(
-      autoware::trajectory_selector::utils::calc_extended_point(trajectory_points.back(), 0.1));
-    trajectory_time_duration += 0.1;
+    trajectory_points.push_back(autoware::trajectory_selector::utils::calc_extended_point(
+      trajectory_points.back(), parameters()->extension_interval));
+    trajectory_time_duration += parameters()->extension_interval;
   }
 
   const auto new_trajectory =
@@ -172,9 +172,6 @@ void TrajectoryConcatenatorNode::publish()
       if (!pre_combine->trajectories.empty()) {
         const auto elapsed_time = (current_time - pre_combine->trajectories.begin()->header.stamp);
         if (elapsed_time > expiration_time) {
-          RCLCPP_INFO(
-            get_logger(), "Deleted %s because elapsed time is %lf",
-            it->second->generator_info.front().generator_name.data.c_str(), elapsed_time.seconds());
           it = buffer_.erase(it);
           continue;
         }
@@ -207,6 +204,7 @@ auto TrajectoryConcatenatorNode::parameters() const -> std::shared_ptr<Concatena
   parameters->duration_time = node_params.duration_time;
   parameters->use_feedback = node_params.selected_trajectory.use;
   parameters->min_end_time = node_params.selected_trajectory.endpoint_time_min;
+  parameters->extension_interval = node_params.selected_trajectory.extension_interval;
 
   return parameters;
 }
