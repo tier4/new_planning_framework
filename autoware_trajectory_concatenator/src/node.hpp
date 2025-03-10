@@ -15,13 +15,17 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include "autoware_trajectory_concatenator_param.hpp"
 #include "structs.hpp"
 
+#include <autoware_trajectory_concatenator_param.hpp>
+#include <autoware_utils/ros/polling_subscriber.hpp>
 #include <autoware_utils/system/time_keeper.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/subscription.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 #include <map>
 #include <memory>
@@ -36,7 +40,7 @@ using namespace std::literals::chrono_literals;
 using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_new_planning_msgs::msg::Trajectory;
 using autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo;
-
+using nav_msgs::msg::Odometry;
 class TrajectoryConcatenatorNode : public rclcpp::Node
 {
 public:
@@ -45,6 +49,8 @@ public:
 private:
   void on_trajectories(const Trajectories::ConstSharedPtr msg);
 
+  void on_selected_trajectory(const autoware_planning_msgs::msg::Trajectory::ConstSharedPtr msg);
+
   void publish();
 
   auto parameters() const -> std::shared_ptr<ConcatenatorParam>;
@@ -52,6 +58,10 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
 
   rclcpp::Subscription<Trajectories>::SharedPtr subs_trajectories_;
+
+  rclcpp::Subscription<autoware_planning_msgs::msg::Trajectory>::SharedPtr sub_selected_trajectory_;
+
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
 
   rclcpp::Publisher<Trajectories>::SharedPtr pub_trajectores_;
 

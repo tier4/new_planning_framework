@@ -17,15 +17,28 @@
 #include "autoware/interpolation/linear_interpolation.hpp"
 #include "autoware/motion_utils/trajectory/interpolation.hpp"
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
+#include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/duration.hpp>
+#include <rclcpp/logging.hpp>
+#include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/utils.hpp>
+
+#include <autoware_planning_msgs/msg/detail/lanelet_route__builder.hpp>
+#include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
+#include <geometry_msgs/msg/detail/point__struct.hpp>
+#include <geometry_msgs/msg/detail/pose__builder.hpp>
+#include <geometry_msgs/msg/detail/pose__struct.hpp>
+#include <geometry_msgs/msg/detail/twist__struct.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include <boost/geometry/algorithms/disjoint.hpp>
 
+#include <cmath>
 #include <optional>
 #include <vector>
 
@@ -170,11 +183,46 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
   return from_msg(v_world) - from_msg(pose.position);
 }
 
+TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const double extension_time)
+{
+  const auto new_yaw =
+    tf2::getYaw(end_point.pose.orientation) + end_point.heading_rate_rps * extension_time;
+  const auto new_time =
+    rclcpp::Duration(end_point.time_from_start) + rclcpp::Duration::from_seconds(extension_time);
+  const auto world_coordinate_velocity = get_velocity_in_world_coordinate(end_point);
+
+  const auto new_point =
+    geometry_msgs::build<Point>()
+      .x(end_point.pose.position.x + world_coordinate_velocity.x() * extension_time)
+      .y(end_point.pose.position.y + world_coordinate_velocity.y() * extension_time)
+      .z(end_point.pose.position.z);
+
+  tf2::Quaternion new_quaternion;
+  new_quaternion.setRPY(0.0, 0.0, new_yaw);
+  new_quaternion.normalize();
+
+  const auto new_pose =
+    geometry_msgs::build<Pose>().position(new_point).orientation(tf2::toMsg(new_quaternion));
+  const auto new_trajectory_point =
+    autoware_planning_msgs::build<TrajectoryPoint>()
+      .time_from_start(new_time)
+      .pose(new_pose)
+      .longitudinal_velocity_mps(
+        end_point.longitudinal_velocity_mps + end_point.acceleration_mps2 * extension_time)
+      .lateral_velocity_mps(end_point.lateral_velocity_mps)
+      .acceleration_mps2(end_point.acceleration_mps2)
+      .heading_rate_rps(end_point.heading_rate_rps)
+      .front_wheel_angle_rad(end_point.front_wheel_angle_rad)
+      .rear_wheel_angle_rad(end_point.rear_wheel_angle_rad);
+
+  return new_trajectory_point;
+}
+
 auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double resolution) -> TrajectoryPoints
 {
-  const auto ego_seg_idx = autoware::motion_utils::findNearestIndex(points,p_ego, 10.0,M_PI_2);
+  const auto ego_seg_idx = autoware::motion_utils::findNearestIndex(points, p_ego, 10.0, M_PI_2);
 
   std::vector<double> timestamps;
   for (const auto & point : points) {
@@ -188,7 +236,7 @@ auto sampling(
 
   TrajectoryPoints output;
   FrenetPoint vehicle_pose_frenet;
-  if(ego_seg_idx.has_value()) {
+  if (ego_seg_idx.has_value()) {
     vehicle_pose_frenet = convertToFrenetPoint(points, p_ego.position, ego_seg_idx.value());
   }
 
@@ -217,11 +265,13 @@ auto sampling_with_time(
   output.reserve(sample_num);
 
   if (points.empty() || !start_idx.has_value() || start_idx.value() >= points.size()) {
-    std::cerr << "Error: points is empty or start_idx is out of range!" << std::endl;
+    RCLCPP_DEBUG(
+      rclcpp::get_logger(__func__), "Error: points is empty or start_idx is out of range!");
     return output;
   }
 
-  const double start_time = rclcpp::Duration(points.at(start_idx.value()).time_from_start).seconds();
+  const double start_time =
+    rclcpp::Duration(points.at(start_idx.value()).time_from_start).seconds();
 
   for (size_t i = 0; i < sample_num; i++) {
     const auto elapsed_time = static_cast<double>(i) * resolution + start_time;

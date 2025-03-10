@@ -24,7 +24,9 @@
 
 namespace autoware::trajectory_selector::utils
 {
-  auto sampling(
+TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const double extension_time);
+
+auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double time_resolution) -> TrajectoryPoints;
 

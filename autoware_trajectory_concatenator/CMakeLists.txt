@@ -20,6 +20,10 @@ target_link_libraries(${PROJECT_NAME}
   ${PROJECT_NAME}_param
 )
 
+target_compile_options(${PROJECT_NAME} PUBLIC
+  -Wno-error=deprecated-declarations
+)
+
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "autoware::trajectory_selector::trajectory_concatenator::TrajectoryConcatenatorNode"
   EXECUTABLE ${PROJECT_NAME}_node

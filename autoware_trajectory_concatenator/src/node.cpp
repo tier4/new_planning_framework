@@ -14,16 +14,29 @@
 
 #include "node.hpp"
 
-#include "autoware_trajectory_concatenator_param.hpp"
+#include "autoware/motion_utils/trajectory/trajectory.hpp"
+#include "autoware/trajectory_selector_common/utils.hpp"
 #include "structs.hpp"
 
+#include <autoware/trajectory_selector_common/type_alias.hpp>
 #include <autoware_utils/ros/uuid_helper.hpp>
+#include <builtin_interfaces/msg/detail/duration__builder.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
+#include <rclcpp/time.hpp>
+
+#include "autoware_new_planning_msgs/msg/trajectory.hpp"
+#include "autoware_new_planning_msgs/msg/trajectory_generator_info.hpp"
+#include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <chrono>
+#include <cmath>
+#include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace autoware::trajectory_selector::trajectory_concatenator
 {
@@ -35,14 +48,15 @@ TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions
   subs_trajectories_{this->create_subscription<Trajectories>(
     "~/input/trajectories", 1,
     std::bind(&TrajectoryConcatenatorNode::on_trajectories, this, std::placeholders::_1))},
+  sub_selected_trajectory_{this->create_subscription<autoware_planning_msgs::msg::Trajectory>(
+    "~/input/selected_trajectory", 1,
+    std::bind(&TrajectoryConcatenatorNode::on_selected_trajectory, this, std::placeholders::_1))},
   pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)},
   listener_{std::make_unique<concatenator::ParamListener>(get_node_parameters_interface())}
 {
-  debug_processing_time_detail_pub_ =
-    create_publisher<autoware_utils::ProcessingTimeDetail>(
-      "~/debug/processing_time_detail_ms/trajectory_concatenator", 1);
-  time_keeper_ =
-    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+    "~/debug/processing_time_detail_ms/trajectory_concatenator", 1);
+  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
@@ -73,6 +87,70 @@ void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstShared
   }
 }
 
+void TrajectoryConcatenatorNode::on_selected_trajectory(
+  const autoware_planning_msgs::msg::Trajectory::ConstSharedPtr msg)
+{
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  if (!parameters()->use_feedback) return;
+
+  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
+  if (odometry_ptr == nullptr) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  const auto uuid = autoware_utils::generate_default_uuid();
+  const auto hex_uuid = autoware_utils::to_hex_string(uuid);
+  const auto ego_seg_idx =
+    autoware::motion_utils::findNearestIndex(msg->points, odometry_ptr->pose.pose, 10.0, M_PI_2);
+  if (!ego_seg_idx.has_value()) {
+    return;
+  }
+
+  const auto end = msg->points.back().time_from_start;
+  const auto start = msg->points.at(ego_seg_idx.value()).time_from_start;
+
+  auto trajectory_time_duration =
+    (rclcpp::Duration(end.sec, end.nanosec) - rclcpp::Duration(start.sec, start.nanosec)).seconds();
+
+  TrajectoryPoints trajectory_points(msg->points.begin() + ego_seg_idx.value(), msg->points.end());
+
+  while (trajectory_time_duration < parameters()->min_end_time) {
+    trajectory_points.push_back(
+      autoware::trajectory_selector::utils::calc_extended_point(trajectory_points.back(), 0.1));
+    trajectory_time_duration += 0.1;
+  }
+
+  const auto new_trajectory =
+    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
+      .header(
+        std_msgs::build<Header>()
+          .stamp(this->now())
+          .frame_id(msg->header.frame_id))  // To-do(go-sakayori): consider if msg-> header could be
+                                            // used directly. Seems to exceed expiration_time
+      .generator_id(uuid)
+      .points(trajectory_points)
+      .score(0.0);
+
+  const auto generator_info =
+    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo>()
+      .generator_id(uuid)
+      .generator_name(std_msgs::msg::String().set__data("SelectedTrajectory"));
+
+  const auto output =
+    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectories>()
+      .trajectories({new_trajectory})
+      .generator_info({generator_info});
+
+  if (buffer_.count(hex_uuid) == 0) {
+    buffer_.emplace(hex_uuid, std::make_shared<Trajectories>(output));
+  } else {
+    buffer_.at(hex_uuid) = std::make_shared<Trajectories>(output);
+  }
+}
+
 void TrajectoryConcatenatorNode::publish()
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
@@ -94,6 +172,9 @@ void TrajectoryConcatenatorNode::publish()
       if (!pre_combine->trajectories.empty()) {
         const auto elapsed_time = (current_time - pre_combine->trajectories.begin()->header.stamp);
         if (elapsed_time > expiration_time) {
+          RCLCPP_INFO(
+            get_logger(), "Deleted %s because elapsed time is %lf",
+            it->second->generator_info.front().generator_name.data.c_str(), elapsed_time.seconds());
           it = buffer_.erase(it);
           continue;
         }
@@ -124,6 +205,8 @@ auto TrajectoryConcatenatorNode::parameters() const -> std::shared_ptr<Concatena
   const auto parameters = std::make_shared<ConcatenatorParam>();
 
   parameters->duration_time = node_params.duration_time;
+  parameters->use_feedback = node_params.selected_trajectory.use;
+  parameters->min_end_time = node_params.selected_trajectory.endpoint_time_min;
 
   return parameters;
 }

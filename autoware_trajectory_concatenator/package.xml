@@ -16,7 +16,9 @@
 
   <depend>autoware_new_planning_msgs</depend>
   <depend>autoware_planning_msgs</depend>
+  <depend>autoware_trajectory_selector_common</depend>
   <depend>autoware_utils</depend>
+  <depend>autoware_motion_utils</depend>
   <depend>generate_parameter_library</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
