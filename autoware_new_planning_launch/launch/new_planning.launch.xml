@@ -35,6 +35,7 @@
 
   <group>
     <include file="$(find-pkg-share autoware_new_planning_launch)/launch/generator.launch.xml">
+      <arg name="map_path" value="$(var map_path)"/>
     </include>
   </group>
 </launch>

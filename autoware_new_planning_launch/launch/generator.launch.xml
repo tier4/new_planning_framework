@@ -1,4 +1,5 @@
 <launch>
+  <arg name="map_path" description="point cloud and lanelet2 map directory path"/>
   <arg name="launch_hierarchy_planning" default="false"/>
 
   <arg name="input_traj" default="mtr/trajectory"/>
@@ -7,6 +8,7 @@
 
   <include file="$(find-pkg-share autoware_mtr_python)/launch/mtr_ego_python.launch.xml">
     <arg name="data_path" value="$(find-pkg-share autoware_mtr_python)/data"/>
+    <arg name="map_path" value="$(var map_path)"/>
   </include>
 
   <include file="$(find-pkg-share autoware_trajectory_interpolator)/launch/trajectory_interpolator.launch.xml">
