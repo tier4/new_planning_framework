@@ -32,6 +32,7 @@
 #include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <string>
@@ -114,10 +115,8 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
   auto trajectory_time_duration =
     (rclcpp::Duration(end.sec, end.nanosec) - rclcpp::Duration(start.sec, start.nanosec)).seconds();
 
-  TrajectoryPoints trajectory_points;
-  trajectory_points.reserve(msg->points.size() - ego_seg_idx.value());
-  std::copy(
-    msg->points.begin() + ego_seg_idx.value(), msg->points.end(), trajectory_points.begin());
+  TrajectoryPoints trajectory_points(msg->points.begin() + ego_seg_idx.value(), msg->points.end());
+
   while (trajectory_time_duration < parameters()->min_end_time) {
     trajectory_points.push_back(
       autoware::trajectory_selector::utils::calc_extended_point(trajectory_points.back(), 0.1));

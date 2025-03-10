@@ -24,6 +24,7 @@
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/duration.hpp>
+#include <rclcpp/logging.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/utils.hpp>
 
@@ -188,8 +189,8 @@ TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const dou
     tf2::getYaw(end_point.pose.orientation) + end_point.heading_rate_rps * extension_time;
   const auto new_time =
     rclcpp::Duration(end_point.time_from_start) + rclcpp::Duration::from_seconds(extension_time);
-
   const auto world_coordinate_velocity = get_velocity_in_world_coordinate(end_point);
+
   const auto new_point =
     geometry_msgs::build<Point>()
       .x(end_point.pose.position.x + world_coordinate_velocity.x() * extension_time)
@@ -198,6 +199,7 @@ TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const dou
 
   tf2::Quaternion new_quaternion;
   new_quaternion.setRPY(0.0, 0.0, new_yaw);
+  new_quaternion.normalize();
 
   const auto new_pose =
     geometry_msgs::build<Pose>().position(new_point).orientation(tf2::toMsg(new_quaternion));
@@ -263,7 +265,8 @@ auto sampling_with_time(
   output.reserve(sample_num);
 
   if (points.empty() || !start_idx.has_value() || start_idx.value() >= points.size()) {
-    std::cerr << "Error: points is empty or start_idx is out of range!" << std::endl;
+    RCLCPP_DEBUG(
+      rclcpp::get_logger(__func__), "Error: points is empty or start_idx is out of range!");
     return output;
   }
 
