@@ -26,6 +26,7 @@
 #include <lanelet2_core/geometry/LineString.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <string>
@@ -45,7 +46,8 @@ BagEvaluator::BagEvaluator(
 
 void BagEvaluator::setup(
   const std::shared_ptr<BagData> & bag_data,
-  const std::shared_ptr<TrajectoryPoints> & previous_points)
+  const std::shared_ptr<TrajectoryPoints> & previous_points,
+  const bool create_augmented_data)
 {
   tf_ = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
           ->get(bag_data->timestamp);
@@ -69,11 +71,13 @@ void BagEvaluator::setup(
   }
 
   // data augmentation
-  for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
-    const auto core_data = std::make_shared<CoreData>(
-      points, previous_points, objects_, odometry_, steering_, preferred_lanes_, "candidates");
+  if(create_augmented_data) {
+    for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
+      const auto core_data = std::make_shared<CoreData>(
+        points, previous_points, objects_, odometry_, steering_, preferred_lanes_, "candidates");
 
-    add(core_data);
+      add(core_data);
+    }
   }
 
   // Evaluator::setup(previous_points);
@@ -262,6 +266,40 @@ auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
   }
 
   return std::make_pair(mse, best_data->points());
+}
+
+std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points)
+{
+  std::vector<TrajectoryWithMetrics> results;
+  evaluate();
+  const auto ground_truth = get("ground_truth");
+  TrajectoryWithMetrics ground_truth_with_metrics;
+  ground_truth_with_metrics.points.reserve(20);
+  
+  std::vector<std::vector<double>> metric_values;
+  for (size_t i=0; i< metrics_size; i++) {
+    metric_values.push_back(ground_truth->get_metric(i));
+  }
+
+  for(size_t idx = 0; idx < ground_truth->points()->size(); idx++) {
+    TrajectoryPointWithMetrics point_with_metrics;
+    point_with_metrics.point.pose = ground_truth->points()->at(idx).pose;
+    point_with_metrics.point.longitudinal_velocity_mps = ground_truth->points()->at(idx).longitudinal_velocity_mps;
+    point_with_metrics.point.lateral_velocity_mps = ground_truth->points()->at(idx).lateral_velocity_mps;
+    point_with_metrics.point.acceleration_mps2 = ground_truth->points()->at(idx).acceleration_mps2;
+    point_with_metrics.point.heading_rate_rps = ground_truth->points()->at(idx).heading_rate_rps;
+    point_with_metrics.point.front_wheel_angle_rad = ground_truth->points()->at(idx).front_wheel_angle_rad;
+    point_with_metrics.point.rear_wheel_angle_rad = ground_truth->points()->at(idx).rear_wheel_angle_rad;
+    point_with_metrics.metrics.reserve(metrics_size);
+    for (size_t i = 0; i < metrics_size; i++) {
+      point_with_metrics.metrics.push_back(metric_values.at(i).at(idx));
+    }
+    ground_truth_with_metrics.points.push_back(point_with_metrics);
+  }
+  results.push_back(ground_truth_with_metrics);
+  previous_points = ground_truth != nullptr ? ground_truth->points() : nullptr;
+
+  return results;
 }
 
 auto BagEvaluator::marker() const -> std::shared_ptr<MarkerArray>

@@ -18,6 +18,7 @@
 #include "autoware/offline_evaluation_tools/data_structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
+#include "structs.hpp"
 
 #include <autoware/trajectory_selector_common/evaluation.hpp>
 
@@ -44,10 +45,13 @@ public:
 
   void setup(
     const std::shared_ptr<BagData> & bag_data,
-    const std::shared_ptr<TrajectoryPoints> & previous_points);
+    const std::shared_ptr<TrajectoryPoints> & previous_points,
+    const bool create_augmented_data = true);
 
   auto loss(const std::shared_ptr<EvaluatorParameters> & parameters)
     -> std::pair<double, std::shared_ptr<TrajectoryPoints>>;
+
+  std::vector<TrajectoryWithMetrics> calc_metric_values(const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points);
 
   auto tf() const -> std::shared_ptr<TFMessage> { return tf_; };
 
