@@ -271,7 +271,8 @@ auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
 std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points)
 {
   std::vector<TrajectoryWithMetrics> results;
-  evaluate();
+  std::vector<double> max_values(metrics_size, std::numeric_limits<double>::max());
+  evaluate(max_values);
   const auto ground_truth = get("ground_truth");
   TrajectoryWithMetrics ground_truth_with_metrics;
   ground_truth_with_metrics.points.reserve(20);

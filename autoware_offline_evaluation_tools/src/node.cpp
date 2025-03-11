@@ -455,7 +455,7 @@ void OfflineEvaluatorNode::create_dataset(
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
   
-  auto bag_path = getOrDeclareParameter<std::string>(*this, "bag_path");
+  auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   std::string output_file = bag_path;
   if (output_file.find_last_of('.') != std::string::npos) {
     output_file = output_file.substr(0, output_file.find_last_of('.'));
@@ -468,7 +468,7 @@ void OfflineEvaluatorNode::create_dataset(
     return;
   }
   
-  const auto metrics = getOrDeclareParameter<std::vector<std::string>>(*this, "metrics");
+  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
