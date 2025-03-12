@@ -23,6 +23,7 @@
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+#include <autoware_vehicle_msgs/msg/detail/steering_report__struct.hpp>
 
 #include <lanelet2_core/geometry/LineString.h>
 
@@ -66,6 +67,10 @@ void BagEvaluator::setup(
       ->get(bag_data->timestamp);
 
   preferred_lanes_ = preferred_lanes(bag_data, route_handler());
+
+  if (!trajectory_) return;
+  if (odometry_->twist.twist.linear.x < 1e-3) return;
+  if(std::all_of(trajectory_->points.begin(),trajectory_->points.end(),[](const auto & points){return points.longitudinal_velocity_mps < 1e-3;})) return;
 
   // add candidate path
   {
@@ -187,22 +192,22 @@ auto BagEvaluator::ground_truth(
     std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING));
 
   for (size_t i = 0; i < parameters->sample_num; i++) {
-    const auto odometry_ptr =
+    auto odometry_ptr =
       odometry_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
     if (!odometry_ptr) {
-      throw std::logic_error("data is not enough.");
+      odometry_ptr = std::make_shared<Odometry>(odometry_buffer_ptr->msgs.back());
     }
 
-    const auto accel_ptr =
+    auto accel_ptr =
       acceleration_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
     if (!accel_ptr) {
-      throw std::logic_error("data is not enough.");
+      accel_ptr = std::make_shared<AccelWithCovarianceStamped>(acceleration_buffer_ptr->msgs.back());
     }
 
-    const auto opt_steer =
+    auto opt_steer =
       steering_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
     if (!opt_steer) {
-      throw std::logic_error("data is not enough.");
+      opt_steer = std::make_shared<SteeringReport>(steering_buffer_ptr->msgs.back());
     }
 
     const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);

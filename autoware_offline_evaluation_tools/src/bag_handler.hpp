@@ -50,7 +50,19 @@ struct BufferBase
 template <typename T>
 struct Buffer : BufferBase
 {
+  using iterator = typename std::vector<T>::iterator;
+  using const_iterator = typename std::vector<T>::const_iterator;
+
   std::vector<T> msgs;
+
+  iterator begin() { return msgs.begin(); }
+  iterator end() { return msgs.end(); }
+
+  const_iterator begin() const { return msgs.begin(); }
+  const_iterator end() const { return msgs.end(); }
+
+  size_t size() const { return msgs.size(); }
+  const T & at(size_t index) const { return msgs.at(index); }
 
   const double BUFFER_TIME = 20.0 * 1e9;
 

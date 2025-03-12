@@ -33,7 +33,6 @@ struct TrajectoryPointWithMetrics
 struct TrajectoryWithMetrics
 {
   std::string tag;
-  double time;
   std::vector<TrajectoryPointWithMetrics> points;
 };
 }  // namespace autoware::trajectory_selector

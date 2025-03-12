@@ -64,7 +64,7 @@ private:
 
   auto get_route() -> LaneletRoute::ConstSharedPtr;
 
-  void update(const std::shared_ptr<BagData> & bag_data, const double dt);
+  void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
 
   void analyze(const std::shared_ptr<BagData> & bag_data) const;
 
@@ -103,8 +103,6 @@ private:
   mutable std::mutex mutex_;
 
   mutable rosbag2_cpp::Reader reader_;
-
-  size_t index_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
