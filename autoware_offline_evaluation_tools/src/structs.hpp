@@ -15,21 +15,24 @@
 #ifndef AUTOWARE__OFFLINE_EVALUATION_TOOLS__STRUCTS_HPP_
 #define AUTOWARE__OFFLINE_EVALUATION_TOOLS__STRUCTS_HPP_
 
-#include <array>
-#include <vector>
-#include <memory>
-
 #include "autoware/trajectory_selector_common/type_alias.hpp"
+
+#include <array>
+#include <memory>
+#include <vector>
 
 namespace autoware::trajectory_selector
 {
 // サンプル点および軌道構造体の定義
-struct TrajectoryPointWithMetrics {
+struct TrajectoryPointWithMetrics
+{
   TrajectoryPoint point;
   std::vector<double> metrics;
 };
 
-struct TrajectoryWithMetrics {
+struct TrajectoryWithMetrics
+{
+  std::string tag;
   double time;
   std::vector<TrajectoryPointWithMetrics> points;
 };

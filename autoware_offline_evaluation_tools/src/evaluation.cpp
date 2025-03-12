@@ -18,9 +18,10 @@
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
 
+#include <autoware/trajectory_selector_common/structs.hpp>
+#include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
-#include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <magic_enum.hpp>
 
 #include <lanelet2_core/geometry/LineString.h>
@@ -46,8 +47,7 @@ BagEvaluator::BagEvaluator(
 
 void BagEvaluator::setup(
   const std::shared_ptr<BagData> & bag_data,
-  const std::shared_ptr<TrajectoryPoints> & previous_points,
-  const bool create_augmented_data)
+  const std::shared_ptr<TrajectoryPoints> & previous_points, const bool create_augmented_data)
 {
   tf_ = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
           ->get(bag_data->timestamp);
@@ -55,23 +55,39 @@ void BagEvaluator::setup(
   odometry_ = std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
                 ->get(bag_data->timestamp);
 
-  steering_ = std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))->get(bag_data->timestamp);
+  steering_ =
+    std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))
+      ->get(bag_data->timestamp);
 
   objects_ = objects(bag_data, parameters_);
 
+  trajectory_ =
+    std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
+      ->get(bag_data->timestamp);
+
   preferred_lanes_ = preferred_lanes(bag_data, route_handler());
+
+  // add candidate path
+  {
+    const auto points = autoware::trajectory_selector::utils::sampling(
+      trajectory_->points, odometry_->pose.pose, parameters_->sample_num, parameters_->resolution);
+    const auto core_data = std::make_shared<CoreData>(
+      std::make_shared<TrajectoryPoints>(points), previous_points, objects_, odometry_, steering_,
+      preferred_lanes_, "candidate");
+    add(core_data);
+  }
 
   // add actual driving data
   {
     const auto core_data = std::make_shared<CoreData>(
-      ground_truth(bag_data, parameters_), previous_points, objects_, odometry_, steering_, preferred_lanes_,
-      "ground_truth");
+      ground_truth(bag_data, parameters_), previous_points, objects_, odometry_, steering_,
+      preferred_lanes_, "ground_truth");
 
     add(core_data);
   }
 
   // data augmentation
-  if(create_augmented_data) {
+  if (create_augmented_data) {
     for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
       const auto core_data = std::make_shared<CoreData>(
         points, previous_points, objects_, odometry_, steering_, preferred_lanes_, "candidates");
@@ -268,29 +284,39 @@ auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
   return std::make_pair(mse, best_data->points());
 }
 
-std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points)
+std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(
+  const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points)
 {
   std::vector<TrajectoryWithMetrics> results;
   std::vector<double> max_values(metrics_size, std::numeric_limits<double>::max());
   evaluate(max_values);
   const auto ground_truth = get("ground_truth");
+  const auto candidate = get("candidate");
   TrajectoryWithMetrics ground_truth_with_metrics;
+  ground_truth_with_metrics.tag = "ground_truth";
   ground_truth_with_metrics.points.reserve(20);
-  
+  TrajectoryWithMetrics candidate_with_metrics;
+  candidate_with_metrics.tag = "candidate";
+  candidate_with_metrics.points.reserve(20);
+
   std::vector<std::vector<double>> metric_values;
-  for (size_t i=0; i< metrics_size; i++) {
+  for (size_t i = 0; i < metrics_size; i++) {
     metric_values.push_back(ground_truth->get_metric(i));
   }
 
-  for(size_t idx = 0; idx < ground_truth->points()->size(); idx++) {
+  for (size_t idx = 0; idx < ground_truth->points()->size(); idx++) {
     TrajectoryPointWithMetrics point_with_metrics;
     point_with_metrics.point.pose = ground_truth->points()->at(idx).pose;
-    point_with_metrics.point.longitudinal_velocity_mps = ground_truth->points()->at(idx).longitudinal_velocity_mps;
-    point_with_metrics.point.lateral_velocity_mps = ground_truth->points()->at(idx).lateral_velocity_mps;
+    point_with_metrics.point.longitudinal_velocity_mps =
+      ground_truth->points()->at(idx).longitudinal_velocity_mps;
+    point_with_metrics.point.lateral_velocity_mps =
+      ground_truth->points()->at(idx).lateral_velocity_mps;
     point_with_metrics.point.acceleration_mps2 = ground_truth->points()->at(idx).acceleration_mps2;
     point_with_metrics.point.heading_rate_rps = ground_truth->points()->at(idx).heading_rate_rps;
-    point_with_metrics.point.front_wheel_angle_rad = ground_truth->points()->at(idx).front_wheel_angle_rad;
-    point_with_metrics.point.rear_wheel_angle_rad = ground_truth->points()->at(idx).rear_wheel_angle_rad;
+    point_with_metrics.point.front_wheel_angle_rad =
+      ground_truth->points()->at(idx).front_wheel_angle_rad;
+    point_with_metrics.point.rear_wheel_angle_rad =
+      ground_truth->points()->at(idx).rear_wheel_angle_rad;
     point_with_metrics.metrics.reserve(metrics_size);
     for (size_t i = 0; i < metrics_size; i++) {
       point_with_metrics.metrics.push_back(metric_values.at(i).at(idx));
@@ -298,6 +324,32 @@ std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(const size_t
     ground_truth_with_metrics.points.push_back(point_with_metrics);
   }
   results.push_back(ground_truth_with_metrics);
+
+  for (size_t i = 0; i < metrics_size; i++) {
+    metric_values.push_back(candidate->get_metric(i));
+  }
+
+  for (size_t idx = 0; idx < candidate->points()->size(); idx++) {
+    TrajectoryPointWithMetrics point_with_metrics;
+    point_with_metrics.point.pose = candidate->points()->at(idx).pose;
+    point_with_metrics.point.longitudinal_velocity_mps =
+      candidate->points()->at(idx).longitudinal_velocity_mps;
+    point_with_metrics.point.lateral_velocity_mps =
+      candidate->points()->at(idx).lateral_velocity_mps;
+    point_with_metrics.point.acceleration_mps2 = candidate->points()->at(idx).acceleration_mps2;
+    point_with_metrics.point.heading_rate_rps = candidate->points()->at(idx).heading_rate_rps;
+    point_with_metrics.point.front_wheel_angle_rad =
+      candidate->points()->at(idx).front_wheel_angle_rad;
+    point_with_metrics.point.rear_wheel_angle_rad =
+      candidate->points()->at(idx).rear_wheel_angle_rad;
+    point_with_metrics.metrics.reserve(metrics_size);
+    for (size_t i = 0; i < metrics_size; i++) {
+      point_with_metrics.metrics.push_back(metric_values.at(i).at(idx));
+    }
+    candidate_with_metrics.points.push_back(point_with_metrics);
+  }
+  results.push_back(candidate_with_metrics);
+
   previous_points = ground_truth != nullptr ? ground_truth->points() : nullptr;
 
   return results;

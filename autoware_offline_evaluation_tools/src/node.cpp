@@ -13,22 +13,26 @@
 // limitations under the License.
 
 #include "node.hpp"
-#include "rosbag2_storage/storage_filter.hpp"
-#include "structs.hpp"
 
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "autoware_utils/ros/parameter.hpp"
 #include "autoware_utils/system/stop_watch.hpp"
-
+#include "rosbag2_storage/storage_filter.hpp"
+#include "structs.hpp"
 
 #include <autoware/trajectory_selector_common/type_alias.hpp>
-#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
+#include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
-#include <memory>
+#include <rclcpp/utilities.hpp>
+
+#include <chrono>
+#include <cstddef>
 #include <fstream>
+#include <memory>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -40,13 +44,16 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
 : Node("offline_evaluator_node", node_options),
   route_handler_{std::make_shared<RouteHandler>()},
   vehicle_info_{std::make_shared<VehicleInfo>(
-    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
+    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())},
+  index_(0)
 {
   pub_marker_ = create_publisher<MarkerArray>("~/output/markers", 1);
 
   pub_objects_ = create_publisher<PredictedObjects>(TOPIC::OBJECTS, rclcpp::QoS(1));
 
   pub_tf_ = create_publisher<TFMessage>(TOPIC::TF, rclcpp::QoS(1));
+
+  pub_trajectory_ = create_publisher<Trajectory>(TOPIC::TRAJECTORY, rclcpp::QoS(1));
 
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
@@ -75,7 +82,8 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
 
   srv_create_dataset_ = this->create_service<Trigger>(
     "create_dataset",
-    std::bind(&OfflineEvaluatorNode::create_dataset, this, std::placeholders::_1, std::placeholders::_2),
+    std::bind(
+      &OfflineEvaluatorNode::create_dataset, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
   reader_.open(get_or_declare_parameter<std::string>(*this, "bag_path"));
@@ -150,7 +158,7 @@ auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
   return deserialized_message;
 }
 
-void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
+void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt)
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back(TOPIC::TF);
@@ -213,6 +221,7 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
     }
 
     if (next_data->topic_name == TOPIC::TRAJECTORY) {
+      index_++;
       rclcpp::Serialization<Trajectory> serializer;
       const auto deserialized_message = std::make_shared<Trajectory>();
       serializer.deserialize_message(&serialized_msg, deserialized_message.get());
@@ -261,9 +270,12 @@ void OfflineEvaluatorNode::play(
 
     pub_marker_->publish(*bag_evaluator->marker());
 
+    pub_trajectory_->publish(*bag_evaluator->trajectory());
+
     bag_evaluator->show();
 
     bag_evaluator->clear();
+    rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<long>(time_step * 1e9)));
   }
 
   res->success = true;
@@ -447,14 +459,14 @@ void OfflineEvaluatorNode::create_dataset(
   std::lock_guard<std::mutex> lock(mutex_);
   RCLCPP_INFO(get_logger(), "Starting dataset creation...");
   route_handler_->setRoute(*get_route());
-  
+
   reader_.seek(0);
   const auto bag_data = std::make_shared<BagData>(
     duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
 
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
-  
+
   auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   std::string output_file = bag_path;
   if (output_file.find_last_of('.') != std::string::npos) {
@@ -462,37 +474,53 @@ void OfflineEvaluatorNode::create_dataset(
   }
   output_file += ".csv";
   std::ofstream ofs(output_file);
-  if(!ofs.is_open()) {
+  if (!ofs.is_open()) {
     RCLCPP_ERROR(get_logger(), "Failed to open %s for writing.", output_file.c_str());
     res->success = false;
     return;
   }
-  
+
   const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
+  ofs << "Tag,Timestamp,";
+  for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
+    ofs << "x" << i << ",y" << i << ",yaw" << i << ",";
+    for (const auto & metric : metrics) {
+      ofs << metric.c_str() << ",";
+    }
+  }
+  ofs << std::endl;
+
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-    
-  while(reader_.has_next() && rclcpp::ok()) {
+
+  while (reader_.has_next() && rclcpp::ok()) {
     const bool write = previous_points != nullptr;
-    update(bag_data, 0.1); // to-do(go-sakayori): fix hard code
+    update(bag_data, 0.1);  // to-do(go-sakayori): fix hard code
     if (!bag_data->ready()) break;
 
     bag_evaluator->setup(bag_data, previous_points, false);
-    const auto results = bag_evaluator->calc_metric_values(metrics.size(),previous_points);
-    
-    if(write) {
-      for(const auto & result : results) {
-        ofs << result.time << ",";
-        for(const auto & point : result.points) {
-          ofs << point.point.pose.position.x << "," << point.point.pose.position.y << "," << point.point.pose.orientation.z << "," ;
-          for(const auto & metric : point.metrics) {
+    const auto results = bag_evaluator->calc_metric_values(metrics.size(), previous_points);
+
+    if (results.size() != 2) {
+      RCLCPP_INFO(get_logger(), "Data creation failed");
+      res->success = false;
+      return;
+    }
+
+    if (write) {
+      for (const auto & result : results) {
+        ofs << result.tag << "," << result.time << ",";
+        for (const auto & point : result.points) {
+          ofs << point.point.pose.position.x << "," << point.point.pose.position.y << ","
+              << point.point.pose.orientation.z << ",";
+          for (const auto & metric : point.metrics) {
             ofs << metric << ",";
           }
-          ofs << std::endl;
         }
+        ofs << std::endl;
       }
     }
     bag_evaluator->clear();

@@ -130,6 +130,8 @@ struct BagData
     remove_old_data();
   }
 
+  void set_time(const rcutils_time_point_value_t time) { timestamp = time; }
+
   void remove_old_data()
   {
     std::for_each(buffers.begin(), buffers.end(), [this](const auto & buffer) {
