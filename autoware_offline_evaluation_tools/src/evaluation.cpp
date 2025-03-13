@@ -215,7 +215,7 @@ auto BagEvaluator::ground_truth(
                          .time_from_start(duration)
                          .pose(odometry_ptr->pose.pose)
                          .longitudinal_velocity_mps(odometry_ptr->twist.twist.linear.x)
-                         .lateral_velocity_mps(odometry_ptr->twist.twist.angular.z * odometry_ptr->twist.twist.linear.x)
+                         .lateral_velocity_mps(odometry_ptr->twist.twist.linear.y)
                          .acceleration_mps2(accel_ptr->accel.accel.linear.x)
                          .heading_rate_rps(odometry_ptr->twist.twist.angular.z)
                          .front_wheel_angle_rad(opt_steer->steering_tire_angle)
