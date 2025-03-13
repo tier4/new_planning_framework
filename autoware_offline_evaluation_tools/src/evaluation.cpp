@@ -72,6 +72,15 @@ void BagEvaluator::setup(
   if (odometry_->twist.twist.linear.x < 1e-3) return;
   if(std::all_of(trajectory_->points.begin(),trajectory_->points.end(),[](const auto & points){return points.longitudinal_velocity_mps < 1e-3;})) return;
 
+  // Remove zero velocity at end point if necessary
+  const auto trajectory_size = trajectory_->points.size();
+  if(trajectory_size > 1 && trajectory_->points.back().longitudinal_velocity_mps < 1e-03) {
+    const auto velocity_diff = trajectory_->points.back().longitudinal_velocity_mps - trajectory_->points.at(trajectory_size-2).longitudinal_velocity_mps;
+    if(velocity_diff > 2.0) {
+      trajectory_->points.back().longitudinal_velocity_mps = trajectory_->points.at(trajectory_size-2).longitudinal_velocity_mps;
+    }
+  }
+
   // add candidate path
   {
     const auto points = autoware::trajectory_selector::utils::sampling(
