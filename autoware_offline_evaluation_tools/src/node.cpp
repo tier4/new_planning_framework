@@ -588,7 +588,7 @@ void OfflineEvaluatorNode::create_dataset(
         ofs << result.tag << "," ;
         for (const auto & point : result.points) {
           ofs << point.point.pose.position.x << "," << point.point.pose.position.y << ","
-              << point.point.pose.orientation.z << ",";
+              << tf2::getYaw(point.point.pose.orientation) << ",";
           for (const auto & metric : point.metrics) {
             ofs << metric << ",";
           }
