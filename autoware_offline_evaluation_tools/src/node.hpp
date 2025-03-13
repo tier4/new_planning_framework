@@ -22,9 +22,13 @@
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
+#include <rclcpp/publisher.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/service.hpp>
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
+#include <std_srvs/srv/detail/trigger__struct.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
 #include <algorithm>
@@ -56,6 +60,8 @@ private:
 
   void weight(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
 
+  void create_dataset(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
+
   auto get_route() -> LaneletRoute::ConstSharedPtr;
 
   void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
@@ -74,6 +80,8 @@ private:
 
   rclcpp::Publisher<PredictedObjects>::SharedPtr pub_objects_;
 
+  rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_;
+
   rclcpp::Publisher<TFMessage>::SharedPtr pub_tf_;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
@@ -85,6 +93,8 @@ private:
   rclcpp::Service<Trigger>::SharedPtr srv_route_;
 
   rclcpp::Service<Trigger>::SharedPtr srv_weight_;
+
+  rclcpp::Service<Trigger>::SharedPtr srv_create_dataset_;
 
   std::shared_ptr<RouteHandler> route_handler_;
 

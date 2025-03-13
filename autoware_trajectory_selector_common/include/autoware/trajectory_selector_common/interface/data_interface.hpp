@@ -91,6 +91,8 @@ public:
     metrics_.at(idx) = metric;
   }
 
+  std::vector<double> get_metric(const size_t idx) const { return metrics_.at(idx); }
+
   auto total() const -> double { return total_; };
 
   auto score(const size_t index) const -> double { return scores_.at(index); }
