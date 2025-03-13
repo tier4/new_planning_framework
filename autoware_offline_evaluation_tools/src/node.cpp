@@ -570,11 +570,16 @@ void OfflineEvaluatorNode::create_dataset(
     bag_data->set_time(timestamp);
 
     bag_evaluator->setup(bag_data, previous_points, false);
-    if(bag_evaluator->results().empty()) continue;
+    if(bag_evaluator->results().size() != 2) {
+      previous_points = nullptr;
+      bag_evaluator->clear();
+      continue;
+    }
     const auto results = bag_evaluator->calc_metric_values(metrics.size(), previous_points);
 
     if (results.size() != 2) {
       RCLCPP_INFO(get_logger(), "Data creation failed");
+      bag_evaluator->clear();
       continue;
     }
 

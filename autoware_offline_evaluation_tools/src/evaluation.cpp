@@ -330,6 +330,7 @@ std::vector<TrajectoryWithMetrics> BagEvaluator::calc_metric_values(
   }
   results.push_back(ground_truth_with_metrics);
 
+  metric_values.clear();
   for (size_t i = 0; i < metrics_size; i++) {
     metric_values.push_back(candidate->get_metric(i));
   }
