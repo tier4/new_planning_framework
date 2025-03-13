@@ -18,10 +18,12 @@
 #include "autoware/offline_evaluation_tools/data_structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
+#include "structs.hpp"
 
 #include <autoware/trajectory_selector_common/evaluation.hpp>
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -44,14 +46,20 @@ public:
 
   void setup(
     const std::shared_ptr<BagData> & bag_data,
-    const std::shared_ptr<TrajectoryPoints> & previous_points);
+    const std::shared_ptr<TrajectoryPoints> & previous_points,
+    const bool create_augmented_data = true);
 
   auto loss(const std::shared_ptr<EvaluatorParameters> & parameters)
     -> std::pair<double, std::shared_ptr<TrajectoryPoints>>;
 
+  std::vector<TrajectoryWithMetrics> calc_metric_values(
+    const size_t metrics_size, std::shared_ptr<TrajectoryPoints> & previous_points);
+
   auto tf() const -> std::shared_ptr<TFMessage> { return tf_; };
 
   auto objects() const -> std::shared_ptr<PredictedObjects> { return objects_; }
+
+  auto trajectory() const -> std::shared_ptr<Trajectory> { return trajectory_; }
 
   auto marker() const -> std::shared_ptr<MarkerArray>;
 
@@ -84,6 +92,8 @@ private:
   std::shared_ptr<SteeringReport> steering_;
 
   std::shared_ptr<PredictedObjects> objects_;
+
+  std::shared_ptr<Trajectory> trajectory_;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
 };
