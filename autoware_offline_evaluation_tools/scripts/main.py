@@ -21,6 +21,11 @@ def parse_args():
                         help="Whether to use CUDA (default: True)")
     parser.add_argument("--use_max_values", type=lambda s: s.lower() in ['true', '1', 'yes'], default=True,
                         help="Whether to use max_values for normalization (default: True)")
+    parser.add_argument("--reparam_weights", type=lambda s: s.lower() in ['true', '1', 'yes'], default=True,
+                        help="Whether to use reparameterization for metric weights (default: True)")
+    parser.add_argument("--reparam_time_weights", type=lambda s: s.lower() in ['true', '1', 'yes'], default=True,
+                        help="Whether to reparameterize time decay weights (default: True)")
+
     parser.add_argument(
         "--param_file",
         type=str,
@@ -40,7 +45,7 @@ def main():
     num_metrics = len(metrics)
 
     # Fixed max_values and lower_better_mask (can be extended to load from YAML if needed)
-    max_values = [100.0, 50.0, 200.0, 10.0, 5.0, 2.0]
+    max_values = [2.0, 2.0, 10.0, 100.0, 2.0, 2.0]
     lower_better_mask = [True, True, False, False, True, True]
 
     model = TrajectoryNetPerMetric(
@@ -52,7 +57,9 @@ def main():
         max_values=max_values,
         lower_better_mask=lower_better_mask,
         use_max_values=args.use_max_values,
-        train_subnet=False
+        reparam_weights=args.reparam_weights,
+        reparam_time_weights=args.reparam_time_weights,
+        train_subnet=True
     ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = torch.nn.MarginRankingLoss(margin=1.0)
@@ -76,6 +83,13 @@ def main():
 
     print("Starting testing...")
     test_model(model, test_loader, margin=1.0, device=device)
+
+    if model.reparam_weights:
+        rep_weights = torch.sigmoid(model.unconstrained_metric_weights).detach().cpu().numpy()
+        print("Reparameterized metric weights (in [0,1]):", rep_weights)
+    else:
+        w = model.metric_weights.detach().cpu().numpy()
+        print("Metric weights:", w)
 
 
 if __name__ == "__main__":
