@@ -3,24 +3,29 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+
 class TrajectoryDataset(Dataset):
     """
-    複数のCSVファイルを読み込み、全データをメモリに保持します。
-    各CSVファイルは、ヘッダーがあり、先頭列が tag、
-    その後に各点の9要素（x, y, yaw, m1～m6）が記録されていると仮定します。
-    
-    各行の最初180個の値（20点×9要素）を用いてリシェイプし、メトリクス部分（m1～m6）を抽出します。
-    ペアは、1行目を ground_truth、2行目を candidate として作成し、
-    candidate の lateral acceleration (m1) は ground_truth の値に置き換えます。
+    Reads multiple CSV files and holds all data in memory.
+    Each CSV file is assumed to have a header, with the first column being 'tag',
+    followed by data points consisting of 9 elements each (x, y, yaw, m1 through m6).
+
+    Using the first 180 values (20 points × 9 elements) of each row, the data is reshaped, 
+    and the metrics portion (m1 through m6) is extracted.
+
+    Pairs are created by treating the first row as 'ground_truth' and the second row as 'candidate'.
+    The candidate's lateral acceleration (m1) is replaced with the corresponding values from the ground_truth.
     """
+
     def __init__(self, csv_files):
-        self.trajectories = []  # 各行のメトリクス部分を保存するリスト
+        self.trajectories = []
         for csv_file in csv_files:
             df = pd.read_csv(csv_file, header=0)
+            # To-do(go-sakayori): delete when dataset format is fixed
             if "Unnamed: 181" in df.columns:
                 df = df.drop(columns=["Unnamed: 181"])
-            # 先頭の tag 列を除去 (to-do:これをなくすようにデータを作成)
-            df = df.iloc[:, 1:]
+
+            df = df.iloc[:, 1:]  # Remove the leading tag column
             num_points = 20
             num_cols_per_point = 9
             total_expected = num_points * num_cols_per_point  # 180
@@ -31,13 +36,12 @@ class TrajectoryDataset(Dataset):
                 values = row_values.reshape(num_points, num_cols_per_point)
                 mets = values[:, 3:9]  # Metrics part（m1～m6）
                 self.trajectories.append(mets)
-        # ペアは、連続する2行を (ground_truth, candidate) として作成
-        self.pairs = [(self.trajectories[i], self.trajectories[i+1]) 
+        self.pairs = [(self.trajectories[i], self.trajectories[i+1])
                       for i in range(0, len(self.trajectories), 2)]
-    
+
     def __len__(self):
         return len(self.pairs)
-    
+
     def __getitem__(self, idx):
         gt_metrics_np, cand_metrics_np = self.pairs[idx]
         gt_metrics = torch.tensor(gt_metrics_np, dtype=torch.float32)

@@ -1,11 +1,8 @@
 import torch
 import yaml
 
+
 def load_parameters(param_file: str):
-    """
-    YAML ファイルからパラメータを読み込み、score_weight と time_decay_weight を返す。
-    YAML の構造は、"/**:" の下の ros__parameters に格納されている前提。
-    """
     with open(param_file, "r") as f:
         params = yaml.safe_load(f)
     ros_params = params["/**"]["ros__parameters"]
@@ -15,16 +12,12 @@ def load_parameters(param_file: str):
     metrics = ros_params["metrics"]
     return score_weight, time_decay_weight, sample_num, metrics
 
+
 def get_device(use_cuda=True):
-    """
-    use_cuda が True かつ CUDA が利用可能なら GPU、そうでなければ CPU を返す。
-    """
     return torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
 
+
 def train_model(model, train_loader, optimizer, loss_fn, num_epochs, device):
-    """
-    学習ループ。各バッチごとに入力をデバイスに移動して学習する。
-    """
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0.0
@@ -46,11 +39,8 @@ def train_model(model, train_loader, optimizer, loss_fn, num_epochs, device):
         else:
             print(f"Epoch {epoch+1}/{num_epochs}, No batches processed.")
 
+
 def test_model(model, test_loader, margin, device):
-    """
-    テストループ。各バッチごとに入力をデバイスに移動して推論し、
-    平均マージンとランキング精度を表示する。
-    """
     model.eval()
     total_samples = 0
     correct = 0
