@@ -23,6 +23,7 @@
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+#include <rclcpp/logging.hpp>
 
 #include <autoware_vehicle_msgs/msg/detail/steering_report__struct.hpp>
 
@@ -161,6 +162,9 @@ auto BagEvaluator::objects(
     std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers.at(TOPIC::OBJECTS));
 
   const auto current_objects = objects_buffer_ptr->get(bag_data->timestamp);
+  if (!current_objects) {
+    return nullptr;
+  }
 
   // remove predicted_paths.
   std::for_each(
