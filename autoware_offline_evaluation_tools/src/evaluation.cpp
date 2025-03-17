@@ -23,6 +23,7 @@
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
+
 #include <autoware_vehicle_msgs/msg/detail/steering_report__struct.hpp>
 
 #include <lanelet2_core/geometry/LineString.h>
@@ -66,18 +67,24 @@ void BagEvaluator::setup(
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
       ->get(bag_data->timestamp);
 
-  preferred_lanes_ = preferred_lanes(bag_data, route_handler());
+  preferred_lanes_ = preferred_lanes(bag_data, route_handler(), parameters_->max_trajectory_length);
 
   if (!trajectory_) return;
   if (odometry_->twist.twist.linear.x < 1e-3) return;
-  if(std::all_of(trajectory_->points.begin(),trajectory_->points.end(),[](const auto & points){return points.longitudinal_velocity_mps < 1e-3;})) return;
+  if (std::all_of(trajectory_->points.begin(), trajectory_->points.end(), [](const auto & points) {
+        return points.longitudinal_velocity_mps < 1e-3;
+      }))
+    return;
 
   // Remove zero velocity at end point if necessary
   const auto trajectory_size = trajectory_->points.size();
-  if(trajectory_size > 1 && trajectory_->points.back().longitudinal_velocity_mps < 1e-03) {
-    const auto velocity_diff = trajectory_->points.back().longitudinal_velocity_mps - trajectory_->points.at(trajectory_size-2).longitudinal_velocity_mps;
-    if(velocity_diff > 2.0) {
-      trajectory_->points.back().longitudinal_velocity_mps = trajectory_->points.at(trajectory_size-2).longitudinal_velocity_mps;
+  if (trajectory_size > 1 && trajectory_->points.back().longitudinal_velocity_mps < 1e-03) {
+    const auto velocity_diff =
+      trajectory_->points.back().longitudinal_velocity_mps -
+      trajectory_->points.at(trajectory_size - 2).longitudinal_velocity_mps;
+    if (velocity_diff > 2.0) {
+      trajectory_->points.back().longitudinal_velocity_mps =
+        trajectory_->points.at(trajectory_size - 2).longitudinal_velocity_mps;
     }
   }
 
@@ -114,8 +121,8 @@ void BagEvaluator::setup(
 }
 
 auto BagEvaluator::preferred_lanes(
-  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
-  const -> std::shared_ptr<lanelet::ConstLanelets>
+  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+  const double max_trajectory_length) const -> std::shared_ptr<lanelet::ConstLanelets>
 {
   const auto lanes = route_handler->getPreferredLanelets();
 
@@ -135,11 +142,12 @@ auto BagEvaluator::preferred_lanes(
   double length = 0.0;
 
   const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>();
-  std::for_each(itr, lanes.end(), [&length, &preferred_lanes](const auto & lanelet) {
-    length += static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
-    constexpr double threshold = 150.0;
-    if (length < threshold) preferred_lanes->push_back(lanelet);
-  });
+  std::for_each(
+    itr, lanes.end(), [&length, &preferred_lanes, &max_trajectory_length](const auto & lanelet) {
+      length +=
+        static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
+      if (length < max_trajectory_length) preferred_lanes->push_back(lanelet);
+    });
 
   return preferred_lanes;
 }
@@ -210,7 +218,8 @@ auto BagEvaluator::ground_truth(
     auto accel_ptr =
       acceleration_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
     if (!accel_ptr) {
-      accel_ptr = std::make_shared<AccelWithCovarianceStamped>(acceleration_buffer_ptr->msgs.back());
+      accel_ptr =
+        std::make_shared<AccelWithCovarianceStamped>(acceleration_buffer_ptr->msgs.back());
     }
 
     auto opt_steer =

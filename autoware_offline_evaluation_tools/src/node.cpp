@@ -119,6 +119,8 @@ auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAug
 
   parameters->sample_num = get_or_declare_parameter<int>(*this, "sample_num");
   parameters->resolution = get_or_declare_parameter<double>(*this, "resolution");
+  parameters->max_trajectory_length =
+    get_or_declare_parameter<double>(*this, "max_trajectory_length");
   parameters->target_state.lat_positions =
     get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_positions");
   parameters->target_state.lat_velocities =
