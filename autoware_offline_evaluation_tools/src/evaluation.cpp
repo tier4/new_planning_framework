@@ -64,7 +64,7 @@ void BagEvaluator::setup(
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
       ->get(bag_data->timestamp);
 
-  preferred_lanes_ = preferred_lanes(bag_data, route_handler());
+  preferred_lanes_ = preferred_lanes(bag_data, route_handler(), parameters_->max_trajectory_length);
 
   if (!trajectory_) return;
   if (odometry_->twist.twist.linear.x < 1e-3) return;
@@ -72,6 +72,18 @@ void BagEvaluator::setup(
         return points.longitudinal_velocity_mps < 1e-3;
       }))
     return;
+
+  // Remove zero velocity at end point if necessary
+  const auto trajectory_size = trajectory_->points.size();
+  if (trajectory_size > 1 && trajectory_->points.back().longitudinal_velocity_mps < 1e-03) {
+    const auto velocity_diff =
+      trajectory_->points.back().longitudinal_velocity_mps -
+      trajectory_->points.at(trajectory_size - 2).longitudinal_velocity_mps;
+    if (velocity_diff > 2.0) {
+      trajectory_->points.back().longitudinal_velocity_mps =
+        trajectory_->points.at(trajectory_size - 2).longitudinal_velocity_mps;
+    }
+  }
 
   // add candidate path
   {
@@ -105,8 +117,8 @@ void BagEvaluator::setup(
 }
 
 auto BagEvaluator::preferred_lanes(
-  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
-  const -> std::shared_ptr<lanelet::ConstLanelets>
+  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+  const double max_trajectory_length) const -> std::shared_ptr<lanelet::ConstLanelets>
 {
   const auto lanes = route_handler->getPreferredLanelets();
 
@@ -126,11 +138,12 @@ auto BagEvaluator::preferred_lanes(
   double length = 0.0;
 
   const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>();
-  std::for_each(itr, lanes.end(), [&length, &preferred_lanes](const auto & lanelet) {
-    length += static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
-    constexpr double threshold = 150.0;
-    if (length < threshold) preferred_lanes->push_back(lanelet);
-  });
+  std::for_each(
+    itr, lanes.end(), [&length, &preferred_lanes, &max_trajectory_length](const auto & lanelet) {
+      length +=
+        static_cast<double>(boost::geometry::length(lanelet.centerline().basicLineString()));
+      if (length < max_trajectory_length) preferred_lanes->push_back(lanelet);
+    });
 
   return preferred_lanes;
 }
@@ -144,6 +157,9 @@ auto BagEvaluator::objects(
     std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers.at(TOPIC::OBJECTS));
 
   const auto current_objects = objects_buffer_ptr->get(bag_data->timestamp);
+  if (!current_objects) {
+    return nullptr;
+  }
 
   // remove predicted_paths.
   std::for_each(
@@ -218,7 +234,7 @@ auto BagEvaluator::ground_truth(
                          .longitudinal_velocity_mps(odometry_ptr->twist.twist.linear.x)
                          .lateral_velocity_mps(odometry_ptr->twist.twist.linear.y)
                          .acceleration_mps2(accel_ptr->accel.accel.linear.x)
-                         .heading_rate_rps(0.0)
+                         .heading_rate_rps(odometry_ptr->twist.twist.angular.z)
                          .front_wheel_angle_rad(opt_steer->steering_tire_angle)
                          .rear_wheel_angle_rad(0.0);
     points.push_back(point);
