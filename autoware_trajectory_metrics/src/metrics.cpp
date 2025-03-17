@@ -22,7 +22,9 @@
 
 #include <rcl/subscription.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <vector>
 
 namespace autoware::trajectory_selector::trajectory_metrics
@@ -36,14 +38,39 @@ void LateralAcceleration::evaluate(
   const double time_resolution = resolution() > epsilon ? resolution() : epsilon;
 
   metric.reserve(result->points()->size());
-  for (size_t i = 0; i < result->points()->size() - 1; i++) {
-    const auto lateral_acc = (result->points()->at(i + 1).lateral_velocity_mps -
-                              result->points()->at(i).lateral_velocity_mps) /
-                             time_resolution;
+
+  if (std::any_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
+        return point.lateral_velocity_mps > 1e-3;
+      })) {
+    for (size_t i = 0; i < result->points()->size() - 1; i++) {
+      const auto lateral_acc = (result->points()->at(i + 1).lateral_velocity_mps -
+                                result->points()->at(i).lateral_velocity_mps) /
+                               time_resolution;
+      metric.push_back(std::min(max_value, std::abs(lateral_acc)));
+    }
+    metric.push_back(metric.back());
+    result->set_metric(index(), metric);
+    return;
+  }
+
+  if (std::any_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
+        return point.heading_rate_rps > 1e-3;
+      })) {
+    for (const auto & point : *result->points()) {
+      const double lateral_acc = point.heading_rate_rps * point.longitudinal_velocity_mps;
+      metric.push_back(std::min(max_value, std::abs(lateral_acc)));
+    }
+    result->set_metric(index(), metric);
+    return;
+  }
+
+  const auto wheel_base = vehicle_info()->wheel_base_m;
+  for (const auto & point : *result->points()) {
+    const auto steering_angle = utils::steer_command(result->points(), point.pose, wheel_base);
+    const auto lateral_acc = point.longitudinal_velocity_mps * point.longitudinal_velocity_mps *
+                             std::tan(steering_angle) / wheel_base;
     metric.push_back(std::min(max_value, std::abs(lateral_acc)));
   }
-  metric.push_back(metric.back());
-
   result->set_metric(index(), metric);
 }
 

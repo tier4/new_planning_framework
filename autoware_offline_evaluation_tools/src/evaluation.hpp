@@ -65,8 +65,8 @@ public:
 
 private:
   auto preferred_lanes(
-    const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
-    const -> std::shared_ptr<lanelet::ConstLanelets>;
+    const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler,
+    const double max_trajectory_length) const -> std::shared_ptr<lanelet::ConstLanelets>;
 
   auto objects(
     const std::shared_ptr<BagData> & bag_data,

@@ -2,6 +2,7 @@
   ros__parameters:
     sample_num: 20
     resolution: 0.5
+    max_trajectory_length: 500.0
 
     target_state:
       lateral_positions: [-2.5, -1.0, 0.0, 1.0, 2.5]
