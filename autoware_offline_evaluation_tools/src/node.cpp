@@ -32,9 +32,10 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <memory>
-#include <filesystem>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -118,6 +119,8 @@ auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAug
 
   parameters->sample_num = get_or_declare_parameter<int>(*this, "sample_num");
   parameters->resolution = get_or_declare_parameter<double>(*this, "resolution");
+  parameters->max_trajectory_length =
+    get_or_declare_parameter<double>(*this, "max_trajectory_length");
   parameters->target_state.lat_positions =
     get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_positions");
   parameters->target_state.lat_velocities =
@@ -258,7 +261,7 @@ void OfflineEvaluatorNode::play(
   while (reader_.has_next() && rclcpp::ok()) {
     update(bag_data, time_step);
 
-    bag_evaluator->setup(bag_data, previous_points, bag_data->timestamp);
+    bag_evaluator->setup(bag_data, previous_points);
 
     const auto best_data = bag_evaluator->best(parameters);
 
@@ -275,7 +278,7 @@ void OfflineEvaluatorNode::play(
     bag_evaluator->show();
 
     bag_evaluator->clear();
-    rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<long>(time_step * 1e9)));
+    rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(time_step * 1e9)));
   }
 
   res->success = true;
@@ -409,7 +412,7 @@ void OfflineEvaluatorNode::weight(
       std::shared_ptr<TrajectoryPoints> selected_points;
       {
         std::lock_guard<std::mutex> lock(e_mutex);
-        bag_evaluator->setup(bag_data, previous_points,bag_data->timestamp);
+        bag_evaluator->setup(bag_data, previous_points);
         std::tie(loss, selected_points) = bag_evaluator->loss(selector_parameters);
         bag_evaluator->clear();
       }
@@ -503,7 +506,7 @@ void OfflineEvaluatorNode::create_dataset(
   filter.topics.emplace_back(TOPIC::STEERING);
   filter.topics.emplace_back(TOPIC::TRAJECTORY);
   reader_.set_filter(filter);
-  
+
   while (reader_.has_next()) {
     const auto next_data = reader_.read_next();
     rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
@@ -557,20 +560,20 @@ void OfflineEvaluatorNode::create_dataset(
         ->append(*deserialized_message);
     }
   }
-  auto trajectory_buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY));
-  if(!trajectory_buffer) {
+  auto trajectory_buffer =
+    std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY));
+  if (!trajectory_buffer) {
     res->success = false;
     RCLCPP_INFO(get_logger(), "No trajectory in ros bag data. Data creation failed");
     return;
   }
-  for(const auto & buffer : *trajectory_buffer)
-  {
+  for (const auto & buffer : *trajectory_buffer) {
     const auto timestamp = rclcpp::Time(buffer.header.stamp).nanoseconds();
     const bool write = previous_points != nullptr;
     bag_data->set_time(timestamp);
 
     bag_evaluator->setup(bag_data, previous_points, false);
-    if(bag_evaluator->results().size() != 2) {
+    if (bag_evaluator->results().size() != 2) {
       previous_points = nullptr;
       bag_evaluator->clear();
       continue;
@@ -585,10 +588,10 @@ void OfflineEvaluatorNode::create_dataset(
 
     if (write) {
       for (const auto & result : results) {
-        ofs << result.tag << "," ;
+        ofs << result.tag << ",";
         for (const auto & point : result.points) {
           ofs << point.point.pose.position.x << "," << point.point.pose.position.y << ","
-              << point.point.pose.orientation.z << ",";
+              << tf2::getYaw(point.point.pose.orientation) << ",";
           for (const auto & metric : point.metrics) {
             ofs << metric << ",";
           }

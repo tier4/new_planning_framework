@@ -39,6 +39,8 @@ struct DataAugmentParameters
 
   double resolution{0.5};
 
+  double max_trajectory_length;
+
   TargetStateParameters target_state{};
 };
 
