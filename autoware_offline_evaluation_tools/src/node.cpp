@@ -82,7 +82,7 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
-  srv_create_dataset_ = this->create_service<Trigger>(
+  srv_create_dataset_ = this->create_service<autoware_internal_debug_msgs::srv::String>(
     "create_dataset",
     std::bind(
       &OfflineEvaluatorNode::create_dataset, this, std::placeholders::_1, std::placeholders::_2),
@@ -457,11 +457,20 @@ void OfflineEvaluatorNode::weight(
 }
 
 void OfflineEvaluatorNode::create_dataset(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
+  const autoware_internal_debug_msgs::srv::String::Request::SharedPtr req,
+  [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr res)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   RCLCPP_INFO(get_logger(), "Starting dataset creation...");
-  reader_.seek(0);
+  reader_.close();
+  auto bag_path = req->data;
+  try {
+    reader_.open(bag_path);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Exception caught: %s", e.what());
+    res->success = false;
+    return;
+  }
   route_handler_->setRoute(*get_route());
   RCLCPP_INFO(get_logger(), "Route set");
 
@@ -472,7 +481,6 @@ void OfflineEvaluatorNode::create_dataset(
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
 
-  auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   std::filesystem::path input_path(bag_path);
   std::string output_file = input_path.parent_path() / "data.csv";
   std::ofstream ofs(output_file);

@@ -20,7 +20,10 @@ class TrajectoryDataset(Dataset):
     def __init__(self, csv_files):
         self.trajectories = []
         for csv_file in csv_files:
-            df = pd.read_csv(csv_file, header=0)
+            try:
+                df = pd.read_csv(csv_file, header=0)
+            except pd.errors.EmptyDataError:
+                print(f"Cannot read {csv_file} as it is empty")
             # To-do(go-sakayori): delete when dataset format is fixed
             if "Unnamed: 181" in df.columns:
                 df = df.drop(columns=["Unnamed: 181"])

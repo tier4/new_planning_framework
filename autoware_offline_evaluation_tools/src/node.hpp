@@ -27,6 +27,7 @@
 #include <rclcpp/service.hpp>
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_internal_debug_msgs/srv/string.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 #include <std_srvs/srv/detail/trigger__struct.hpp>
 #include <std_srvs/srv/trigger.hpp>
@@ -60,7 +61,9 @@ private:
 
   void weight(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
 
-  void create_dataset(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
+  void create_dataset(
+    const autoware_internal_debug_msgs::srv::String::Request::SharedPtr request,
+    [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr response);
 
   auto get_route() -> LaneletRoute::ConstSharedPtr;
 
@@ -94,7 +97,7 @@ private:
 
   rclcpp::Service<Trigger>::SharedPtr srv_weight_;
 
-  rclcpp::Service<Trigger>::SharedPtr srv_create_dataset_;
+  rclcpp::Service<autoware_internal_debug_msgs::srv::String>::SharedPtr srv_create_dataset_;
 
   std::shared_ptr<RouteHandler> route_handler_;
 
