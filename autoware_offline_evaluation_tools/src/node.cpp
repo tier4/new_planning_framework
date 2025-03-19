@@ -487,11 +487,11 @@ void OfflineEvaluatorNode::create_dataset(
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
-  ofs << "Tag,";
+  ofs << "Tag";
   for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
-    ofs << "x" << i << ",y" << i << ",yaw" << i << ",";
+    ofs << ",x" << i << ",y" << i << ",yaw" << i;
     for (const auto & metric : metrics) {
-      ofs << metric.c_str() << ",";
+      ofs << "," << metric.c_str();
     }
   }
   ofs << std::endl;
@@ -588,12 +588,12 @@ void OfflineEvaluatorNode::create_dataset(
 
     if (write) {
       for (const auto & result : results) {
-        ofs << result.tag << ",";
+        ofs << result.tag;
         for (const auto & point : result.points) {
-          ofs << point.point.pose.position.x << "," << point.point.pose.position.y << ","
-              << tf2::getYaw(point.point.pose.orientation) << ",";
+          ofs << "," << point.point.pose.position.x << "," << point.point.pose.position.y << ","
+              << tf2::getYaw(point.point.pose.orientation);
           for (const auto & metric : point.metrics) {
-            ofs << metric << ",";
+            ofs << "," << metric;
           }
         }
         ofs << std::endl;

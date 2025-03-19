@@ -10,7 +10,7 @@ class TrajectoryDataset(Dataset):
     Each CSV file is assumed to have a header, with the first column being 'tag',
     followed by data points consisting of 9 elements each (x, y, yaw, m1 through m6).
 
-    Using the first 180 values (20 points × 9 elements) of each row, the data is reshaped, 
+    Using the first 180 values (20 points * 9 elements) of each row, the data is reshaped, 
     and the metrics portion (m1 through m6) is extracted.
 
     Pairs are created by treating the first row as 'ground_truth' and the second row as 'candidate'.
