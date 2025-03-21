@@ -500,7 +500,7 @@ void OfflineEvaluatorNode::create_dataset(
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
-  ofs << "Tag";
+  ofs << "Tag,Timestamp";
   for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
     ofs << ",x" << i << ",y" << i << ",yaw" << i;
     for (const auto & metric : metrics) {
