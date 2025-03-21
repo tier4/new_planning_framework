@@ -69,6 +69,8 @@ private:
 
   void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
 
+  void read_all(const std::shared_ptr<BagData> & bag_data) const;
+
   void analyze(const std::shared_ptr<BagData> & bag_data) const;
 
   void visualize(const std::shared_ptr<BagEvaluator> & bag_evaluator) const;
