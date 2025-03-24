@@ -57,6 +57,7 @@ void BagEvaluator::setup(
 
   odometry_ = std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
                 ->get(bag_data->timestamp);
+  if (!odometry_) return;
 
   steering_ =
     std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))

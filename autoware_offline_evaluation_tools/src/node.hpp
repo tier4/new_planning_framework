@@ -65,7 +65,7 @@ private:
     const autoware_internal_debug_msgs::srv::String::Request::SharedPtr request,
     [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr response);
 
-  auto get_route() -> LaneletRoute::ConstSharedPtr;
+  auto get_route(bool get_first = true) -> LaneletRoute::ConstSharedPtr;
 
   void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
 

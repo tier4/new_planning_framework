@@ -137,7 +137,7 @@ auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAug
   return parameters;
 }
 
-auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
+auto OfflineEvaluatorNode::get_route(bool get_first) -> LaneletRoute::ConstSharedPtr
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back("/planning/mission_planning/route");
@@ -155,7 +155,7 @@ auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
     if (next_data->topic_name == TOPIC::ROUTE) {
       rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
       serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      break;
+      if (get_first) break;
     }
   }
 
@@ -537,7 +537,7 @@ void OfflineEvaluatorNode::create_dataset(
     res->success = false;
     return;
   }
-  route_handler_->setRoute(*get_route());
+  route_handler_->setRoute(*get_route(false));
   RCLCPP_INFO(get_logger(), "Route set");
 
   reader_.seek(0);
@@ -561,7 +561,7 @@ void OfflineEvaluatorNode::create_dataset(
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
-  ofs << "Tag,Timestamp";
+  ofs << "Tag";
   for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
     ofs << ",x" << i << ",y" << i << ",yaw" << i;
     for (const auto & metric : metrics) {
@@ -599,10 +599,9 @@ void OfflineEvaluatorNode::create_dataset(
       continue;
     }
 
-    const auto time = this->now().seconds();
     for (const auto & result : bag_evaluator->results()) {
       size_t idx = 0;
-      ofs << result->tag() << "," << time;
+      ofs << result->tag();
       for (const auto & point : *result->points()) {
         ofs << "," << point.pose.position.x << "," << point.pose.position.y << ","
             << tf2::getYaw(point.pose.orientation);
