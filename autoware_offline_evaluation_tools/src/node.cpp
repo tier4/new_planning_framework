@@ -476,7 +476,7 @@ void OfflineEvaluatorNode::create_dataset(
     res->success = false;
     return;
   }
-  route_handler_->setRoute(*get_route());
+  route_handler_->setRoute(*get_route(false));
   RCLCPP_INFO(get_logger(), "Route set");
 
   reader_.seek(0);
@@ -500,7 +500,7 @@ void OfflineEvaluatorNode::create_dataset(
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
-  ofs << "Tag,Timestamp";
+  ofs << "Tag";
   for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
     ofs << ",x" << i << ",y" << i << ",yaw" << i;
     for (const auto & metric : metrics) {
