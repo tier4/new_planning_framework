@@ -17,8 +17,8 @@
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "autoware_utils/ros/parameter.hpp"
 #include "autoware_utils/system/stop_watch.hpp"
+#include "bag_handler.hpp"
 #include "rosbag2_storage/storage_filter.hpp"
-#include "structs.hpp"
 
 #include <autoware/trajectory_selector_common/type_alias.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
@@ -82,7 +82,7 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
-  srv_create_dataset_ = this->create_service<Trigger>(
+  srv_create_dataset_ = this->create_service<autoware_internal_debug_msgs::srv::String>(
     "create_dataset",
     std::bind(
       &OfflineEvaluatorNode::create_dataset, this, std::placeholders::_1, std::placeholders::_2),
@@ -137,7 +137,7 @@ auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAug
   return parameters;
 }
 
-auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
+auto OfflineEvaluatorNode::get_route(bool get_first) -> LaneletRoute::ConstSharedPtr
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back("/planning/mission_planning/route");
@@ -155,14 +155,15 @@ auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
     if (next_data->topic_name == TOPIC::ROUTE) {
       rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
       serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      break;
+      if (get_first) break;
     }
   }
 
   return deserialized_message;
 }
 
-void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
+void OfflineEvaluatorNode::process_messages(
+  const std::shared_ptr<BagData> & bag_data, bool break_on_ready) const
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back(TOPIC::TF);
@@ -173,13 +174,11 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
   filter.topics.emplace_back(TOPIC::TRAJECTORY);
   reader_.set_filter(filter);
 
-  bag_data->update(dt * 1e9);
-
   while (reader_.has_next()) {
     const auto next_data = reader_.read_next();
     rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
 
-    if (bag_data->ready()) {
+    if (break_on_ready && bag_data->ready()) {
       break;
     }
 
@@ -232,6 +231,12 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
         ->append(*deserialized_message);
     }
   }
+}
+
+void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
+{
+  bag_data->update(dt * 1e9);
+  process_messages(bag_data, true);
 }
 
 void OfflineEvaluatorNode::play(
@@ -457,11 +462,20 @@ void OfflineEvaluatorNode::weight(
 }
 
 void OfflineEvaluatorNode::create_dataset(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
+  const autoware_internal_debug_msgs::srv::String::Request::SharedPtr req,
+  [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr res)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   RCLCPP_INFO(get_logger(), "Starting dataset creation...");
-  reader_.seek(0);
+  reader_.close();
+  auto bag_path = req->data;
+  try {
+    reader_.open(bag_path);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Exception caught: %s", e.what());
+    res->success = false;
+    return;
+  }
   route_handler_->setRoute(*get_route());
   RCLCPP_INFO(get_logger(), "Route set");
 
@@ -472,7 +486,6 @@ void OfflineEvaluatorNode::create_dataset(
   const auto bag_evaluator =
     std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
 
-  auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   std::filesystem::path input_path(bag_path);
   std::string output_file = input_path.parent_path() / "data.csv";
   std::ofstream ofs(output_file);
@@ -487,79 +500,17 @@ void OfflineEvaluatorNode::create_dataset(
     bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
   }
 
-  ofs << "Tag,";
+  ofs << "Tag";
   for (size_t i = 0; i < data_augument_parameters()->sample_num; ++i) {
-    ofs << "x" << i << ",y" << i << ",yaw" << i << ",";
+    ofs << ",x" << i << ",y" << i << ",yaw" << i;
     for (const auto & metric : metrics) {
-      ofs << metric.c_str() << ",";
+      ofs << "," << metric.c_str();
     }
   }
   ofs << std::endl;
 
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-
-  rosbag2_storage::StorageFilter filter;
-  filter.topics.emplace_back(TOPIC::TF);
-  filter.topics.emplace_back(TOPIC::ODOMETRY);
-  filter.topics.emplace_back(TOPIC::ACCELERATION);
-  filter.topics.emplace_back(TOPIC::OBJECTS);
-  filter.topics.emplace_back(TOPIC::STEERING);
-  filter.topics.emplace_back(TOPIC::TRAJECTORY);
-  reader_.set_filter(filter);
-
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
-    rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
-
-    if (next_data->topic_name == TOPIC::TF) {
-      rclcpp::Serialization<TFMessage> serializer;
-      const auto deserialized_message = std::make_shared<TFMessage>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::ODOMETRY) {
-      rclcpp::Serialization<Odometry> serializer;
-      const auto deserialized_message = std::make_shared<Odometry>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::ACCELERATION) {
-      rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
-      const auto deserialized_message = std::make_shared<AccelWithCovarianceStamped>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-        bag_data->buffers.at(TOPIC::ACCELERATION))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::OBJECTS) {
-      rclcpp::Serialization<PredictedObjects> serializer;
-      const auto deserialized_message = std::make_shared<PredictedObjects>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers.at(TOPIC::OBJECTS))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::STEERING) {
-      rclcpp::Serialization<SteeringReport> serializer;
-      const auto deserialized_message = std::make_shared<SteeringReport>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::TRAJECTORY) {
-      rclcpp::Serialization<Trajectory> serializer;
-      const auto deserialized_message = std::make_shared<Trajectory>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
-        ->append(*deserialized_message);
-    }
-  }
+  process_messages(bag_data, false);
   auto trajectory_buffer =
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY));
   if (!trajectory_buffer) {
@@ -567,38 +518,40 @@ void OfflineEvaluatorNode::create_dataset(
     RCLCPP_INFO(get_logger(), "No trajectory in ros bag data. Data creation failed");
     return;
   }
+
   for (const auto & buffer : *trajectory_buffer) {
     const auto timestamp = rclcpp::Time(buffer.header.stamp).nanoseconds();
-    const bool write = previous_points != nullptr;
+
     bag_data->set_time(timestamp);
-
     bag_evaluator->setup(bag_data, previous_points, false);
-    if (bag_evaluator->results().size() != 2) {
-      previous_points = nullptr;
+
+    bag_evaluator->calc_metric_values(metrics.size());
+    const auto ground_truth = bag_evaluator->get("ground_truth");
+    if (!ground_truth) {
       bag_evaluator->clear();
       continue;
     }
-    const auto results = bag_evaluator->calc_metric_values(metrics.size(), previous_points);
+    previous_points = ground_truth->points();
 
-    if (results.size() != 2) {
-      RCLCPP_INFO(get_logger(), "Data creation failed");
+    if (ground_truth->previous() == nullptr) {
       bag_evaluator->clear();
       continue;
     }
 
-    if (write) {
-      for (const auto & result : results) {
-        ofs << result.tag << ",";
-        for (const auto & point : result.points) {
-          ofs << point.point.pose.position.x << "," << point.point.pose.position.y << ","
-              << tf2::getYaw(point.point.pose.orientation) << ",";
-          for (const auto & metric : point.metrics) {
-            ofs << metric << ",";
-          }
+    for (const auto & result : bag_evaluator->results()) {
+      size_t idx = 0;
+      ofs << result->tag();
+      for (const auto & point : *result->points()) {
+        ofs << "," << point.pose.position.x << "," << point.pose.position.y << ","
+            << tf2::getYaw(point.pose.orientation);
+        for (size_t i = 0; i < metrics.size(); i++) {
+          ofs << "," << result->get_metric(i).at(idx);
         }
-        ofs << std::endl;
+        idx++;
       }
+      ofs << std::endl;
     }
+
     bag_evaluator->clear();
   }
 
