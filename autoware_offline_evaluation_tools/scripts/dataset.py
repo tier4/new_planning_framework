@@ -10,7 +10,7 @@ class TrajectoryDataset(Dataset):
     Each CSV file is assumed to have a header, with the first column being 'tag',
     followed by data points consisting of 9 elements each (x, y, yaw, m1 through m6).
 
-    Using the first 180 values (20 points × 9 elements) of each row, the data is reshaped, 
+    Using the first 180 values (20 points * 9 elements) of each row, the data is reshaped, 
     and the metrics portion (m1 through m6) is extracted.
 
     Pairs are created by treating the first row as 'ground_truth' and the second row as 'candidate'.
@@ -20,7 +20,10 @@ class TrajectoryDataset(Dataset):
     def __init__(self, csv_files):
         self.trajectories = []
         for csv_file in csv_files:
-            df = pd.read_csv(csv_file, header=0)
+            try:
+                df = pd.read_csv(csv_file, header=0)
+            except pd.errors.EmptyDataError:
+                print(f"Cannot read {csv_file} as it is empty")
             # To-do(go-sakayori): delete when dataset format is fixed
             if "Unnamed: 181" in df.columns:
                 df = df.drop(columns=["Unnamed: 181"])

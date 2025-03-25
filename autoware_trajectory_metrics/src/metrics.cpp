@@ -39,7 +39,7 @@ void LateralAcceleration::evaluate(
 
   metric.reserve(result->points()->size());
 
-  if (std::any_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
+  if (std::all_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
         return point.lateral_velocity_mps > 1e-3;
       })) {
     for (size_t i = 0; i < result->points()->size() - 1; i++) {
@@ -53,7 +53,7 @@ void LateralAcceleration::evaluate(
     return;
   }
 
-  if (std::any_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
+  if (std::all_of(result->points()->begin(), result->points()->end(), [](const auto & point) {
         return point.heading_rate_rps > 1e-3;
       })) {
     for (const auto & point : *result->points()) {
