@@ -162,7 +162,8 @@ auto OfflineEvaluatorNode::get_route(bool get_first) -> LaneletRoute::ConstShare
   return deserialized_message;
 }
 
-void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
+void OfflineEvaluatorNode::process_messages(
+  const std::shared_ptr<BagData> & bag_data, bool break_on_ready) const
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back(TOPIC::TF);
@@ -173,13 +174,11 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
   filter.topics.emplace_back(TOPIC::TRAJECTORY);
   reader_.set_filter(filter);
 
-  bag_data->update(dt * 1e9);
-
   while (reader_.has_next()) {
     const auto next_data = reader_.read_next();
     rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
 
-    if (bag_data->ready()) {
+    if (break_on_ready && bag_data->ready()) {
       break;
     }
 
@@ -234,70 +233,10 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
   }
 }
 
-void OfflineEvaluatorNode::read_all(const std::shared_ptr<BagData> & bag_data) const
+void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
 {
-  rosbag2_storage::StorageFilter filter;
-  filter.topics.emplace_back(TOPIC::TF);
-  filter.topics.emplace_back(TOPIC::ODOMETRY);
-  filter.topics.emplace_back(TOPIC::ACCELERATION);
-  filter.topics.emplace_back(TOPIC::OBJECTS);
-  filter.topics.emplace_back(TOPIC::STEERING);
-  filter.topics.emplace_back(TOPIC::TRAJECTORY);
-  reader_.set_filter(filter);
-
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
-    rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
-
-    if (next_data->topic_name == TOPIC::TF) {
-      rclcpp::Serialization<TFMessage> serializer;
-      const auto deserialized_message = std::make_shared<TFMessage>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::ODOMETRY) {
-      rclcpp::Serialization<Odometry> serializer;
-      const auto deserialized_message = std::make_shared<Odometry>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::ACCELERATION) {
-      rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
-      const auto deserialized_message = std::make_shared<AccelWithCovarianceStamped>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-        bag_data->buffers.at(TOPIC::ACCELERATION))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::OBJECTS) {
-      rclcpp::Serialization<PredictedObjects> serializer;
-      const auto deserialized_message = std::make_shared<PredictedObjects>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers.at(TOPIC::OBJECTS))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::STEERING) {
-      rclcpp::Serialization<SteeringReport> serializer;
-      const auto deserialized_message = std::make_shared<SteeringReport>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::TRAJECTORY) {
-      rclcpp::Serialization<Trajectory> serializer;
-      const auto deserialized_message = std::make_shared<Trajectory>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
-        ->append(*deserialized_message);
-    }
-  }
+  bag_data->update(dt * 1e9);
+  process_messages(bag_data, true);
 }
 
 void OfflineEvaluatorNode::play(
@@ -537,7 +476,7 @@ void OfflineEvaluatorNode::create_dataset(
     res->success = false;
     return;
   }
-  route_handler_->setRoute(*get_route(false));
+  route_handler_->setRoute(*get_route());
   RCLCPP_INFO(get_logger(), "Route set");
 
   reader_.seek(0);
@@ -571,7 +510,7 @@ void OfflineEvaluatorNode::create_dataset(
   ofs << std::endl;
 
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-  read_all(bag_data);
+  process_messages(bag_data, false);
   auto trajectory_buffer =
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY));
   if (!trajectory_buffer) {
@@ -608,6 +547,7 @@ void OfflineEvaluatorNode::create_dataset(
         for (size_t i = 0; i < metrics.size(); i++) {
           ofs << "," << result->get_metric(i).at(idx);
         }
+        idx++;
       }
       ofs << std::endl;
     }

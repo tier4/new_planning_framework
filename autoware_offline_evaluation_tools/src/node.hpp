@@ -67,9 +67,9 @@ private:
 
   auto get_route(bool get_first = true) -> LaneletRoute::ConstSharedPtr;
 
-  void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
+  void process_messages(const std::shared_ptr<BagData> & bag_data, bool break_on_ready) const;
 
-  void read_all(const std::shared_ptr<BagData> & bag_data) const;
+  void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
 
   void analyze(const std::shared_ptr<BagData> & bag_data) const;
 
