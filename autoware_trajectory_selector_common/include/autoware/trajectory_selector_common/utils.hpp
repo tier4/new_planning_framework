@@ -37,10 +37,6 @@ auto sampling_with_time(
 auto find_nearest_timestamp(
   const TrajectoryPoints & points, const double target_timestamp,
   const size_t start_index) -> std::optional<size_t>;
-
-auto to_marker(
-  const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,
-  const std::string & ns, const size_t id) -> Marker;
 }  // namespace autoware::trajectory_selector::utils
 
 #endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__UTILS_HPP_
