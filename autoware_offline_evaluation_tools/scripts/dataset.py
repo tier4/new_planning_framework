@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
@@ -7,46 +7,86 @@ from torch.utils.data import Dataset
 class TrajectoryDataset(Dataset):
     """
     Reads multiple CSV files and holds all data in memory.
+
     Each CSV file is assumed to have a header, with the first column being 'tag',
-    followed by data points consisting of 9 elements each (x, y, yaw, m1 through m6).
-
-    Using the first 180 values (20 points * 9 elements) of each row, the data is reshaped, 
-    and the metrics portion (m1 through m6) is extracted.
-
-    Pairs are created by treating the first row as 'ground_truth' and the second row as 'candidate'.
-    The candidate's lateral acceleration (m1) is replaced with the corresponding values from the ground_truth.
+    followed by data points consisting of 3 elements + n metrics each (x, y, yaw, m_1 through m_n).
+    Using the first 180 values (seq_len points * (3+n) elements) of each row, the data is reshaped,
+    and the metrics portion (m_1 through m_n) is extracted.
     """
 
-    def __init__(self, csv_files):
-        self.trajectories = []
+    def __init__(self, csv_files, seq_len: int, metric_num: int):
+        self.samples = []
         for csv_file in csv_files:
-            try:
-                df = pd.read_csv(csv_file, header=0)
-            except pd.errors.EmptyDataError:
-                print(f"Cannot read {csv_file} as it is empty")
-            # To-do(go-sakayori): delete when dataset format is fixed
-            if "Unnamed: 181" in df.columns:
-                df = df.drop(columns=["Unnamed: 181"])
-
-            df = df.iloc[:, 1:]  # Remove the leading tag column
-            num_points = 20
-            num_cols_per_point = 9
-            total_expected = num_points * num_cols_per_point  # 180
-            for idx, row in df.iterrows():
-                row_values = row.values.astype(np.float32)[:total_expected]
-                if row_values.size < total_expected:
+            df = pd.read_csv(csv_file, header=0)
+            current_gt_metrics = None
+            current_gt_pose = None
+            candidate_list = []
+            for _, row in df.iterrows():
+                tag = str(row.iloc[0]).strip().lower()
+                data = row.iloc[1:].values.astype(np.float32)
+                if data.size < seq_len * (metric_num + 3):
                     continue
-                values = row_values.reshape(num_points, num_cols_per_point)
-                mets = values[:, 3:9]  # Metrics part（m1～m6）
-                self.trajectories.append(mets)
-        self.pairs = [(self.trajectories[i], self.trajectories[i+1])
-                      for i in range(0, len(self.trajectories), 2)]
+                trajectory_with_metrics = data[: seq_len * (metric_num + 3)].reshape(
+                    seq_len, metric_num + 3
+                )
+                pose = trajectory_with_metrics[:, :2]  # Just use [x,y] position
+                metrics = trajectory_with_metrics[:, 3 : 3 + metric_num]
+                if tag == "ground_truth":
+                    if current_gt_metrics is not None and len(candidate_list) > 0:
+                        if len(candidate_list) == 1:
+                            cand_metrics, cand_pose = candidate_list[0]
+                            cand_metrics = torch.tensor(
+                                cand_metrics, dtype=torch.float32
+                            ).unsqueeze(0)
+                            cand_pose = torch.tensor(cand_pose, dtype=torch.float32).unsqueeze(0)
+                        else:
+                            cand_metrics = torch.from_numpy(
+                                np.array([x[0] for x in candidate_list])
+                            ).float()
+                            cand_pose = torch.from_numpy(
+                                np.array([x[1] for x in candidate_list])
+                            ).float()
+                        self.samples.append(
+                            (
+                                torch.tensor(current_gt_metrics, dtype=torch.float32),
+                                torch.tensor(current_gt_pose, dtype=torch.float32),
+                                cand_metrics,
+                                cand_pose,
+                            )
+                        )
+                    current_gt_metrics = metrics
+                    current_gt_pose = pose
+                    candidate_list = []
+                elif tag == "candidate":
+                    if current_gt_metrics is None:
+                        continue
+                    candidate_list.append((metrics, pose))
+                else:
+                    raise ValueError("Invalid tag in dataset")
+
+            # Assuming the last row finishes with candidate tag
+            if current_gt_metrics is not None and len(candidate_list) > 0:
+                if len(candidate_list) == 1:
+                    cand_metrics, cand_pose = candidate_list[0]
+                    cand_metrics = torch.tensor(cand_metrics, dtype=torch.float32).unsqueeze(0)
+                    cand_pose = torch.tensor(cand_pose, dtype=torch.float32).unsqueeze(0)
+                else:
+                    cand_metrics = torch.from_numpy(
+                        np.array([x[0] for x in candidate_list])
+                    ).float()
+                    cand_pose = torch.from_numpy(np.array([x[1] for x in candidate_list])).float()
+                self.samples.append(
+                    (
+                        torch.tensor(current_gt_metrics, dtype=torch.float32),
+                        torch.tensor(current_gt_pose, dtype=torch.float32),
+                        cand_metrics,
+                        cand_pose,
+                    )
+                )
 
     def __len__(self):
-        return len(self.pairs)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        gt_metrics_np, cand_metrics_np = self.pairs[idx]
-        gt_metrics = torch.tensor(gt_metrics_np, dtype=torch.float32)
-        cand_metrics = torch.tensor(cand_metrics_np, dtype=torch.float32)
-        return gt_metrics, cand_metrics
+        # Each sample returns a tuple of (gt_metrics, gt_pose, cand_metrics, cand_pose).
+        return self.samples[idx]

@@ -476,7 +476,7 @@ void OfflineEvaluatorNode::create_dataset(
     res->success = false;
     return;
   }
-  route_handler_->setRoute(*get_route());
+  route_handler_->setRoute(*get_route(false));
   RCLCPP_INFO(get_logger(), "Route set");
 
   reader_.seek(0);
