@@ -26,9 +26,11 @@ class TrajectoryDataset(Dataset):
                 data = row.iloc[1:].values.astype(np.float32)
                 if data.size < seq_len * (metric_num + 3):
                     continue
-                traj = data[: seq_len * (metric_num + 3)].reshape(seq_len, metric_num + 3)
-                pose = traj[:, :2]  # Just use [x,y] position
-                metrics = traj[:, 3 : 3 + metric_num]
+                trajectory_with_metrics = data[: seq_len * (metric_num + 3)].reshape(
+                    seq_len, metric_num + 3
+                )
+                pose = trajectory_with_metrics[:, :2]  # Just use [x,y] position
+                metrics = trajectory_with_metrics[:, 3 : 3 + metric_num]
                 if tag == "ground_truth":
                     if current_gt_metrics is not None and len(candidate_list) > 0:
                         if len(candidate_list) == 1:

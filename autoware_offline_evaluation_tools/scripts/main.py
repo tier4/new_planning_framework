@@ -20,9 +20,7 @@ def print_model_weights(model):
 
     for idx, subnet in enumerate(model.subnets):
         if hasattr(subnet, "reparam_time_weights") and subnet.reparam_time_weights:
-            rep_time_weights = (
-                torch.sigmoid(subnet.unconstrained_time_weights).detach().cpu().numpy()
-            )
+            rep_time_weights = torch.sigmoid(subnet.weights).detach().cpu().numpy()
             print(f"Subnet {idx} reparameterized time weights (in [0,1]):", rep_time_weights)
         elif hasattr(subnet, "weights"):
             time_weights = subnet.weights.detach().cpu().numpy()
@@ -85,7 +83,7 @@ def main():
     seq_len = sample_num
     num_metrics = len(metrics)
 
-    max_values = [10.0, 10.0, 10.0, 10.0, 5.0, 10.0]
+    max_values = [10.0, 100.0, 200.0, 50.0, 35.0, 0.2]
     lower_better_mask = [True, True, False, False, True, True]
 
     model = TrajectoryNetPerMetric(
