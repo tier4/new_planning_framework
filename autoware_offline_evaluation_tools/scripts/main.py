@@ -4,7 +4,7 @@ import glob
 import torch
 import torch.optim as optim
 from dataset import TrajectoryDataset
-from multi_loss import multi_candidate_loss
+from multi_loss import pairwise_adaptive_ranking_loss
 from torch.utils.data import DataLoader
 from trajectory_selector import TrajectoryNetPerMetric
 from utils import get_device, load_parameters, test_model, train_model
@@ -105,7 +105,9 @@ def main():
 
     # loss_fn を def を使って定義（引数: model, gt_mets, gt_pos, cand_mets, cand_pos）
     def loss_fn(model, gt_mets, gt_pos, cand_mets, cand_pos):
-        return multi_candidate_loss(model, gt_mets, gt_pos, cand_mets, cand_pos, margin=1.0)
+        return pairwise_adaptive_ranking_loss(
+            model, gt_mets, gt_pos, cand_mets, cand_pos, margin=1.0
+        )
 
     train_csv_files = glob.glob(args.train_set)
     train_csv_files.sort()

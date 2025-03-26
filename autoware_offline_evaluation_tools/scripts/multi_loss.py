@@ -181,3 +181,64 @@ def multi_candidate_loss(
             )
     else:
         raise ValueError("Invalid candidate dimensions")
+
+
+def pairwise_adaptive_ranking_loss(
+    model, gt_metrics, gt_pose, cand_metrics, cand_pose, margin=1.0, lambda_factor=1.0
+):
+    """
+    Calculate pairwise ranking loss.
+
+    - Within each sample, among multiple candidates, the candidate with a smaller ADE based on location information should be considered a "good candidate" and have a higher score.
+    - Specifically, for each candidate pair (i,j), if the ADE of candidate i is smaller than the ADE of candidate j, the score of candidate i is trained to be sufficiently higher than the score of candidate j (score_i - score_j ≥ adaptive_margin).
+
+    Parameters:
+      model: model used. Input (B, T, D) -> output (B, 1)
+      gt_metrics: (B, T, D) Ground truth metrics used as reference.
+      gt_pos:  (B, T, 2) Ground truth position.
+      cand_metrics:
+          - Single candidate: (B, T, D)
+          - Multiple candidate: (B, num_candidates, T, D)
+      cand_pose:
+          - Single candidate: (B, T, 2)
+          - Multiple candidate: (B, num_candidates, T, 2)
+      margin: base margin (Lower limit of score difference between good and bad candidates)
+      lambda_factor: A coefficient to adjust the margin by multiplying the difference in ADE
+
+    Returns:
+      The average loss over all candidate pairs (scalar tensor).
+    """
+    # In the case of a single candidate, we use the conventional margin ranking loss.
+    if cand_metrics.dim() == 3:
+        return margin_ranking_loss(model, gt_metrics, cand_metrics, margin)
+
+    B, num_candidates, T, D = cand_metrics.shape
+    cand_reshaped = cand_metrics.view(B * num_candidates, T, D)
+    cand_scores = model(cand_reshaped).view(B, num_candidates)  # (B, num_candidates)
+
+    diff = cand_pose - gt_pose.unsqueeze(1)  # (B, num_candidates, T, 2)
+    error = torch.norm(diff, p=2, dim=-1)  # (B, num_candidates, T)
+    ade = error.mean(dim=2)  # (B, num_candidates)
+
+    total_loss = 0.0
+    total_pairs = 0
+    for b in range(B):
+        for i in range(num_candidates):
+            for j in range(num_candidates):
+                if i == j:
+                    continue
+                # if candidate i is better than candidate j (ADE_i < ADE_j),
+                # then we want candidate i's score to be higher than candidate j's score.
+                if ade[b, i] < ade[b, j]:
+                    # adaptive margin can be defined as base_margin + lambda_factor * (ade_j - ade_i)
+                    adaptive_margin = margin + lambda_factor * (ade[b, j] - ade[b, i])
+                    # We want: score_i - score_j >= adaptive_margin
+                    loss_ij = torch.clamp(
+                        adaptive_margin - (cand_scores[b, i] - cand_scores[b, j]), min=0
+                    )
+                    total_loss += loss_ij
+                    total_pairs += 1
+    if total_pairs > 0:
+        return total_loss / total_pairs
+    else:
+        return torch.tensor(0.0, device=gt_metrics.device)
