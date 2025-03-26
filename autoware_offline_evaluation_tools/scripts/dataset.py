@@ -38,12 +38,12 @@ class TrajectoryDataset(Dataset):
                             ).unsqueeze(0)
                             cand_pose = torch.tensor(cand_pose, dtype=torch.float32).unsqueeze(0)
                         else:
-                            cand_metrics = torch.tensor(
-                                [x[0] for x in candidate_list], dtype=torch.float32
-                            )
-                            cand_pose = torch.tensor(
-                                [x[1] for x in candidate_list], dtype=torch.float32
-                            )
+                            cand_metrics = torch.from_numpy(
+                                np.array([x[0] for x in candidate_list])
+                            ).float()
+                            cand_pose = torch.from_numpy(
+                                np.array([x[1] for x in candidate_list])
+                            ).float()
                         self.samples.append(
                             (
                                 torch.tensor(current_gt_metrics, dtype=torch.float32),
@@ -69,8 +69,10 @@ class TrajectoryDataset(Dataset):
                     cand_metrics = torch.tensor(cand_metrics, dtype=torch.float32).unsqueeze(0)
                     cand_pose = torch.tensor(cand_pose, dtype=torch.float32).unsqueeze(0)
                 else:
-                    cand_metrics = torch.tensor([x[0] for x in candidate_list], dtype=torch.float32)
-                    cand_pose = torch.tensor([x[1] for x in candidate_list], dtype=torch.float32)
+                    cand_metrics = torch.from_numpy(
+                        np.array([x[0] for x in candidate_list])
+                    ).float()
+                    cand_pose = torch.from_numpy(np.array([x[1] for x in candidate_list])).float()
                 self.samples.append(
                     (
                         torch.tensor(current_gt_metrics, dtype=torch.float32),

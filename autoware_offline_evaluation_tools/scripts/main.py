@@ -105,17 +105,7 @@ def main():
 
     # loss_fn を def を使って定義（引数: model, gt_mets, gt_pos, cand_mets, cand_pos）
     def loss_fn(model, gt_mets, gt_pos, cand_mets, cand_pos):
-        return multi_candidate_loss(
-            model,
-            gt_mets,
-            gt_pos,
-            cand_mets,
-            cand_pos,
-            margin=1.0,
-            lambda_factor=args.lambda_factor,
-            threshold=args.threshold,
-            use_fde=args.use_fde,
-        )
+        return multi_candidate_loss(model, gt_mets, gt_pos, cand_mets, cand_pos, margin=1.0)
 
     train_csv_files = glob.glob(args.train_set)
     train_csv_files.sort()
