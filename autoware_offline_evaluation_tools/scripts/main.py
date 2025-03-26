@@ -34,13 +34,13 @@ def print_model_weights(model):
 def parse_args():
     parser = argparse.ArgumentParser(description="Train and test TrajectoryNet model.")
     parser.add_argument(
-        "--train_pattern",
+        "--train_set",
         type=str,
         default="data_train*.csv",
         help="Glob pattern for training CSV files",
     )
     parser.add_argument(
-        "--test_pattern", type=str, default="data_test*.csv", help="Glob pattern for test CSV files"
+        "--test_set", type=str, default="data_test*.csv", help="Glob pattern for test CSV files"
     )
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument(
@@ -85,7 +85,7 @@ def main():
     seq_len = sample_num
     num_metrics = len(metrics)
 
-    max_values = [10.0, 50.0, 200.0, 20.0, 5.0, 0.1]
+    max_values = [10.0, 10.0, 10.0, 10.0, 5.0, 10.0]
     lower_better_mask = [True, True, False, False, True, True]
 
     model = TrajectoryNetPerMetric(
@@ -102,9 +102,22 @@ def main():
         train_subnet=False,
     ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = multi_candidate_loss
 
-    train_csv_files = glob.glob(args.train_pattern)
+    # loss_fn を def を使って定義（引数: model, gt_mets, gt_pos, cand_mets, cand_pos）
+    def loss_fn(model, gt_mets, gt_pos, cand_mets, cand_pos):
+        return multi_candidate_loss(
+            model,
+            gt_mets,
+            gt_pos,
+            cand_mets,
+            cand_pos,
+            margin=1.0,
+            lambda_factor=args.lambda_factor,
+            threshold=args.threshold,
+            use_fde=args.use_fde,
+        )
+
+    train_csv_files = glob.glob(args.train_set)
     train_csv_files.sort()
     dataset = TrajectoryDataset(train_csv_files, seq_len, num_metrics)
     train_loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True)
@@ -116,7 +129,7 @@ def main():
     torch.save(model.state_dict(), "trained_model_weights.pth")
     print("Model weights saved to 'trained_model_weights.pth'.")
 
-    test_csv_files = glob.glob(args.test_pattern)
+    test_csv_files = glob.glob(args.test_set)
     test_csv_files.sort()
     test_dataset = TrajectoryDataset(test_csv_files, seq_len, num_metrics)
     test_loader = DataLoader(
