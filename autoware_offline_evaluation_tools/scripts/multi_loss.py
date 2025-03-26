@@ -80,6 +80,44 @@ def triplet_loss(model, gt_metrics, gt_pose, cand_metrics, cand_pose, margin=1.0
     return loss
 
 
+def adaptive_triplet_loss(model, gt_metrics, gt_pose, cand_metrics, cand_pose, margin=1.0):
+    """
+    Triplet Loss based on ADE for multiple candidate trajectories.
+
+    Parameters:
+      gt_metrics: (B, T, D) Ground truth metrics.
+      gt_pose:  (B, T, 2) Ground truth positions.
+      cand_metrics: (B, num_candidates, T, D) Candidate metrics.
+      cand_pose:  (B, num_candidates, T, 2) Candidate positions.
+      margin: base margin
+    """
+    B, num_candidates, T, D = cand_metrics.shape
+    diff = cand_pose - gt_pose.unsqueeze(1)  # (B, num_candidates, T, 2)
+    error = torch.norm(diff, p=2, dim=-1)  # (B, num_candidates, T)
+    ade = error.mean(dim=-1)  # (B, num_candidates)
+
+    pos_idx = torch.argmin(ade, dim=1)  # (B,)
+    neg_idx = torch.argmax(ade, dim=1)  # (B,)
+    pos_candidates = cand_metrics[torch.arange(B), pos_idx, :, :]  # (B, T, D)
+    neg_candidates = cand_metrics[torch.arange(B), neg_idx, :, :]  # (B, T, D)
+
+    score_gt = model(gt_metrics)  # (B, 1)
+    score_positive = model(pos_candidates)  # (B, 1)
+    score_negative = model(neg_candidates)  # (B, 1)
+
+    loss_positive = torch.clamp(margin - (score_gt - score_positive), min=0)
+    loss_negative = torch.clamp(margin - (score_positive - score_negative), min=0)
+    loss = loss_positive + loss_negative  # (B, 1) or (B,)
+
+    # Calculate the variance of ADE among candidates and set sample weights
+    candidate_diff = torch.max(ade, dim=1)[0] - torch.min(ade, dim=1)[0]  # (B,)
+    sample_weight = torch.ones_like(candidate_diff)
+    sample_weight[candidate_diff < 0.5] = 0.5
+
+    weighted_loss = (loss.mean(dim=1) * sample_weight).mean()
+    return weighted_loss
+
+
 def multi_candidate_loss(
     model,
     gt_metrics,
@@ -124,7 +162,9 @@ def multi_candidate_loss(
     elif cand_metrics.dim() == 4:
         num_candidates = cand_metrics.shape[1]
         if num_candidates >= 2:
-            return triplet_loss(model, gt_metrics, gt_pose, cand_metrics, cand_pose, margin)
+            return adaptive_triplet_loss(
+                model, gt_metrics, gt_pose, cand_metrics, cand_pose, margin
+            )
         else:
             candidate = cand_metrics.squeeze(1)  # (B, T, D)
             cand_pos_squeezed = cand_pose.squeeze(1)  # (B, T, 2)
