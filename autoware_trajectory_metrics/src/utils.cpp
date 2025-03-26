@@ -132,7 +132,7 @@ auto time_to_collision(
   const std::shared_ptr<PredictedObjects> & objects, const size_t idx) -> double
 {
   double constexpr max_ttc_value = 10.0;
-  if (objects->objects.empty()) {
+  if (!objects || objects->objects.empty()) {
     return max_ttc_value;
   }
 
@@ -152,8 +152,7 @@ auto time_to_collision(
     if (max_confidence_path->path.size() < idx + 1) continue;
 
     const auto & p_object = max_confidence_path->path.at(idx);
-    const auto v_ego2object =
-      autoware_utils::point_2_tf_vector(p_ego.position, p_object.position);
+    const auto v_ego2object = autoware_utils::point_2_tf_vector(p_ego.position, p_object.position);
 
     const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
     const auto object_world_velocity =
