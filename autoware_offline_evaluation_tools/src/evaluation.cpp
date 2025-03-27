@@ -107,7 +107,7 @@ void BagEvaluator::setup(
     const auto points = autoware::trajectory_selector::utils::sampling(
       trajectory_->points, odometry_->pose.pose, parameters_->sample_num, parameters_->resolution);
     const auto core_data = std::make_shared<CoreData>(
-      std::make_shared<TrajectoryPoints>(points), previous_points, objects_, steering_,
+      std::make_shared<TrajectoryPoints>(points), previous_points, objects_,
       preferred_lanes_, "candidate");
     add(core_data);
   }
