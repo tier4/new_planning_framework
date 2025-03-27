@@ -17,8 +17,8 @@
 
 #include "autoware/trajectory_selector_common/evaluation.hpp"
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
-#include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_trajectory_ranker_param.hpp"
+#include "autoware_utils/ros/polling_subscriber.hpp"
 
 #include <autoware_utils/system/time_keeper.hpp>
 
@@ -51,11 +51,7 @@ private:
   autoware_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};
 
-  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{
-    this, "~/input/odometry"};
-
-  autoware_utils::InterProcessPollingSubscriber<SteeringReport> sub_steering_{
-    this, "~/input/steering"};
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
 

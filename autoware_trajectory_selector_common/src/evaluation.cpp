@@ -17,9 +17,9 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 
-#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
 
 #include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
 
@@ -220,57 +220,9 @@ void Evaluator::show() const
 
 auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
 {
-  using autoware_utils::create_default_marker;
   using autoware_utils::create_marker_color;
-  using autoware_utils::create_marker_scale;
 
   MarkerArray msg;
-
-  const auto best_data = best();
-  if (best_data != nullptr) {
-    Marker marker = create_default_marker(
-      "map", rclcpp::Clock{RCL_ROS_TIME}.now(), "best_score", 0L, Marker::LINE_STRIP,
-      create_marker_scale(0.2, 0.0, 0.0), create_marker_color(1.0, 1.0, 1.0, 0.999));
-    for (const auto & point : *best_data->points()) {
-      marker.points.push_back(point.pose.position);
-    }
-    msg.markers.push_back(marker);
-  }
-
-  double min = std::numeric_limits<double>::max();
-  double max = std::numeric_limits<double>::lowest();
-  for (size_t i = 0; i < results().size(); ++i) {
-    const auto result = results().at(i);
-
-    if (result == nullptr) continue;
-
-    for (const auto & plugin : plugins_) {
-      const auto score = result->score(plugin->index());
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->points(), score, result->feasible(), plugin->name(), i));
-    }
-
-    {
-      min = std::min(min, result->total());
-      max = std::max(max, result->total());
-    }
-  }
-
-  for (size_t i = 0; i < results().size(); ++i) {
-    const auto result = results().at(i);
-
-    if (result == nullptr) continue;
-
-    if (std::abs(max - min) < std::numeric_limits<double>::epsilon()) {
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->points(), 1.0, result->feasible(), "TOTAL", i));
-    } else {
-      // convert score to 0.0~1.0 value
-      const auto score = (result->total() - min) / (max - min);
-      msg.markers.push_back(trajectory_selector::utils::to_marker(
-        result->points(), score, result->feasible(), "TOTAL", i));
-    }
-  }
 
   autoware_utils::append_marker_array(
     lanelet::visualization::laneletsAsTriangleMarkerArray(

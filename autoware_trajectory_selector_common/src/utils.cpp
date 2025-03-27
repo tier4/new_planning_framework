@@ -44,11 +44,6 @@
 
 namespace autoware::trajectory_selector::utils
 {
-
-using autoware_utils::create_default_marker;
-using autoware_utils::create_marker_color;
-using autoware_utils::create_marker_scale;
-
 struct FrenetPoint
 {
   double length{0.0};    // longitudinal
@@ -310,29 +305,5 @@ auto find_nearest_timestamp(
     if (time > target_timestamp) return (i - 1);
   }
   return std::nullopt;
-}
-
-auto to_marker(
-  const std::shared_ptr<TrajectoryPoints> & points, const double score, const bool feasible,
-  const std::string & ns, const size_t id) -> Marker
-{
-  Marker marker = create_default_marker(
-    "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
-    create_marker_scale(0.1, 0.0, 0.0), create_marker_color(1.0, 1.0, 1.0, 0.999));
-
-  if (!feasible) {
-    for (const auto & point : *points) {
-      marker.points.push_back(point.pose.position);
-      marker.colors.push_back(create_marker_color(0.1, 0.1, 0.1, 0.3));
-    }
-  } else {
-    for (const auto & point : *points) {
-      marker.points.push_back(point.pose.position);
-      marker.colors.push_back(
-        create_marker_color(1.0 - score, score, 0.0, std::clamp(score, 0.5, 0.999)));
-    }
-  }
-
-  return marker;
 }
 }  // namespace autoware::trajectory_selector::utils

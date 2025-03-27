@@ -65,11 +65,9 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
     "~/input/route", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
 
-  debug_processing_time_detail_pub_ =
-    create_publisher<autoware_utils::ProcessingTimeDetail>(
-      "~/debug/processing_time_detail_ms/trajectory_ranker", 1);
-  time_keeper_ =
-    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+    "~/debug/processing_time_detail_ms/trajectory_ranker", 1);
+  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
@@ -100,11 +98,6 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
     return msg;
   }
 
-  const auto steering_ptr = std::const_pointer_cast<SteeringReport>(sub_steering_.take_data());
-  if (steering_ptr == nullptr) {
-    return msg;
-  }
-
   const auto preferred_lanes =
     std::make_shared<lanelet::ConstLanelets>(route_handler_->getPreferredLanelets());
 
@@ -121,8 +114,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
-      previous_points_, objects_ptr, odometry_ptr, steering_ptr, preferred_lanes, t.header,
-      t.generator_id);
+      previous_points_, objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
 
     evaluator_->add(core_data);
   }
