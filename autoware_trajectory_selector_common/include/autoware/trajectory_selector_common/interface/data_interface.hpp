@@ -79,13 +79,6 @@ public:
   {
     if (core_data_->points->empty()) return false;
     constexpr double epsilon = -1e-06;
-    const auto idx = autoware::motion_utils::findNearestIndex(
-      *core_data_->points, core_data_->odometry->pose.pose.position);
-    const auto & p1 = core_data_->points->at(idx).pose.position;
-    const auto & p2 = core_data_->odometry->pose.pose.position;
-    if (autoware_utils::calc_squared_distance2d(p1, p2) > 10.0) {
-      return false;
-    }
 
     const auto condition = [&epsilon](const auto & p) {
       return p.longitudinal_velocity_mps >= epsilon;
@@ -109,8 +102,6 @@ public:
   auto original() const -> std::shared_ptr<TrajectoryPoints> { return core_data_->original; }
 
   auto objects() const -> std::shared_ptr<PredictedObjects> { return core_data_->objects; }
-
-  auto odometry() const -> std::shared_ptr<Odometry> { return core_data_->odometry; }
 
   auto steering() const -> std::shared_ptr<SteeringReport> { return core_data_->steering; }
 

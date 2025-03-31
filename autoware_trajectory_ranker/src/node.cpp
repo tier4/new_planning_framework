@@ -114,7 +114,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
     const auto core_data = std::make_shared<CoreData>(
       std::make_shared<TrajectoryPoints>(t.points), std::make_shared<TrajectoryPoints>(points),
-      previous_points_, objects_ptr, odometry_ptr, preferred_lanes, t.header, t.generator_id);
+      previous_points_, objects_ptr, preferred_lanes, t.header, t.generator_id);
 
     evaluator_->add(core_data);
   }
