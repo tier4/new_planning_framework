@@ -18,6 +18,7 @@
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 #include "autoware_feasible_trajectory_filter_param.hpp"
 
+#include <autoware_utils/ros/polling_subscriber.hpp>
 #include <autoware_utils/system/time_keeper.hpp>
 
 #include <memory>
@@ -35,9 +36,11 @@ private:
 
   void map_callback(const LaneletMapBin::ConstSharedPtr msg);
 
-  auto check_feasibility(const Trajectories::ConstSharedPtr msg) -> Trajectories::ConstSharedPtr;
+  Trajectories::ConstSharedPtr check_feasibility(const Trajectories::ConstSharedPtr msg);
 
-  auto out_of_lane(const autoware_new_planning_msgs::msg::Trajectory & trajectory) -> bool;
+  bool check_trajectory_origin(const autoware_new_planning_msgs::msg::Trajectory & trajectory);
+
+  bool out_of_lane(const autoware_new_planning_msgs::msg::Trajectory & trajectory);
 
   std::unique_ptr<feasible::ParamListener> listener_;
 
@@ -46,6 +49,7 @@ private:
   mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
 
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
   std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
