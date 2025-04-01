@@ -72,8 +72,6 @@ private:
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
-
-  friend class TestTrajectoryRanker;
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_ranker
