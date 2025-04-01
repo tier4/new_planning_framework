@@ -17,7 +17,10 @@
 #include "autoware/interpolation/linear_interpolation.hpp"
 
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/duration.hpp>
+
+#include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <boost/geometry/algorithms/detail/within/interface.hpp>
 
@@ -25,6 +28,7 @@
 #include <lanelet2_core/geometry/LaneletMap.h>
 
 #include <algorithm>
+#include <vector>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
@@ -33,11 +37,9 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
 : TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options},
   listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())}
 {
-  debug_processing_time_detail_pub_ =
-    create_publisher<autoware_utils::ProcessingTimeDetail>(
-      "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
-  time_keeper_ =
-    std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+    "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
+  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&FeasibleTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
@@ -59,24 +61,26 @@ void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstShared
     *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 }
 
-auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSharedPtr msg)
-  -> Trajectories::ConstSharedPtr
+Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
+  const Trajectories::ConstSharedPtr msg)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   auto trajectories = msg->trajectories;
 
-  auto itr = std::remove_if(trajectories.begin(), trajectories.end(), [](const auto & trajectory) {
-    return trajectory.points.size() < 2;
-  });
-  trajectories.erase(itr, trajectories.end());
+  const auto remove_invalid_trajectories = [&trajectories](auto predicate) {
+    auto itr = std::remove_if(trajectories.begin(), trajectories.end(), predicate);
+    trajectories.erase(itr, trajectories.end());
+  };
+
+  remove_invalid_trajectories([](const auto & trajectory) { return trajectory.points.size() < 2; });
+
+  remove_invalid_trajectories(
+    [this](const auto & trajectory) { return check_trajectory_origin(trajectory); });
 
   if (listener_->get_params().out_of_lane.enable) {
-    itr = std::remove_if(trajectories.begin(), trajectories.end(), [this](const auto & trajectory) {
-      return out_of_lane(trajectory);
-    });
-
-    trajectories.erase(itr, trajectories.end());
+    remove_invalid_trajectories(
+      [this](const auto & trajectory) { return out_of_lane(trajectory); });
   }
 
   const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
@@ -86,8 +90,25 @@ auto FeasibleTrajectoryFilterNode::check_feasibility(const Trajectories::ConstSh
   return std::make_shared<Trajectories>(new_trajectories);
 }
 
-auto FeasibleTrajectoryFilterNode::out_of_lane(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory) -> bool
+bool FeasibleTrajectoryFilterNode::check_trajectory_origin(
+  const autoware_new_planning_msgs::msg::Trajectory & trajectory)
+{
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  static constexpr double epsilon = 5.0;
+
+  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
+  if (odometry_ptr == nullptr) {
+    return false;
+  }
+  const auto & ego_position = odometry_ptr->pose.pose.position;
+  const auto & trajectory_origin = trajectory.points.front().pose.position;
+
+  return autoware_utils::calc_squared_distance2d(ego_position, trajectory_origin) > epsilon;
+}
+
+bool FeasibleTrajectoryFilterNode::out_of_lane(
+  const autoware_new_planning_msgs::msg::Trajectory & trajectory)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
