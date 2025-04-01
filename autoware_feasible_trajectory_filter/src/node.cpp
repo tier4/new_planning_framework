@@ -16,11 +16,13 @@
 
 #include "autoware/interpolation/linear_interpolation.hpp"
 
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/duration.hpp>
 
 #include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
+#include <geometry_msgs/msg/detail/pose__struct.hpp>
 
 #include <boost/geometry/algorithms/detail/within/interface.hpp>
 
@@ -66,6 +68,11 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
+  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
+  if (odometry_ptr == nullptr) {
+    return std::make_shared<Trajectories>();
+  }
+
   auto trajectories = msg->trajectories;
 
   const auto remove_invalid_trajectories = [&trajectories](auto predicate) {
@@ -75,8 +82,9 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
 
   remove_invalid_trajectories([](const auto & trajectory) { return trajectory.points.size() < 2; });
 
-  remove_invalid_trajectories(
-    [this](const auto & trajectory) { return check_trajectory_origin(trajectory); });
+  remove_invalid_trajectories([this, odometry_ptr](const auto & trajectory) {
+    return is_trajectory_offtrack(trajectory, odometry_ptr->pose.pose.position);
+  });
 
   if (listener_->get_params().out_of_lane.enable) {
     remove_invalid_trajectories(
@@ -90,21 +98,18 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
   return std::make_shared<Trajectories>(new_trajectories);
 }
 
-bool FeasibleTrajectoryFilterNode::check_trajectory_origin(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory)
+bool FeasibleTrajectoryFilterNode::is_trajectory_offtrack(
+  const autoware_new_planning_msgs::msg::Trajectory & trajectory,
+  const geometry_msgs::msg::Point & ego_position)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   static constexpr double epsilon = 5.0;
 
-  const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
-  if (odometry_ptr == nullptr) {
-    return false;
-  }
-  const auto & ego_position = odometry_ptr->pose.pose.position;
-  const auto & trajectory_origin = trajectory.points.front().pose.position;
+  const auto idx = autoware::motion_utils::findNearestIndex(trajectory.points, ego_position);
+  const auto target_position = trajectory.points.at(idx).pose.position;
 
-  return autoware_utils::calc_squared_distance2d(ego_position, trajectory_origin) > epsilon;
+  return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
 }
 
 bool FeasibleTrajectoryFilterNode::out_of_lane(

@@ -43,6 +43,7 @@
     >
       <remap from="~/input/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
       <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
     </composable_node>
 
