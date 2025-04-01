@@ -15,10 +15,9 @@
 #include "node.hpp"
 
 #include "autoware/interpolation/linear_interpolation.hpp"
+#include "utils.hpp"
 
-#include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
-#include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/duration.hpp>
 
 #include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
@@ -82,8 +81,8 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
 
   remove_invalid_trajectories([](const auto & trajectory) { return trajectory.points.size() < 2; });
 
-  remove_invalid_trajectories([this, odometry_ptr](const auto & trajectory) {
-    return is_trajectory_offtrack(trajectory, odometry_ptr->pose.pose.position);
+  remove_invalid_trajectories([odometry_ptr](const auto & trajectory) {
+    return utils::is_trajectory_offtrack(trajectory, odometry_ptr->pose.pose.position);
   });
 
   if (listener_->get_params().out_of_lane.enable) {
@@ -96,20 +95,6 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
                                   .generator_info(msg->generator_info);
 
   return std::make_shared<Trajectories>(new_trajectories);
-}
-
-bool FeasibleTrajectoryFilterNode::is_trajectory_offtrack(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory,
-  const geometry_msgs::msg::Point & ego_position)
-{
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-
-  static constexpr double epsilon = 5.0;
-
-  const auto idx = autoware::motion_utils::findNearestIndex(trajectory.points, ego_position);
-  const auto target_position = trajectory.points.at(idx).pose.position;
-
-  return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
 }
 
 bool FeasibleTrajectoryFilterNode::out_of_lane(

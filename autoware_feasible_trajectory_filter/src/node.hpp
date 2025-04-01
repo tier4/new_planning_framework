@@ -38,10 +38,6 @@ private:
 
   Trajectories::ConstSharedPtr check_feasibility(const Trajectories::ConstSharedPtr msg);
 
-  bool is_trajectory_offtrack(
-    const autoware_new_planning_msgs::msg::Trajectory & trajectory,
-    const geometry_msgs::msg::Point & ego_position);
-
   bool out_of_lane(const autoware_new_planning_msgs::msg::Trajectory & trajectory);
 
   std::unique_ptr<feasible::ParamListener> listener_;
