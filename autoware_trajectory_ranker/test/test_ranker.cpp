@@ -113,16 +113,33 @@ protected:
   void TearDown() override { rclcpp::shutdown(); }
 
   std::shared_ptr<TrajectoryRankerNode> node_;
-  size_t sample_num;
-  double resolution;
+  size_t sample_num{};
+  double resolution{};
 };
 
 TEST_F(TestTrajectoryRanker, straight_line)
 {
   const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>(
-    get_preferred_lanes("autoware_test_utils", "2km_test.osm", 9618, 4715));
-  const auto prev_pose = autoware::test_utils::createPose(-700.0, 1.45, 0.0, 0.0, 0.0, 0.0);
-  const auto current_pose = autoware::test_utils::createPose(-695.0, 1.45, 0.0, 0.0, 0.0, 0.0);
+    get_preferred_lanes("autoware_test_utils", "lanelet2_map.osm", 9102, 124));
+
+  const auto prev_pose =
+    geometry_msgs::build<geometry_msgs::msg::Pose>()
+      .position(
+        geometry_msgs::build<geometry_msgs::msg::Point>().x(3711.967529296875).y(73718.0).z(19.339))
+      .orientation(geometry_msgs::build<geometry_msgs::msg::Quaternion>()
+                     .x(0.00012232430968265882)
+                     .y(-0.0005086549380674299)
+                     .z(0.23381954091659465)
+                     .w(0.972279871535182));
+  const auto current_pose =
+    geometry_msgs::build<geometry_msgs::msg::Pose>()
+      .position(
+        geometry_msgs::build<geometry_msgs::msg::Point>().x(3714.1552734375).y(73718.0).z(19.339))
+      .orientation(geometry_msgs::build<geometry_msgs::msg::Quaternion>()
+                     .x(0.00012232430968265882)
+                     .y(-0.0005086549380674299)
+                     .z(0.23381954091659465)
+                     .w(0.972279871535182));
 
   const auto previous_points =
     std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
