@@ -28,6 +28,7 @@
 #include "nav_msgs/msg/detail/odometry__struct.hpp"
 #include <autoware_perception_msgs/msg/detail/predicted_objects__struct.hpp>
 #include <autoware_planning_msgs/msg/detail/lanelet_primitive__builder.hpp>
+#include <autoware_planning_msgs/msg/detail/lanelet_route__builder.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 
 #include <gtest/gtest.h>
@@ -98,6 +99,11 @@ protected:
 
   void add_data(const std::shared_ptr<CoreData> & core_data) { node_->evaluator_->add(core_data); }
 
+  std::shared_ptr<DataInterface> get_best_trajectory()
+  {
+    return node_->evaluator_->best(get_parameters());
+  }
+
   void call_evaluator()
   {
     const auto parameters = node_->parameters();
@@ -125,9 +131,33 @@ TEST_F(TestTrajectoryRanker, straight_line)
     std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
       create_centerline_path(), current_pose, sample_num, resolution));
 
+  TrajectoryPoints diagonal_points;
+  diagonal_points.reserve(sample_num);
+  for (size_t i = 0; i < sample_num; i++) {
+    const auto time =
+      builtin_interfaces::build<builtin_interfaces::msg::Duration>().sec(i).nanosec(0);
+    const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                         .time_from_start(time)
+                         .pose(autoware::test_utils::createPose(i, i, 0.0, 0.0, 0.0, 0.0))
+                         .longitudinal_velocity_mps(1.0)
+                         .lateral_velocity_mps(0.0)
+                         .acceleration_mps2(0.0)
+                         .heading_rate_rps(0.0)
+                         .front_wheel_angle_rad(0.0)
+                         .rear_wheel_angle_rad(0.0);
+    diagonal_points.push_back(point);
+  }
+
   std::shared_ptr<PredictedObjects> objects = std::make_shared<PredictedObjects>();
 
-  add_data(
-    std::make_shared<CoreData>(current_points, previous_points, objects, preferred_lanes, "best"));
+  add_data(std::make_shared<CoreData>(
+    current_points, previous_points, objects, preferred_lanes, "possible"));
+  add_data(std::make_shared<CoreData>(
+    std::make_shared<TrajectoryPoints>(diagonal_points), previous_points, objects, preferred_lanes,
+    "bad"));
+
+  const auto best = get_best_trajectory();
+
+  EXPECT_NE(best->tag(), "bad");
 }
 }  // namespace autoware::trajectory_selector::trajectory_ranker
