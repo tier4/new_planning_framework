@@ -19,6 +19,8 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <autoware/planning_test_manager/autoware_planning_test_manager_utils.hpp>
 #include <autoware/route_handler/route_handler.hpp>
+#include <autoware/trajectory/trajectory_point.hpp>
+#include <autoware/trajectory/utils/shift.hpp>
 #include <autoware/trajectory_selector_common/structs.hpp>
 #include <autoware_test_utils/autoware_test_utils.hpp>
 #include <rclcpp/duration.hpp>
@@ -26,10 +28,6 @@
 #include <rclcpp/node.hpp>
 
 #include "nav_msgs/msg/detail/odometry__struct.hpp"
-#include <autoware_perception_msgs/msg/detail/predicted_objects__struct.hpp>
-#include <autoware_planning_msgs/msg/detail/lanelet_primitive__builder.hpp>
-#include <autoware_planning_msgs/msg/detail/lanelet_route__builder.hpp>
-#include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 
 #include <gtest/gtest.h>
 
@@ -117,7 +115,7 @@ protected:
   double resolution{};
 };
 
-TEST_F(TestTrajectoryRanker, straight_line)
+TEST_F(TestTrajectoryRanker, straight_lane_keep)
 {
   const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>(
     get_preferred_lanes("autoware_test_utils", "lanelet2_map.osm", 9102, 124));
@@ -141,37 +139,43 @@ TEST_F(TestTrajectoryRanker, straight_line)
                      .z(0.23381954091659465)
                      .w(0.972279871535182));
 
+  const auto centerline_points = create_centerline_path();
   const auto previous_points =
     std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
-      create_centerline_path(), prev_pose, sample_num, resolution));
+      centerline_points, prev_pose, sample_num, resolution));
   const auto current_points =
     std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
-      create_centerline_path(), current_pose, sample_num, resolution));
+      centerline_points, current_pose, sample_num, resolution));
 
-  TrajectoryPoints diagonal_points;
-  diagonal_points.reserve(sample_num);
-  for (size_t i = 0; i < sample_num; i++) {
-    const auto time =
-      builtin_interfaces::build<builtin_interfaces::msg::Duration>().sec(i).nanosec(0);
-    const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
-                         .time_from_start(time)
-                         .pose(autoware::test_utils::createPose(i, i, 0.0, 0.0, 0.0, 0.0))
-                         .longitudinal_velocity_mps(1.0)
-                         .lateral_velocity_mps(0.0)
-                         .acceleration_mps2(0.0)
-                         .heading_rate_rps(0.0)
-                         .front_wheel_angle_rad(0.0)
-                         .rear_wheel_angle_rad(0.0);
-    diagonal_points.push_back(point);
+  const auto centerline_trajectory =
+    autoware::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>::Builder{}.build(
+      centerline_points);
+
+  std::vector<trajectory::ShiftInterval> shift_intervals;
+
+  double length = centerline_trajectory->length();
+  for (size_t i = 0; i < 4; i++) {
+    trajectory::ShiftInterval interval;
+    interval.start = 0.25 * length * static_cast<double>(i);
+    interval.end = 0.25 * length * static_cast<double>(i + 1);
+    if (i == 0)
+      interval.lateral_offset = 0.5;
+    else
+      interval.lateral_offset = std::pow(-1.0, i);
+    shift_intervals.push_back(interval);
   }
+  const auto snake_trajectory =
+    autoware::trajectory::shift(centerline_trajectory.value(), shift_intervals);
+  const auto snake_points =
+    std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
+      snake_trajectory.restore(), current_pose, sample_num, resolution));
 
   std::shared_ptr<PredictedObjects> objects = std::make_shared<PredictedObjects>();
 
   add_data(std::make_shared<CoreData>(
     current_points, previous_points, objects, preferred_lanes, "possible"));
-  add_data(std::make_shared<CoreData>(
-    std::make_shared<TrajectoryPoints>(diagonal_points), previous_points, objects, preferred_lanes,
-    "bad"));
+  add_data(
+    std::make_shared<CoreData>(snake_points, previous_points, objects, preferred_lanes, "bad"));
 
   const auto best = get_best_trajectory();
 
