@@ -41,6 +41,7 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_${PROJECT_NAME}
     autoware_test_utils
     autoware_planning_test_manager
+    autoware_trajectory
   )
 endif()
 
