@@ -39,10 +39,9 @@ if(BUILD_TESTING)
     ${PROJECT_NAME}
   )
 
-  # ament_target_dependencies(test_${PROJECT_NAME}
-  #   autoware_test_utils
-  #   autoware_planning_test_manager
-  # )
+  ament_target_dependencies(test_${PROJECT_NAME}
+    autoware_test_utils
+  )
 endif()
 
 ament_auto_package()
