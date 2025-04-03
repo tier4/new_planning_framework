@@ -16,6 +16,14 @@
 
 #include "autoware/trajectory_selector_common/utils.hpp"
 
+#include <rclcpp/time.hpp>
+
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
+
+#include <algorithm>
+#include <memory>
+#include <string>
+
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 
@@ -24,6 +32,7 @@ std::string TOPIC::ODOMETRY = "/localization/kinematic_state";             // NO
 std::string TOPIC::ACCELERATION = "/localization/acceleration";            // NOLINT
 std::string TOPIC::OBJECTS = "/perception/object_recognition/objects";     // NOLINT
 std::string TOPIC::TRAJECTORY = "/planning/scenario_planning/trajectory";  // NOLINT
+std::string TOPIC::CANDIDATE_TRAJECTORIES = "/mtr/trajectories";           // NOLINT
 std::string TOPIC::STEERING = "/vehicle/status/steering_status";           // NOLINT
 std::string TOPIC::ROUTE = "/planning/mission_planning/route";             // NOLINT
 
@@ -113,4 +122,47 @@ auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMes
 
   return std::make_shared<TFMessage>(*itr);
 }
+
+template <>
+bool Buffer<autoware_new_planning_msgs::msg::Trajectories>::ready() const
+{
+  if (msgs.empty()) {
+    return false;
+  }
+
+  return rclcpp::Time(msgs.back().trajectories.front().header.stamp).nanoseconds() -
+           rclcpp::Time(msgs.front().trajectories.front().header.stamp).nanoseconds() >
+         BUFFER_TIME;
+}
+
+template <>
+void Buffer<autoware_new_planning_msgs::msg::Trajectories>::remove_old_data(
+  const rcutils_time_point_value_t now)
+{
+  if (msgs.empty()) {
+    return;
+  }
+
+  const auto itr = std::remove_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
+    return rclcpp::Time(msg.trajectories.front().header.stamp).nanoseconds() < now;
+  });
+  msgs.erase(itr, msgs.end());
+}
+
+template <>
+auto Buffer<autoware_new_planning_msgs::msg::Trajectories>::get(
+  const rcutils_time_point_value_t now) const
+  -> autoware_new_planning_msgs::msg::Trajectories::SharedPtr
+{
+  const auto itr = std::find_if(msgs.begin(), msgs.end(), [&now](const auto & msg) {
+    return rclcpp::Time(msg.trajectories.front().header.stamp).nanoseconds() > now;
+  });
+
+  if (itr == msgs.end()) {
+    return nullptr;
+  }
+
+  return std::make_shared<autoware_new_planning_msgs::msg::Trajectories>(*itr);
+}
+
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

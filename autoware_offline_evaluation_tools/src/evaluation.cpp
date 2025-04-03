@@ -24,6 +24,7 @@
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 #include <autoware_vehicle_msgs/msg/detail/steering_report__struct.hpp>
 
 #include <lanelet2_core/geometry/LineString.h>
@@ -64,6 +65,10 @@ void BagEvaluator::setup(
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
       ->get(bag_data->timestamp);
 
+  candidate_trajectories_ = std::dynamic_pointer_cast<Buffer<Trajectories>>(
+                              bag_data->buffers.at(TOPIC::CANDIDATE_TRAJECTORIES))
+                              ->get(bag_data->timestamp);
+
   preferred_lanes_ = preferred_lanes(bag_data, route_handler(), parameters_->max_trajectory_length);
 
   if (!trajectory_) return;
@@ -94,6 +99,18 @@ void BagEvaluator::setup(
     add(core_data);
   }
 
+  if (candidate_trajectories_) {
+    for (const auto & trajectory : candidate_trajectories_->trajectories) {
+      const auto points = autoware::trajectory_selector::utils::sampling(
+        trajectory.points, odometry_->pose.pose, parameters_->sample_num, parameters_->resolution);
+      const auto core_data = std::make_shared<CoreData>(
+        std::make_shared<TrajectoryPoints>(points), previous_points, objects_, preferred_lanes_,
+        "candidate");
+      add(core_data);
+    }
+    return;
+  }
+
   // data augmentation
   if (create_augmented_data) {
     for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
@@ -107,8 +124,8 @@ void BagEvaluator::setup(
     const auto points = autoware::trajectory_selector::utils::sampling(
       trajectory_->points, odometry_->pose.pose, parameters_->sample_num, parameters_->resolution);
     const auto core_data = std::make_shared<CoreData>(
-      std::make_shared<TrajectoryPoints>(points), previous_points, objects_,
-      preferred_lanes_, "candidate");
+      std::make_shared<TrajectoryPoints>(points), previous_points, objects_, preferred_lanes_,
+      "candidate");
     add(core_data);
   }
 

@@ -30,6 +30,8 @@
 #include <rclcpp/time.hpp>
 #include <rclcpp/utilities.hpp>
 
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -172,6 +174,7 @@ void OfflineEvaluatorNode::process_messages(
   filter.topics.emplace_back(TOPIC::OBJECTS);
   filter.topics.emplace_back(TOPIC::STEERING);
   filter.topics.emplace_back(TOPIC::TRAJECTORY);
+  filter.topics.emplace_back(TOPIC::CANDIDATE_TRAJECTORIES);
   reader_.set_filter(filter);
 
   while (reader_.has_next()) {
@@ -228,6 +231,16 @@ void OfflineEvaluatorNode::process_messages(
       const auto deserialized_message = std::make_shared<Trajectory>();
       serializer.deserialize_message(&serialized_msg, deserialized_message.get());
       std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
+        ->append(*deserialized_message);
+    }
+
+    if (next_data->topic_name == TOPIC::CANDIDATE_TRAJECTORIES) {
+      rclcpp::Serialization<autoware_new_planning_msgs::msg::Trajectories> serializer;
+      const auto deserialized_message =
+        std::make_shared<autoware_new_planning_msgs::msg::Trajectories>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<autoware_new_planning_msgs::msg::Trajectories>>(
+        bag_data->buffers.at(TOPIC::CANDIDATE_TRAJECTORIES))
         ->append(*deserialized_message);
     }
   }
@@ -513,7 +526,10 @@ void OfflineEvaluatorNode::create_dataset(
   process_messages(bag_data, false);
   auto trajectory_buffer =
     std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY));
-  if (!trajectory_buffer) {
+  auto candidate_trajectories_buffer =
+    std::dynamic_pointer_cast<Buffer<autoware_new_planning_msgs::msg::Trajectories>>(
+      bag_data->buffers.at(TOPIC::CANDIDATE_TRAJECTORIES));
+  if (!trajectory_buffer && !candidate_trajectories_buffer) {
     res->success = false;
     RCLCPP_INFO(get_logger(), "No trajectory in ros bag data. Data creation failed");
     return;
@@ -538,6 +554,10 @@ void OfflineEvaluatorNode::create_dataset(
       continue;
     }
 
+    if (bag_evaluator->results().size() < 6) {  // 暫定対応
+      bag_evaluator->clear();
+      continue;
+    }
     for (const auto & result : bag_evaluator->results()) {
       size_t idx = 0;
       ofs << result->tag();

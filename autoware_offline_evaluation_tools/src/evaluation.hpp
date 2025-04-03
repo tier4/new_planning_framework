@@ -22,6 +22,7 @@
 #include <autoware/trajectory_selector_common/evaluation.hpp>
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 
 #include <algorithm>
@@ -92,6 +93,8 @@ private:
   std::shared_ptr<PredictedObjects> objects_;
 
   std::shared_ptr<Trajectory> trajectory_;
+
+  std::shared_ptr<autoware_new_planning_msgs::msg::Trajectories> candidate_trajectories_;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
 };

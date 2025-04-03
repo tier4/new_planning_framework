@@ -19,6 +19,7 @@
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 
 #include <map>
 #include <memory>
@@ -37,6 +38,7 @@ struct TOPIC
   static std::string ACCELERATION;
   static std::string OBJECTS;
   static std::string TRAJECTORY;
+  static std::string CANDIDATE_TRAJECTORIES;
   static std::string STEERING;
   static std::string ROUTE;
 };
@@ -108,10 +110,17 @@ template <>
 bool Buffer<TFMessage>::ready() const;
 
 template <>
+bool Buffer<autoware_new_planning_msgs::msg::Trajectories>::ready() const;
+
+template <>
 void Buffer<SteeringReport>::remove_old_data(const rcutils_time_point_value_t now);
 
 template <>
 void Buffer<TFMessage>::remove_old_data(const rcutils_time_point_value_t now);
+
+template <>
+void Buffer<autoware_new_planning_msgs::msg::Trajectories>::remove_old_data(
+  const rcutils_time_point_value_t now);
 
 template <>
 auto Buffer<SteeringReport>::get(const rcutils_time_point_value_t now) const
@@ -119,6 +128,11 @@ auto Buffer<SteeringReport>::get(const rcutils_time_point_value_t now) const
 
 template <>
 auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMessage::SharedPtr;
+
+template <>
+auto Buffer<autoware_new_planning_msgs::msg::Trajectories>::get(
+  const rcutils_time_point_value_t now) const
+  -> autoware_new_planning_msgs::msg::Trajectories::SharedPtr;
 
 struct BagData
 {
@@ -128,6 +142,9 @@ struct BagData
     buffers.emplace(TOPIC::ODOMETRY, std::make_shared<Buffer<Odometry>>());
     buffers.emplace(TOPIC::ACCELERATION, std::make_shared<Buffer<AccelWithCovarianceStamped>>());
     buffers.emplace(TOPIC::TRAJECTORY, std::make_shared<Buffer<Trajectory>>());
+    buffers.emplace(
+      TOPIC::CANDIDATE_TRAJECTORIES,
+      std::make_shared<Buffer<autoware_new_planning_msgs::msg::Trajectories>>());
     buffers.emplace(TOPIC::OBJECTS, std::make_shared<Buffer<PredictedObjects>>());
     buffers.emplace(TOPIC::STEERING, std::make_shared<Buffer<SteeringReport>>());
   }
