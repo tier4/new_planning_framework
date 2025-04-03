@@ -14,16 +14,9 @@
 
 #include "node.hpp"
 
-#include "autoware/interpolation/linear_interpolation.hpp"
 #include "utils.hpp"
 
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
-#include <rclcpp/duration.hpp>
-
-#include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
-#include <geometry_msgs/msg/detail/pose__struct.hpp>
-
-#include <boost/geometry/algorithms/detail/within/interface.hpp>
 
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/geometry/LaneletMap.h>
@@ -86,8 +79,10 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
   });
 
   if (listener_->get_params().out_of_lane.enable) {
-    remove_invalid_trajectories(
-      [this](const auto & trajectory) { return out_of_lane(trajectory); });
+    remove_invalid_trajectories([this](const auto & trajectory) {
+      return utils::out_of_lane(
+        trajectory, lanelet_map_ptr_, listener_->get_params().out_of_lane.time);
+    });
   }
 
   const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
@@ -96,37 +91,6 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
 
   return std::make_shared<Trajectories>(new_trajectories);
 }
-
-bool FeasibleTrajectoryFilterNode::out_of_lane(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory)
-{
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-
-  if (!lanelet_map_ptr_) {
-    return false;
-  }
-
-  std::vector<double> timestamps;
-  for (const auto & point : trajectory.points) {
-    timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
-  }
-  if (!interpolation::isIncreasing(timestamps))
-    return false;  // Todo (go-sakayori): consider how to deal with trajectory without
-                   // time_from_start
-
-  for (const auto & point : trajectory.points) {
-    if (
-      rclcpp::Duration(point.time_from_start).seconds() > listener_->get_params().out_of_lane.time)
-      break;
-    const auto nearest_lanelet = lanelet::geometry::findWithin2d(
-      lanelet_map_ptr_->laneletLayer,
-      lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y),
-      1.0);  // Todo (go-sakayori): remove hard code value
-    if (nearest_lanelet.empty()) return true;
-  }
-  return false;
-}
-
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
 
 #include <rclcpp_components/register_node_macro.hpp>

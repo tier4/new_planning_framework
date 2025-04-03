@@ -14,8 +14,12 @@
 
 #include "utils.hpp"
 
+#include <autoware/interpolation/linear_interpolation.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
+
+#include <lanelet2_core/LaneletMap.h>
+#include <lanelet2_core/geometry/LaneletMap.h>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter::utils
 {
@@ -29,5 +33,24 @@ bool is_trajectory_offtrack(
   const auto target_position = trajectory.points.at(idx).pose.position;
 
   return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
+}
+
+bool out_of_lane(
+  const autoware_new_planning_msgs::msg::Trajectory & trajectory,
+  const lanelet::LaneletMapConstPtr & lanelet_map, const double look_ahead_time)
+{
+  if (!lanelet_map) {
+    return false;
+  }
+
+  for (const auto & point : trajectory.points) {
+    if (rclcpp::Duration(point.time_from_start).seconds() > look_ahead_time) break;
+    const auto nearest_lanelet = lanelet::geometry::findWithin2d(
+      lanelet_map->laneletLayer,
+      lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y),
+      1.0);  // Todo (go-sakayori): remove hard code value
+    if (nearest_lanelet.empty()) return true;
+  }
+  return false;
 }
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter::utils
