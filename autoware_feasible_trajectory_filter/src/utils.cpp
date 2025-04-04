@@ -19,7 +19,6 @@
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/duration.hpp>
-#include <rclcpp/logging.hpp>
 
 #include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 
@@ -38,15 +37,10 @@ bool check_finite(const TrajectoryPoint & point)
 
   using std::isfinite;
   const bool p_result = isfinite(p.x) && isfinite(p.y) && isfinite(p.z);
-  if (!p_result) RCLCPP_INFO(rclcpp::get_logger(__func__), "p infinite");
   const bool quat_result = isfinite(o.x) && isfinite(o.y) && isfinite(o.z) && isfinite(o.w);
-  if (!quat_result) RCLCPP_INFO(rclcpp::get_logger(__func__), "o infinite");
   const bool v_result = isfinite(point.longitudinal_velocity_mps);
-  if (!v_result) RCLCPP_INFO(rclcpp::get_logger(__func__), "v infinite");
   const bool w_result = isfinite(point.heading_rate_rps);
-  if (!w_result) RCLCPP_INFO(rclcpp::get_logger(__func__), "w infinite");
   const bool a_result = isfinite(point.acceleration_mps2);
-  if (!a_result) RCLCPP_INFO(rclcpp::get_logger(__func__), "a infinite");
 
   return quat_result && p_result && v_result && w_result && a_result;
 }
