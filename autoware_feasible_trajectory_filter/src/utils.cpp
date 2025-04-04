@@ -47,8 +47,7 @@ bool is_out_of_lane(
     if (rclcpp::Duration(point.time_from_start).seconds() > look_ahead_time) break;
     const auto nearest_lanelet = lanelet::geometry::findWithin2d(
       lanelet_map->laneletLayer,
-      lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y),
-      1.0);  // Todo (go-sakayori): remove hard code value
+      lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y), 0.0);
     if (nearest_lanelet.empty()) return true;
   }
   return false;

@@ -80,7 +80,7 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
 
   if (listener_->get_params().out_of_lane.enable) {
     remove_invalid_trajectories([this](const auto & trajectory) {
-      return utils::out_of_lane(
+      return utils::is_out_of_lane(
         trajectory, lanelet_map_ptr_, listener_->get_params().out_of_lane.time);
     });
   }

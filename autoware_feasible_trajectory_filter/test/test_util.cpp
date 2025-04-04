@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -95,8 +96,8 @@ TEST(FeasibleTrajectoryFilterUtilsTest, is_trajectory_offtrack)
 
 TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
 {
-  const auto map_path = autoware::test_utils::get_absolute_path_to_lanelet_map(
-    "autoware_test_utils", "lanelet2_map.osm");
+  const auto map_path =
+    autoware::test_utils::get_absolute_path_to_lanelet_map("autoware_test_utils", "2km_test.osm");
   const auto map_bin_msg = autoware::test_utils::make_map_bin_msg(map_path, 0.1);
 
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr = std::make_shared<lanelet::LaneletMap>();
@@ -111,16 +112,16 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
       const auto time = builtin_interfaces::build<builtin_interfaces::msg::Duration>()
                           .sec(static_cast<int32_t>(i / 10))
                           .nanosec(static_cast<uint32_t>((i % 10) * 100000000));
-      const auto point =
-        autoware_planning_msgs::build<TrajectoryPoint>()
-          .time_from_start(time)
-          .pose(autoware::test_utils::createPose(static_cast<double>(i), 0.0, 0.0, 0.0, 0.0, 0.0))
-          .longitudinal_velocity_mps(0.5)
-          .lateral_velocity_mps(0.0)
-          .acceleration_mps2(0.0)
-          .heading_rate_rps(0.0)
-          .front_wheel_angle_rad(0.0)
-          .rear_wheel_angle_rad(0.0);
+      const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                           .time_from_start(time)
+                           .pose(autoware::test_utils::createPose(
+                             static_cast<double>(i) * 0.1, 1.75, 0.0, 0.0, 0.0, 0.0))
+                           .longitudinal_velocity_mps(1.0)
+                           .lateral_velocity_mps(0.0)
+                           .acceleration_mps2(0.0)
+                           .heading_rate_rps(0.0)
+                           .front_wheel_angle_rad(0.0)
+                           .rear_wheel_angle_rad(0.0);
       points.push_back(point);
     }
 
@@ -131,8 +132,8 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
         .points(points)
         .score(0.0);
 
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 12.0));
+    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
+    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 12.0));
   }
   {
     TrajectoryPoints points;
@@ -143,7 +144,9 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
       const auto point =
         autoware_planning_msgs::build<TrajectoryPoint>()
           .time_from_start(time)
-          .pose(autoware::test_utils::createPose(static_cast<double>(i), 0.0, 0.0, 0.0, 0.0, 0.0))
+          .pose(autoware::test_utils::createPose(
+            static_cast<double>(i) * 0.1, 1.75 + 3.0 * sin(static_cast<double>(i) / 180 * M_PI),
+            0.0, 0.0, 0.0, 0.0))
           .longitudinal_velocity_mps(0.5)
           .lateral_velocity_mps(0.0)
           .acceleration_mps2(0.0)
@@ -160,8 +163,10 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
         .points(points)
         .score(0.0);
 
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 12.0));
+    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
+    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 3.5));
+    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 3.6));
+    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 5.0));
   }
 }
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
