@@ -285,7 +285,7 @@ TEST(MetricsUtilsTest, time_to_collision)
   }
 
   {
-    const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
+    const auto duration = builtin_interfaces::build<Duration>().sec(0).nanosec(0);
     const auto ego_pose = geometry_msgs::build<Pose>()
                             .position(create_point(0.0, 0.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
@@ -306,7 +306,7 @@ TEST(MetricsUtilsTest, time_to_collision)
                             .position(create_point(0.0, 1.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(135)));
 
-    const auto time_step = builtin_interfaces::build<Duration>().sec(5).nanosec(5 * 100000000);
+    const auto time_step = builtin_interfaces::build<Duration>().sec(0).nanosec(5 * 100000000);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
                                   .path({obj_pose})
                                   .time_step(time_step)

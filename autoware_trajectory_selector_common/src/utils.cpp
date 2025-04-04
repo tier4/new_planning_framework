@@ -22,12 +22,15 @@
 
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware_utils_geometry/geometry.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Vector3.hpp>
 #include <tf2/utils.hpp>
 
+#include <autoware_perception_msgs/msg/detail/predicted_object__struct.hpp>
 #include <autoware_planning_msgs/msg/detail/lanelet_route__builder.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 #include <geometry_msgs/msg/detail/point__struct.hpp>
@@ -38,7 +41,11 @@
 
 #include <boost/geometry/algorithms/disjoint.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdlib>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -220,6 +227,31 @@ TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const dou
       .rear_wheel_angle_rad(end_point.rear_wheel_angle_rad);
 
   return new_trajectory_point;
+}
+
+double time_to_collision(
+  const TrajectoryPoint & point, const size_t idx,
+  const autoware_perception_msgs::msg::PredictedObject & object)
+{
+  static double constexpr max_ttc_value = 10.0;
+  const auto max_confidence_path = std::max_element(
+    object.kinematics.predicted_paths.begin(), object.kinematics.predicted_paths.end(),
+    [](const auto & a, const auto & b) { return a.confidence < b.confidence; });
+  if (max_confidence_path == object.kinematics.predicted_paths.end()) return max_ttc_value;
+  if (max_confidence_path->path.size() < idx + 1) return max_ttc_value;
+
+  const auto vector_ego_object =
+    autoware_utils::point_2_tf_vector(point, max_confidence_path->path.at(idx).position);
+
+  const auto ego_world_velocity = get_velocity_in_world_coordinate(point);
+  const auto object_world_velocity = get_velocity_in_world_coordinate(
+    max_confidence_path->path.at(idx),
+    object.kinematics.initial_twist_with_covariance.twist.linear);
+  const auto relative_velocity = tf2::tf2Dot(vector_ego_object.normalized(), ego_world_velocity) -
+                                 tf2::tf2Dot(vector_ego_object.normalized(), object_world_velocity);
+  if (relative_velocity < 1e-03) return max_ttc_value;
+
+  return std::min(max_ttc_value, vector_ego_object.length() / relative_velocity);
 }
 
 auto sampling(

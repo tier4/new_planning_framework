@@ -39,6 +39,10 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point);
 
 TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const double extension_time);
 
+double time_to_collision(
+  const TrajectoryPoint & point, const size_t idx,
+  const autoware_perception_msgs::msg::PredictedObject & object);
+
 auto sampling(
   const TrajectoryPoints & points, const Pose & p_ego, const size_t sample_num,
   const double time_resolution) -> TrajectoryPoints;

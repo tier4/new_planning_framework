@@ -100,37 +100,12 @@ auto time_to_collision(
     return max_ttc_value;
   }
 
-  const auto p_ego = points->at(idx).pose;
-  const auto ego_world_velocity =
-    autoware::trajectory_selector::utils::get_velocity_in_world_coordinate(points->at(idx));
-
   std::vector<double> time_to_collisions;
   time_to_collisions.reserve(objects->objects.size());
 
   for (const auto & object : objects->objects) {
-    const auto max_confidence_path = std::max_element(
-      object.kinematics.predicted_paths.begin(), object.kinematics.predicted_paths.end(),
-      [](const auto & a, const auto & b) { return a.confidence < b.confidence; });
-
-    if (max_confidence_path == object.kinematics.predicted_paths.end()) continue;
-
-    if (max_confidence_path->path.size() < idx + 1) continue;
-
-    const auto & p_object = max_confidence_path->path.at(idx);
-    const auto v_ego2object = autoware_utils::point_2_tf_vector(p_ego.position, p_object.position);
-
-    const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
-    const auto object_world_velocity =
-      autoware::trajectory_selector::utils::get_velocity_in_world_coordinate(
-        p_object, object_local_velocity);
-    const auto v_relative = tf2::tf2Dot(v_ego2object.normalized(), ego_world_velocity) -
-                            tf2::tf2Dot(v_ego2object.normalized(), object_world_velocity);
-
-    if (v_relative > std::numeric_limits<double>::epsilon()) {
-      time_to_collisions.push_back(std::min(v_ego2object.length() / v_relative, max_ttc_value));
-    } else {
-      time_to_collisions.push_back(max_ttc_value);
-    }
+    time_to_collisions.push_back(
+      autoware::trajectory_selector::utils::time_to_collision(points->at(idx), idx, object));
   }
 
   std::sort(time_to_collisions.begin(), time_to_collisions.end());
