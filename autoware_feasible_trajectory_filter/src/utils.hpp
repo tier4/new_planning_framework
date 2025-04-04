@@ -22,6 +22,8 @@
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter::utils
 {
+bool is_invalid_trajectory(const TrajectoryPoints & points);
+
 bool is_trajectory_offtrack(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory,
   const geometry_msgs::msg::Point & ego_position);
