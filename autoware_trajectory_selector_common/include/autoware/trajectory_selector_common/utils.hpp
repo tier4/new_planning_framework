@@ -17,6 +17,8 @@
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 
+#include <tf2/LinearMath/Vector3.hpp>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +26,17 @@
 
 namespace autoware::trajectory_selector::utils
 {
+Point vector2point(const geometry_msgs::msg::Vector3 & v);
+
+tf2::Vector3 from_msg(const Point & p);
+
+tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local);
+
+tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & kinematics);
+tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry);
+
+tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point);
+
 TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const double extension_time);
 
 auto sampling(

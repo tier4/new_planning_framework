@@ -17,6 +17,7 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
+#include <autoware/trajectory_selector_common/utils.hpp>
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 
@@ -29,36 +30,6 @@ namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
 namespace internal
 {
-
-Point vector2point(const geometry_msgs::msg::Vector3 & v)
-{
-  return autoware_utils::create_point(v.x, v.y, v.z);
-}
-
-tf2::Vector3 from_msg(const Point & p)
-{
-  return tf2::Vector3(p.x, p.y, p.z);
-}
-
-tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
-{
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), p_world);
-
-  return from_msg(v_world) - from_msg(p_world.position);
-}
-
-tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
-{
-  const auto pose = point.pose;
-  const auto v_local = geometry_msgs::build<Vector3>()
-                         .x(point.longitudinal_velocity_mps)
-                         .y(point.lateral_velocity_mps)
-                         .z(0.0);
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
-
-  return from_msg(v_world) - from_msg(pose.position);
-}
-
 double calcDistSquared2D(const geometry_msgs::msg::Point & p, const geometry_msgs::msg::Point & q)
 {
   const double dx = p.x - q.x;
@@ -131,13 +102,14 @@ auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
   const std::shared_ptr<PredictedObjects> & objects, const size_t idx) -> double
 {
-  double constexpr max_ttc_value = 10.0;
+  static double constexpr max_ttc_value = 10.0;
   if (!objects || objects->objects.empty()) {
     return max_ttc_value;
   }
 
   const auto p_ego = points->at(idx).pose;
-  const auto ego_world_velocity = internal::get_velocity_in_world_coordinate(points->at(idx));
+  const auto ego_world_velocity =
+    autoware::trajectory_selector::utils::get_velocity_in_world_coordinate(points->at(idx));
 
   std::vector<double> time_to_collisions;
   time_to_collisions.reserve(objects->objects.size());
@@ -156,7 +128,8 @@ auto time_to_collision(
 
     const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
     const auto object_world_velocity =
-      internal::get_velocity_in_world_coordinate(p_object, object_local_velocity);
+      autoware::trajectory_selector::utils::get_velocity_in_world_coordinate(
+        p_object, object_local_velocity);
     const auto v_relative = tf2::tf2Dot(v_ego2object.normalized(), ego_world_velocity) -
                             tf2::tf2Dot(v_ego2object.normalized(), object_world_velocity);
 

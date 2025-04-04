@@ -150,6 +150,13 @@ tf2::Vector3 from_msg(const Point & p)
   return tf2::Vector3(p.x, p.y, p.z);
 }
 
+tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
+{
+  const auto v_world = autoware_utils::transform_point(vector2point(v_local), p_world);
+
+  return from_msg(v_world) - from_msg(p_world.position);
+}
+
 tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & kinematics)
 {
   const auto pose = kinematics.initial_pose_with_covariance.pose;
@@ -171,8 +178,10 @@ tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry)
 tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
 {
   const auto pose = point.pose;
-  const auto v_local =
-    geometry_msgs::build<Vector3>().x(point.longitudinal_velocity_mps).y(0.0).z(0.0);
+  const auto v_local = geometry_msgs::build<Vector3>()
+                         .x(point.longitudinal_velocity_mps)
+                         .y(point.lateral_velocity_mps)
+                         .z(0.0);
   const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
