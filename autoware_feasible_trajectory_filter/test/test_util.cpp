@@ -30,6 +30,74 @@
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
+TEST(FeasibleTrajectoryFilterUtilsTest, is_invalid_trajectory)
+{
+  {
+    TrajectoryPoints points;
+    for (size_t i = 0; i < 1; i++) {
+      const auto time =
+        builtin_interfaces::build<builtin_interfaces::msg::Duration>().sec(i).nanosec(0);
+      const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                           .time_from_start(time)
+                           .pose(autoware::test_utils::createPose(
+                             0.5 * static_cast<double>(i), 10.0, 0.0, 0.0, 0.0, 0.0))
+                           .longitudinal_velocity_mps(0.5)
+                           .lateral_velocity_mps(0.0)
+                           .acceleration_mps2(0.0)
+                           .heading_rate_rps(0.0)
+                           .front_wheel_angle_rad(0.0)
+                           .rear_wheel_angle_rad(0.0);
+      points.push_back(point);
+    }
+    EXPECT_TRUE(utils::is_invalid_trajectory(points));
+  }
+  {
+    TrajectoryPoints points;
+    for (size_t i = 0; i < 4; i++) {
+      const auto time =
+        builtin_interfaces::build<builtin_interfaces::msg::Duration>().sec(i).nanosec(0);
+      const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                           .time_from_start(time)
+                           .pose(autoware::test_utils::createPose(
+                             0.5 * static_cast<double>(i), 10.0, 0.0, 0.0, 0.0, 0.0))
+                           .longitudinal_velocity_mps(0.5)
+                           .lateral_velocity_mps(0.0)
+                           .acceleration_mps2(0.0)
+                           .heading_rate_rps(0.0)
+                           .front_wheel_angle_rad(0.0)
+                           .rear_wheel_angle_rad(0.0);
+      points.push_back(point);
+    }
+    EXPECT_TRUE(utils::is_invalid_trajectory(points));
+  }
+  {
+    TrajectoryPoints points;
+    for (size_t i = 0; i < 20; i++) {
+      const auto time =
+        builtin_interfaces::build<builtin_interfaces::msg::Duration>().sec(i).nanosec(0);
+      const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                           .time_from_start(time)
+                           .pose(autoware::test_utils::createPose(
+                             0.5 * static_cast<double>(i), 10.0, 0.0, 0.0, 0.0, 0.0))
+                           .longitudinal_velocity_mps(0.5)
+                           .lateral_velocity_mps(0.0)
+                           .acceleration_mps2(0.0)
+                           .heading_rate_rps(0.0)
+                           .front_wheel_angle_rad(0.0)
+                           .rear_wheel_angle_rad(0.0);
+      points.push_back(point);
+    }
+    EXPECT_FALSE(utils::is_invalid_trajectory(points));
+    points.begin()->acceleration_mps2 = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_TRUE(utils::is_invalid_trajectory(points));
+
+    points.begin()->acceleration_mps2 = 0.0;
+    EXPECT_FALSE(utils::is_invalid_trajectory(points));  // Just in case
+    points.at(10).time_from_start.sec = 5;
+    EXPECT_TRUE(utils::is_invalid_trajectory(points));
+  }
+}
+
 TEST(FeasibleTrajectoryFilterUtilsTest, is_trajectory_offtrack)
 {
   const auto time = builtin_interfaces::build<builtin_interfaces::msg::Time>().sec(0).nanosec(0);

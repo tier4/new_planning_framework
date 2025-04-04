@@ -14,15 +14,56 @@
 
 #include "utils.hpp"
 
+#include <autoware/interpolation/interpolation_utils.hpp>
 #include <autoware/interpolation/linear_interpolation.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
+#include <rclcpp/duration.hpp>
+
+#include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/geometry/LaneletMap.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace autoware::trajectory_selector::feasible_trajectory_filter::utils
 {
+bool check_finite(const TrajectoryPoint & point)
+{
+  const auto & p = point.pose.position;
+  const auto & o = point.pose.orientation;
+
+  using std::isfinite;
+  const bool p_result = isfinite(p.x) && isfinite(p.y) && isfinite(p.z);
+  const bool quat_result = isfinite(o.x) && isfinite(o.y) && isfinite(o.z) && isfinite(o.w);
+  const bool v_result = isfinite(point.longitudinal_velocity_mps);
+  const bool w_result = isfinite(point.heading_rate_rps);
+  const bool a_result = isfinite(point.acceleration_mps2);
+
+  return quat_result && p_result && v_result && w_result && a_result;
+}
+
+bool is_invalid_trajectory(const TrajectoryPoints & points)
+{
+  if (points.size() < 2) return true;
+
+  std::vector<double> timestamps;
+  for (const auto & point : points) {
+    timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
+  }
+  if (!interpolation::isNotDecreasing(timestamps)) return true;
+
+  if (rclcpp::Duration(points.back().time_from_start).seconds() < 8.0)
+    return true;  // To-do (go-sakayori): remove hard code parameter
+
+  const auto is_finite = std::all_of(
+    points.begin(), points.end(), [](const auto & point) { return check_finite(point); });
+
+  return !is_finite;
+}
+
 bool is_trajectory_offtrack(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory,
   const geometry_msgs::msg::Point & ego_position)

@@ -72,7 +72,8 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
     trajectories.erase(itr, trajectories.end());
   };
 
-  remove_invalid_trajectories([](const auto & trajectory) { return trajectory.points.size() < 2; });
+  remove_invalid_trajectories(
+    [](const auto & trajectory) { return utils::is_invalid_trajectory(trajectory.points); });
 
   remove_invalid_trajectories([odometry_ptr](const auto & trajectory) {
     return utils::is_trajectory_offtrack(trajectory, odometry_ptr->pose.pose.position);
