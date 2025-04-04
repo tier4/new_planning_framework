@@ -30,13 +30,6 @@ namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
 namespace internal
 {
-double calcDistSquared2D(const geometry_msgs::msg::Point & p, const geometry_msgs::msg::Point & q)
-{
-  const double dx = p.x - q.x;
-  const double dy = p.y - q.y;
-  return dx * dx + dy * dy;
-}
-
 geometry_msgs::msg::Point transformToRelativeCoordinate2D(
   const geometry_msgs::msg::Point & point, const geometry_msgs::msg::Pose & origin)
 {
@@ -61,7 +54,7 @@ double calcRadius(
 {
   constexpr double RADIUS_MAX = 1e9;
   const double denominator = 2 * transformToRelativeCoordinate2D(target, current_pose).y;
-  const double numerator = calcDistSquared2D(target, current_pose.position);
+  const double numerator = autoware_utils::calc_squared_distance2d(target, current_pose.position);
 
   if (fabs(denominator) > 0) {
     return numerator / denominator;
