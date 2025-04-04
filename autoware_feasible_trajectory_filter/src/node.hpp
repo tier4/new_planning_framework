@@ -38,8 +38,6 @@ private:
 
   Trajectories::ConstSharedPtr check_feasibility(const Trajectories::ConstSharedPtr msg);
 
-  bool out_of_lane(const autoware_new_planning_msgs::msg::Trajectory & trajectory);
-
   std::unique_ptr<feasible::ParamListener> listener_;
 
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
