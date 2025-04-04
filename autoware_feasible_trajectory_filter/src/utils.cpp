@@ -14,6 +14,7 @@
 
 #include "utils.hpp"
 
+#include <autoware/interpolation/interpolation_utils.hpp>
 #include <autoware/interpolation/linear_interpolation.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
@@ -58,7 +59,7 @@ bool is_invalid_trajectory(const TrajectoryPoints & points)
   for (const auto & point : points) {
     timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
   }
-  if (!interpolation::isIncreasing(timestamps)) return true;
+  if (!interpolation::isNotDecreasing(timestamps)) return true;
 
   if (rclcpp::Duration(points.back().time_from_start).seconds() < 8.0)
     return true;  // To-do (go-sakayori): remove hard code parameter
