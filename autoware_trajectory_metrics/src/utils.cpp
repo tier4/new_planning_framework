@@ -17,6 +17,7 @@
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
+#include <autoware/trajectory_selector_common/utils.hpp>
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
 
@@ -29,43 +30,6 @@ namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
 namespace internal
 {
-
-Point vector2point(const geometry_msgs::msg::Vector3 & v)
-{
-  return autoware_utils::create_point(v.x, v.y, v.z);
-}
-
-tf2::Vector3 from_msg(const Point & p)
-{
-  return tf2::Vector3(p.x, p.y, p.z);
-}
-
-tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
-{
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), p_world);
-
-  return from_msg(v_world) - from_msg(p_world.position);
-}
-
-tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
-{
-  const auto pose = point.pose;
-  const auto v_local = geometry_msgs::build<Vector3>()
-                         .x(point.longitudinal_velocity_mps)
-                         .y(point.lateral_velocity_mps)
-                         .z(0.0);
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
-
-  return from_msg(v_world) - from_msg(pose.position);
-}
-
-double calcDistSquared2D(const geometry_msgs::msg::Point & p, const geometry_msgs::msg::Point & q)
-{
-  const double dx = p.x - q.x;
-  const double dy = p.y - q.y;
-  return dx * dx + dy * dy;
-}
-
 geometry_msgs::msg::Point transformToRelativeCoordinate2D(
   const geometry_msgs::msg::Point & point, const geometry_msgs::msg::Pose & origin)
 {
@@ -90,7 +54,7 @@ double calcRadius(
 {
   constexpr double RADIUS_MAX = 1e9;
   const double denominator = 2 * transformToRelativeCoordinate2D(target, current_pose).y;
-  const double numerator = calcDistSquared2D(target, current_pose.position);
+  const double numerator = autoware_utils::calc_squared_distance2d(target, current_pose.position);
 
   if (fabs(denominator) > 0) {
     return numerator / denominator;
@@ -131,40 +95,17 @@ auto time_to_collision(
   const std::shared_ptr<TrajectoryPoints> & points,
   const std::shared_ptr<PredictedObjects> & objects, const size_t idx) -> double
 {
-  double constexpr max_ttc_value = 10.0;
+  static double constexpr max_ttc_value = 10.0;
   if (!objects || objects->objects.empty()) {
     return max_ttc_value;
   }
-
-  const auto p_ego = points->at(idx).pose;
-  const auto ego_world_velocity = internal::get_velocity_in_world_coordinate(points->at(idx));
 
   std::vector<double> time_to_collisions;
   time_to_collisions.reserve(objects->objects.size());
 
   for (const auto & object : objects->objects) {
-    const auto max_confidence_path = std::max_element(
-      object.kinematics.predicted_paths.begin(), object.kinematics.predicted_paths.end(),
-      [](const auto & a, const auto & b) { return a.confidence < b.confidence; });
-
-    if (max_confidence_path == object.kinematics.predicted_paths.end()) continue;
-
-    if (max_confidence_path->path.size() < idx + 1) continue;
-
-    const auto & p_object = max_confidence_path->path.at(idx);
-    const auto v_ego2object = autoware_utils::point_2_tf_vector(p_ego.position, p_object.position);
-
-    const auto object_local_velocity = object.kinematics.initial_twist_with_covariance.twist.linear;
-    const auto object_world_velocity =
-      internal::get_velocity_in_world_coordinate(p_object, object_local_velocity);
-    const auto v_relative = tf2::tf2Dot(v_ego2object.normalized(), ego_world_velocity) -
-                            tf2::tf2Dot(v_ego2object.normalized(), object_world_velocity);
-
-    if (v_relative > std::numeric_limits<double>::epsilon()) {
-      time_to_collisions.push_back(std::min(v_ego2object.length() / v_relative, max_ttc_value));
-    } else {
-      time_to_collisions.push_back(max_ttc_value);
-    }
+    time_to_collisions.push_back(
+      autoware::trajectory_selector::utils::time_to_collision(points->at(idx), idx, object));
   }
 
   std::sort(time_to_collisions.begin(), time_to_collisions.end());

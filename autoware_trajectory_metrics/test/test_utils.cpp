@@ -22,6 +22,7 @@
 namespace autoware::trajectory_selector::trajectory_metrics
 {
 
+using autoware::trajectory_selector::utils::get_velocity_in_world_coordinate;
 using autoware_utils::create_point;
 using autoware_utils::create_quaternion_from_rpy;
 using autoware_utils::create_vector3;
@@ -35,7 +36,7 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
                         .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(90)));
     const auto velocity = create_vector3(1.0, 0.0, 0.0);
 
-    const auto output = utils::internal::get_velocity_in_world_coordinate(pose, velocity);
+    const auto output = get_velocity_in_world_coordinate(pose, velocity);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
     EXPECT_NEAR(output.getY(), 1.0, 1e-6);
     EXPECT_NEAR(output.getZ(), 0.0, 1e-6);
@@ -47,7 +48,7 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
                         .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(60)));
     const auto velocity = create_vector3(0.866025403784438647, 0.5, 0.0);
 
-    const auto output = utils::internal::get_velocity_in_world_coordinate(pose, velocity);
+    const auto output = get_velocity_in_world_coordinate(pose, velocity);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
     EXPECT_NEAR(output.getY(), 1.0, 1e-6);
     EXPECT_NEAR(output.getZ(), 0.0, 1e-6);
@@ -68,7 +69,7 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
                          .front_wheel_angle_rad(0.0)
                          .rear_wheel_angle_rad(0.0);
 
-    const auto output = utils::internal::get_velocity_in_world_coordinate(point);
+    const auto output = get_velocity_in_world_coordinate(point);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
     EXPECT_NEAR(output.getY(), 1.0, 1e-6);
     EXPECT_NEAR(output.getZ(), 0.0, 1e-6);
@@ -89,7 +90,7 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
                          .front_wheel_angle_rad(0.0)
                          .rear_wheel_angle_rad(0.0);
 
-    const auto output = utils::internal::get_velocity_in_world_coordinate(point);
+    const auto output = get_velocity_in_world_coordinate(point);
     EXPECT_NEAR(output.getX(), 0.0, 1e-6);
     EXPECT_NEAR(output.getY(), 1.0, 1e-6);
     EXPECT_NEAR(output.getZ(), 0.0, 1e-6);
@@ -99,7 +100,7 @@ TEST(MetricsUtilsTest, get_velocity_in_world_coordinate)
 TEST(MetricsUtilsTest, time_to_collision)
 {
   {
-    const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
+    const auto duration = builtin_interfaces::build<Duration>().sec(0).nanosec(0);
     const auto ego_pose = geometry_msgs::build<Pose>()
                             .position(create_point(0.0, 0.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
@@ -119,7 +120,7 @@ TEST(MetricsUtilsTest, time_to_collision)
     const auto objects = std::make_shared<PredictedObjects>();
 
     const auto output = utils::time_to_collision(points, objects, 0L);
-    EXPECT_EQ(output, 10000.0);
+    EXPECT_EQ(output, 10.0);
   }
 
   {
@@ -184,7 +185,7 @@ TEST(MetricsUtilsTest, time_to_collision)
                             .position(create_point(1.0, 2.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(-90)));
 
-    const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
+    const auto time_step = builtin_interfaces::build<Duration>().sec(0).nanosec(5 * 100000000);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
                                   .path({obj_pose})
                                   .time_step(time_step)
@@ -224,7 +225,7 @@ TEST(MetricsUtilsTest, time_to_collision)
                             .position(create_point(1.0, 1.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(-90)));
 
-    const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
+    const auto time_step = builtin_interfaces::build<Duration>().sec(0).nanosec(5 * 100000000);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
                                   .path({obj_pose})
                                   .time_step(time_step)
@@ -239,7 +240,7 @@ TEST(MetricsUtilsTest, time_to_collision)
     objects->objects.push_back(object);
 
     const auto output = utils::time_to_collision(points, objects, 0L);
-    EXPECT_DOUBLE_EQ(output, 10000.0);
+    EXPECT_DOUBLE_EQ(output, 10.0);
   }
 
   {
@@ -264,7 +265,7 @@ TEST(MetricsUtilsTest, time_to_collision)
                             .position(create_point(0.0, 1.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(225)));
 
-    const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
+    const auto time_step = builtin_interfaces::build<Duration>().sec(0).nanosec(5 * 100000000);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
                                   .path({obj_pose})
                                   .time_step(time_step)
@@ -284,7 +285,7 @@ TEST(MetricsUtilsTest, time_to_collision)
   }
 
   {
-    const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
+    const auto duration = builtin_interfaces::build<Duration>().sec(0).nanosec(0);
     const auto ego_pose = geometry_msgs::build<Pose>()
                             .position(create_point(0.0, 0.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, 0.0));
@@ -305,7 +306,7 @@ TEST(MetricsUtilsTest, time_to_collision)
                             .position(create_point(0.0, 1.0, 0.0))
                             .orientation(create_quaternion_from_rpy(0.0, 0.0, deg2rad(135)));
 
-    const auto time_step = builtin_interfaces::build<Duration>().sec(0.5).nanosec(0.0);
+    const auto time_step = builtin_interfaces::build<Duration>().sec(0).nanosec(5 * 100000000);
     const auto predicted_path = autoware_perception_msgs::build<PredictedPath>()
                                   .path({obj_pose})
                                   .time_step(time_step)
@@ -321,7 +322,7 @@ TEST(MetricsUtilsTest, time_to_collision)
     objects->objects.push_back(object);
 
     const auto output = utils::time_to_collision(points, objects, 0L);
-    EXPECT_DOUBLE_EQ(output, 10000.0);
+    EXPECT_DOUBLE_EQ(output, 10.0);
   }
 }
 
