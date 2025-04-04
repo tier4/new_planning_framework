@@ -26,21 +26,22 @@
 
 namespace autoware::trajectory_selector::utils
 {
-Point vector2point(const geometry_msgs::msg::Vector3 & v);
+TrajectoryPoints create_trajectory_points(
+  const autoware_perception_msgs::msg::PredictedPath & path,
+  const geometry_msgs::msg::Vector3 velocity);
 
+Point vector2point(const geometry_msgs::msg::Vector3 & v);
 tf2::Vector3 from_msg(const Point & p);
 
 tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local);
-
 tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & kinematics);
 tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry);
-
 tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point);
 
 TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const double extension_time);
 
 double time_to_collision(
-  const TrajectoryPoint & point, const size_t idx,
+  const TrajectoryPoint & point, const rclcpp::Duration & duration,
   const autoware_perception_msgs::msg::PredictedObject & object);
 
 auto sampling(
@@ -51,9 +52,9 @@ auto sampling_with_time(
   const TrajectoryPoints & points, const size_t sample_num, const double resolution,
   const std::optional<size_t> start_idx) -> TrajectoryPoints;
 
-auto find_nearest_timestamp(
-  const TrajectoryPoints & points, const double target_timestamp,
-  const size_t start_index) -> std::optional<size_t>;
+std::optional<size_t> find_nearest_timestamp(
+  const TrajectoryPoints & points, const rclcpp::Duration & target_timestamp,
+  size_t start_index = 1);
 }  // namespace autoware::trajectory_selector::utils
 
 #endif  // AUTOWARE__TRAJECTORY_SELECTOR_COMMON__UTILS_HPP_

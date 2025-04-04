@@ -46,6 +46,8 @@ private:
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
   autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
+  autoware_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
+    this, "~/input/objects"};
 
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
   std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;

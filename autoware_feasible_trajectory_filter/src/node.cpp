@@ -65,6 +65,8 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
     return std::make_shared<Trajectories>();
   }
 
+  const auto objects_ptr = std::const_pointer_cast<PredictedObjects>(sub_objects_.take_data());
+
   auto trajectories = msg->trajectories;
 
   const auto remove_invalid_trajectories = [&trajectories](auto predicate) {
@@ -76,13 +78,20 @@ Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
     [](const auto & trajectory) { return utils::is_invalid_trajectory(trajectory.points); });
 
   remove_invalid_trajectories([odometry_ptr](const auto & trajectory) {
-    return utils::is_trajectory_offtrack(trajectory, odometry_ptr->pose.pose.position);
+    return utils::is_trajectory_offtrack(trajectory.points, odometry_ptr->pose.pose.position);
   });
 
   if (listener_->get_params().out_of_lane.enable) {
     remove_invalid_trajectories([this](const auto & trajectory) {
       return utils::is_out_of_lane(
-        trajectory, lanelet_map_ptr_, listener_->get_params().out_of_lane.time);
+        trajectory.points, lanelet_map_ptr_, listener_->get_params().out_of_lane.time);
+    });
+  }
+
+  if (listener_->get_params().collision.enable && objects_ptr) {
+    remove_invalid_trajectories([this, objects_ptr](const auto & trajectory) {
+      return utils::has_collision_risk(
+        trajectory.points, *objects_ptr, listener_->get_params().collision.time);
     });
   }
 
