@@ -26,7 +26,7 @@ bool is_trajectory_offtrack(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory,
   const geometry_msgs::msg::Point & ego_position);
 
-bool out_of_lane(
+bool is_out_of_lane(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory,
   const lanelet::LaneletMapConstPtr & lanelet_map, const double look_ahead_time);
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter::utils

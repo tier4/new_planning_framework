@@ -35,7 +35,7 @@ bool is_trajectory_offtrack(
   return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
 }
 
-bool out_of_lane(
+bool is_out_of_lane(
   const autoware_new_planning_msgs::msg::Trajectory & trajectory,
   const lanelet::LaneletMapConstPtr & lanelet_map, const double look_ahead_time)
 {
