@@ -14,6 +14,8 @@
 
 #include "node.hpp"
 
+#include "qnamespace.h"
+
 #include <autoware/planning_test_manager/autoware_planning_test_manager_utils.hpp>
 #include <autoware/trajectory/trajectory_point.hpp>
 #include <autoware/trajectory/utils/shift.hpp>
@@ -28,6 +30,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <string>
 #include <vector>
@@ -46,8 +49,16 @@ NewTrajectoryFormatPublisher::NewTrajectoryFormatPublisher(const rclcpp::NodeOpt
     "~/output/trajectories", 1)},
   route_handler_{std::make_shared<route_handler::RouteHandler>()}
 {
+  // Straight line keep
+  // const size_t start_lane_id = 9102;
+  // const size_t end_lane_id = 124;
+
+  // Curved line keep
+  const size_t start_lane_id = 9102;
+  const size_t end_lane_id = 112;
+
   centerline_trajectory_ =
-    generate_centerline_path("autoware_test_utils", "lanelet2_map.osm", 9102, 124);
+    generate_centerline_path("autoware_test_utils", "lanelet2_map.osm", start_lane_id, end_lane_id);
 }
 
 void NewTrajectoryFormatPublisher::publish()
@@ -71,7 +82,8 @@ void NewTrajectoryFormatPublisher::publish()
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
       .header(header)
       .generator_id(autoware_utils::generate_uuid())
-      .points(generate_snake_path())
+      // .points(generate_snake_path()) // Straight lane keep
+      .points(generate_shifted_path(-1.0))  // Curved lane keep
       .score(0.0));
 
   const auto output =
@@ -130,7 +142,7 @@ TrajectoryPoints NewTrajectoryFormatPublisher::generate_snake_path()
     if (i == 0)
       interval.lateral_offset = 0.5;
     else
-      interval.lateral_offset = std::pow(-1.0, i);
+      interval.lateral_offset = std::pow(-1.0, i + 1);
     shift_intervals.push_back(interval);
   }
 
@@ -139,6 +151,27 @@ TrajectoryPoints NewTrajectoryFormatPublisher::generate_snake_path()
   return shifted_point.restore();
 }
 
+TrajectoryPoints NewTrajectoryFormatPublisher::generate_shifted_path(double shift_offset)
+{
+  TrajectoryPoints new_points;
+
+  const auto points = centerline_trajectory_;
+  const auto trajectory = Trajectory::Builder{}.build(points);
+
+  if (!trajectory.has_value()) return new_points;
+
+  std::vector<trajectory::ShiftInterval> shift_intervals;
+
+  for (size_t i = 0; i < 2; i++) {
+    trajectory::ShiftInterval interval;
+    interval.start = trajectory->length() * 0.5 + 5.0 * static_cast<double>(i);
+    interval.end = trajectory->length() * 0.5 + 10.0 * static_cast<double>(i + 1);
+    interval.lateral_offset = std::pow(shift_offset, i);
+    shift_intervals.push_back(interval);
+  }
+  const auto shifted_point = autoware::trajectory::shift(trajectory.value(), shift_intervals);
+  return shifted_point.restore();
+}
 }  // namespace autoware::trajectory_selector::new_trajectory_format_publisher
 
 #include <rclcpp_components/register_node_macro.hpp>

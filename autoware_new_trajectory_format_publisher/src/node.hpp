@@ -44,6 +44,7 @@ private:
     const std::string & package_name, const std::string & map_name, const int route_start_lane_id,
     const int route_goal_lane_id);
   TrajectoryPoints generate_snake_path();
+  TrajectoryPoints generate_shifted_path(double shift_offset);
 };
 }  // namespace autoware::trajectory_selector::new_trajectory_format_publisher
 
