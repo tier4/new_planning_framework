@@ -181,4 +181,69 @@ TEST_F(TestTrajectoryRanker, straight_lane_keep)
 
   EXPECT_NE(best->tag(), "bad");
 }
+
+TEST_F(TestTrajectoryRanker, intersection_lane_keep)
+{
+  const auto preferred_lanes = std::make_shared<lanelet::ConstLanelets>(
+    get_preferred_lanes("autoware_test_utils", "lanelet2_map.osm", 9102, 112));
+
+  const auto prev_pose =
+    geometry_msgs::build<geometry_msgs::msg::Pose>()
+      .position(
+        geometry_msgs::build<geometry_msgs::msg::Point>().x(3711.967529296875).y(73718.0).z(19.339))
+      .orientation(geometry_msgs::build<geometry_msgs::msg::Quaternion>()
+                     .x(0.00012232430968265882)
+                     .y(-0.0005086549380674299)
+                     .z(0.23381954091659465)
+                     .w(0.972279871535182));
+  const auto current_pose =
+    geometry_msgs::build<geometry_msgs::msg::Pose>()
+      .position(
+        geometry_msgs::build<geometry_msgs::msg::Point>().x(3714.1552734375).y(73718.0).z(19.339))
+      .orientation(geometry_msgs::build<geometry_msgs::msg::Quaternion>()
+                     .x(0.00012232430968265882)
+                     .y(-0.0005086549380674299)
+                     .z(0.23381954091659465)
+                     .w(0.972279871535182));
+
+  const auto centerline_points = create_centerline_path();
+  const auto previous_points =
+    std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
+      centerline_points, prev_pose, sample_num, resolution));
+  const auto current_points =
+    std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
+      centerline_points, current_pose, sample_num, resolution));
+
+  const auto centerline_trajectory =
+    autoware::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>::Builder{}.build(
+      centerline_points);
+
+  std::vector<trajectory::ShiftInterval> shift_intervals;
+
+  double length = centerline_trajectory->length();
+  for (size_t i = 0; i < 2; i++) {
+    trajectory::ShiftInterval interval;
+    interval.start = 0.5 * length + 5.0 * static_cast<double>(i);
+    interval.end = 0.5 * length + 5.0 * static_cast<double>(i + 1);
+    interval.lateral_offset = std::pow(-1.0, i);
+    shift_intervals.push_back(interval);
+  }
+  const auto shifted_trajectory =
+    autoware::trajectory::shift(centerline_trajectory.value(), shift_intervals);
+  const auto shifted_point =
+    std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
+      shifted_trajectory.restore(), current_pose, sample_num, resolution));
+
+  std::shared_ptr<PredictedObjects> objects = std::make_shared<PredictedObjects>();
+
+  add_data(std::make_shared<CoreData>(
+    current_points, previous_points, objects, preferred_lanes, "possible"));
+  add_data(
+    std::make_shared<CoreData>(shifted_point, previous_points, objects, preferred_lanes, "bad"));
+
+  const auto best = get_best_trajectory();
+
+  EXPECT_NE(best->tag(), "bad");
+}
+
 }  // namespace autoware::trajectory_selector::trajectory_ranker
