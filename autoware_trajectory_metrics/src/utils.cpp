@@ -104,8 +104,9 @@ auto time_to_collision(
   time_to_collisions.reserve(objects->objects.size());
 
   for (const auto & object : objects->objects) {
+    const auto time = points->at(idx).time_from_start;
     time_to_collisions.push_back(
-      autoware::trajectory_selector::utils::time_to_collision(points->at(idx), idx, object));
+      autoware::trajectory_selector::utils::time_to_collision(points->at(idx), time, object));
   }
 
   std::sort(time_to_collisions.begin(), time_to_collisions.end());

@@ -31,12 +31,14 @@
 #include <tf2/utils.hpp>
 
 #include <autoware_perception_msgs/msg/detail/predicted_object__struct.hpp>
+#include <autoware_perception_msgs/msg/detail/predicted_path__struct.hpp>
 #include <autoware_planning_msgs/msg/detail/lanelet_route__builder.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 #include <geometry_msgs/msg/detail/point__struct.hpp>
 #include <geometry_msgs/msg/detail/pose__builder.hpp>
 #include <geometry_msgs/msg/detail/pose__struct.hpp>
 #include <geometry_msgs/msg/detail/twist__struct.hpp>
+#include <geometry_msgs/msg/detail/vector3__struct.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include <boost/geometry/algorithms/disjoint.hpp>
@@ -147,6 +149,31 @@ auto convertToFrenetPoint(const T & points, const Point & search_point_geom, con
   return frenet_point;
 }
 
+TrajectoryPoints create_trajectory_points(
+  const autoware_perception_msgs::msg::PredictedPath & path,
+  const geometry_msgs::msg::Vector3 velocity)
+{
+  TrajectoryPoints trajectory;
+  trajectory.reserve(path.path.size());
+
+  for (size_t i = 0; i < path.path.size(); i++) {
+    const auto time = rclcpp::Duration::from_seconds(
+      rclcpp::Duration(path.time_step.sec, path.time_step.nanosec).seconds() *
+      static_cast<double>(i));
+    const auto trajectory_point = autoware_planning_msgs::build<TrajectoryPoint>()
+                                    .time_from_start(time)
+                                    .pose(path.path.at(i))
+                                    .longitudinal_velocity_mps(velocity.x)
+                                    .lateral_velocity_mps(velocity.y)
+                                    .acceleration_mps2(0.0)
+                                    .heading_rate_rps(0.0)
+                                    .front_wheel_angle_rad(0.0)
+                                    .rear_wheel_angle_rad(0.0);
+    trajectory.push_back(trajectory_point);
+  }
+  return trajectory;
+}
+
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
 {
   return autoware_utils::create_point(v.x, v.y, v.z);
@@ -230,7 +257,7 @@ TrajectoryPoint calc_extended_point(const TrajectoryPoint & end_point, const dou
 }
 
 double time_to_collision(
-  const TrajectoryPoint & point, const size_t idx,
+  const TrajectoryPoint & ego_point, const rclcpp::Duration & duration,
   const autoware_perception_msgs::msg::PredictedObject & object)
 {
   static double constexpr max_ttc_value = 10.0;
@@ -238,15 +265,36 @@ double time_to_collision(
     object.kinematics.predicted_paths.begin(), object.kinematics.predicted_paths.end(),
     [](const auto & a, const auto & b) { return a.confidence < b.confidence; });
   if (max_confidence_path == object.kinematics.predicted_paths.end()) return max_ttc_value;
-  if (max_confidence_path->path.size() < idx + 1) return max_ttc_value;
 
-  const auto vector_ego_object =
-    autoware_utils::point_2_tf_vector(point, max_confidence_path->path.at(idx).position);
+  const auto object_trajectory = create_trajectory_points(
+    *max_confidence_path, object.kinematics.initial_twist_with_covariance.twist.linear);
+  const auto idx = find_nearest_timestamp(object_trajectory, duration);
 
-  const auto ego_world_velocity = get_velocity_in_world_coordinate(point);
-  const auto object_world_velocity = get_velocity_in_world_coordinate(
-    max_confidence_path->path.at(idx),
-    object.kinematics.initial_twist_with_covariance.twist.linear);
+  if (!idx.has_value()) return max_ttc_value;
+
+  TrajectoryPoint object_point;
+
+  if (idx.value() >= object_trajectory.size() - 1) {
+    object_point = object_trajectory.back();
+  } else {
+    const double t1 = rclcpp::Duration(object_trajectory.at(idx.value()).time_from_start).seconds();
+    const double t2 =
+      rclcpp::Duration(object_trajectory.at(idx.value() + 1).time_from_start).seconds();
+    if (t2 == t1) {
+      object_point = object_trajectory.at(idx.value());
+    } else {
+      const double ratio = (duration.seconds() - t1) / (t2 - t1);
+      const double clamped_ratio = std::clamp(ratio, 0.0, 1.0);
+      object_point = calcInterpolatedPoint(
+        object_trajectory.at(idx.value()), object_trajectory.at(idx.value() + 1), clamped_ratio,
+        false);
+    }
+  }
+
+  const auto vector_ego_object = autoware_utils::point_2_tf_vector(ego_point, object_point);
+
+  const auto ego_world_velocity = get_velocity_in_world_coordinate(ego_point);
+  const auto object_world_velocity = get_velocity_in_world_coordinate(object_point);
   const auto relative_velocity = tf2::tf2Dot(vector_ego_object.normalized(), ego_world_velocity) -
                                  tf2::tf2Dot(vector_ego_object.normalized(), object_world_velocity);
   if (relative_velocity < 1e-03) return max_ttc_value;
@@ -260,37 +308,7 @@ auto sampling(
 {
   const auto ego_seg_idx = autoware::motion_utils::findNearestIndex(points, p_ego, 10.0, M_PI_2);
 
-  std::vector<double> timestamps;
-  for (const auto & point : points) {
-    timestamps.push_back(rclcpp::Duration(point.time_from_start).seconds());
-  }
-  const auto timestamp_increasing = interpolation::isIncreasing(timestamps);
-
-  if (timestamp_increasing) {
-    return sampling_with_time(points, sample_num, resolution, ego_seg_idx);
-  }
-
-  TrajectoryPoints output;
-  FrenetPoint vehicle_pose_frenet;
-  if (ego_seg_idx.has_value()) {
-    vehicle_pose_frenet = convertToFrenetPoint(points, p_ego.position, ego_seg_idx.value());
-  }
-
-  double length = 0.0;
-  for (size_t i = 0; i < sample_num; i++) {
-    const auto pose =
-      autoware::motion_utils::calcInterpolatedPose(points, vehicle_pose_frenet.length + length);
-    const auto p_trajectory = calcInterpolatedPoint(
-      points, pose, false, std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
-    output.push_back(p_trajectory);
-
-    const auto pred_accel = p_trajectory.acceleration_mps2;
-    const auto pred_velocity = p_trajectory.longitudinal_velocity_mps;
-
-    length += pred_velocity * resolution + 0.5 * pred_accel * resolution * resolution;
-  }
-
-  return output;
+  return sampling_with_time(points, sample_num, resolution, ego_seg_idx);
 }
 
 auto sampling_with_time(
@@ -310,7 +328,8 @@ auto sampling_with_time(
     rclcpp::Duration(points.at(start_idx.value()).time_from_start).seconds();
 
   for (size_t i = 0; i < sample_num; i++) {
-    const auto elapsed_time = static_cast<double>(i) * resolution + start_time;
+    const auto elapsed_time =
+      rclcpp::Duration::from_seconds(static_cast<double>(i) * resolution + start_time);
     const auto index = find_nearest_timestamp(points, elapsed_time, start_idx.value());
     if (!index.has_value()) {
       output.push_back(points.back());
@@ -328,7 +347,7 @@ auto sampling_with_time(
       continue;
     }
 
-    const double ratio = (elapsed_time - t1) / (t2 - t1);
+    const double ratio = (elapsed_time.seconds() - t1) / (t2 - t1);
     const double clamped_ratio = std::clamp(ratio, 0.0, 1.0);
     output.push_back(calcInterpolatedPoint(
       points.at(index.value()), points.at(index.value() + 1), clamped_ratio, false));
@@ -336,13 +355,11 @@ auto sampling_with_time(
   return output;
 }
 
-auto find_nearest_timestamp(
-  const TrajectoryPoints & points, const double target_timestamp,
-  const size_t start_index) -> std::optional<size_t>
+std::optional<size_t> find_nearest_timestamp(
+  const TrajectoryPoints & points, const rclcpp::Duration & target_timestamp, size_t start_index)
 {
-  auto start_idx = start_index > 0 ? start_index : 1;
-  for (size_t i = start_idx; i < points.size(); i++) {
-    const auto time = rclcpp::Duration(points.at(i).time_from_start).seconds();
+  for (size_t i = start_index; i < points.size(); i++) {
+    rclcpp::Duration time(points.at(i).time_from_start.sec, points.at(i).time_from_start.nanosec);
     if (time > target_timestamp) return (i - 1);
   }
   return std::nullopt;

@@ -17,6 +17,8 @@
 #include <autoware/interpolation/interpolation_utils.hpp>
 #include <autoware/interpolation/linear_interpolation.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware/trajectory_selector_common/type_alias.hpp>
+#include <autoware/trajectory_selector_common/utils.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/duration.hpp>
 
@@ -26,6 +28,7 @@
 #include <lanelet2_core/geometry/LaneletMap.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <vector>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter::utils
@@ -65,31 +68,48 @@ bool is_invalid_trajectory(const TrajectoryPoints & points)
 }
 
 bool is_trajectory_offtrack(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory,
-  const geometry_msgs::msg::Point & ego_position)
+  const TrajectoryPoints & points, const geometry_msgs::msg::Point & ego_position)
 {
   static constexpr double epsilon = 5.0;
 
-  const auto idx = autoware::motion_utils::findNearestIndex(trajectory.points, ego_position);
-  const auto target_position = trajectory.points.at(idx).pose.position;
+  const auto idx = autoware::motion_utils::findNearestIndex(points, ego_position);
+  const auto target_position = points.at(idx).pose.position;
 
   return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
 }
 
 bool is_out_of_lane(
-  const autoware_new_planning_msgs::msg::Trajectory & trajectory,
-  const lanelet::LaneletMapConstPtr & lanelet_map, const double look_ahead_time)
+  const TrajectoryPoints & points, const lanelet::LaneletMapConstPtr & lanelet_map,
+  const double look_ahead_time)
 {
   if (!lanelet_map) {
     return false;
   }
 
-  for (const auto & point : trajectory.points) {
+  for (const auto & point : points) {
     if (rclcpp::Duration(point.time_from_start).seconds() > look_ahead_time) break;
     const auto nearest_lanelet = lanelet::geometry::findWithin2d(
       lanelet_map->laneletLayer,
       lanelet::BasicPoint2d(point.pose.position.x, point.pose.position.y), 0.0);
     if (nearest_lanelet.empty()) return true;
+  }
+  return false;
+}
+
+bool has_collision_risk(
+  const TrajectoryPoints & points, const PredictedObjects & objects, double look_ahead_time)
+{
+  static constexpr double allowable_ttc = 3.0;
+
+  if (objects.objects.empty()) return false;
+
+  for (const auto & object : objects.objects) {
+    for (const auto & point : points) {
+      const auto time = rclcpp::Duration(point.time_from_start);
+      if (time.seconds() > look_ahead_time) break;
+      const auto ttc = autoware::trajectory_selector::utils::time_to_collision(point, time, object);
+      if (ttc < allowable_ttc) return true;
+    }
   }
   return false;
 }

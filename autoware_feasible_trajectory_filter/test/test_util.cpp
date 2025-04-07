@@ -100,8 +100,6 @@ TEST(FeasibleTrajectoryFilterUtilsTest, is_invalid_trajectory)
 
 TEST(FeasibleTrajectoryFilterUtilsTest, is_trajectory_offtrack)
 {
-  const auto time = builtin_interfaces::build<builtin_interfaces::msg::Time>().sec(0).nanosec(0);
-  const auto header = std_msgs::build<std_msgs::msg::Header>().stamp(time).frame_id("map");
   {
     const auto ego_point = geometry_msgs::build<geometry_msgs::msg::Point>().x(0.0).y(0.0).z(0.0);
 
@@ -122,14 +120,7 @@ TEST(FeasibleTrajectoryFilterUtilsTest, is_trajectory_offtrack)
       points.push_back(point);
     }
 
-    const auto trajectory =
-      autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-        .header(header)
-        .generator_id(autoware_utils_uuid::generate_uuid())
-        .points(points)
-        .score(0.0);
-
-    EXPECT_FALSE(utils::is_trajectory_offtrack(trajectory, ego_point));
+    EXPECT_FALSE(utils::is_trajectory_offtrack(points, ego_point));
   }
   {
     const auto ego_point = geometry_msgs::build<geometry_msgs::msg::Point>().x(0.0).y(0.0).z(0.0);
@@ -151,14 +142,7 @@ TEST(FeasibleTrajectoryFilterUtilsTest, is_trajectory_offtrack)
       points.push_back(point);
     }
 
-    const auto trajectory =
-      autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-        .header(header)
-        .generator_id(autoware_utils_uuid::generate_uuid())
-        .points(points)
-        .score(0.0);
-
-    EXPECT_TRUE(utils::is_trajectory_offtrack(trajectory, ego_point));
+    EXPECT_TRUE(utils::is_trajectory_offtrack(points, ego_point));
   }
 }
 
@@ -170,9 +154,6 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
 
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(map_bin_msg, lanelet_map_ptr);
-
-  const auto time = builtin_interfaces::build<builtin_interfaces::msg::Time>().sec(0).nanosec(0);
-  const auto header = std_msgs::build<std_msgs::msg::Header>().stamp(time).frame_id("map");
 
   {
     TrajectoryPoints points;
@@ -193,15 +174,8 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
       points.push_back(point);
     }
 
-    const auto trajectory =
-      autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-        .header(header)
-        .generator_id(autoware_utils_uuid::generate_uuid())
-        .points(points)
-        .score(0.0);
-
-    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
-    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 12.0));
+    EXPECT_FALSE(utils::is_out_of_lane(points, lanelet_map_ptr, 2.0));
+    EXPECT_FALSE(utils::is_out_of_lane(points, lanelet_map_ptr, 12.0));
   }
   {
     TrajectoryPoints points;
@@ -224,17 +198,33 @@ TEST(FeasibleTrajectoryFilterUtilsTest, out_of_lane)
       points.push_back(point);
     }
 
-    const auto trajectory =
-      autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-        .header(header)
-        .generator_id(autoware_utils_uuid::generate_uuid())
-        .points(points)
-        .score(0.0);
+    EXPECT_FALSE(utils::is_out_of_lane(points, lanelet_map_ptr, 2.0));
+    EXPECT_FALSE(utils::is_out_of_lane(points, lanelet_map_ptr, 3.5));
+    EXPECT_TRUE(utils::is_out_of_lane(points, lanelet_map_ptr, 3.6));
+    EXPECT_TRUE(utils::is_out_of_lane(points, lanelet_map_ptr, 5.0));
+  }
+}
 
-    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 2.0));
-    EXPECT_FALSE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 3.5));
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 3.6));
-    EXPECT_TRUE(utils::is_out_of_lane(trajectory, lanelet_map_ptr, 5.0));
+TEST(FeasibleTrajectoryFilterUtilsTest, has_collision_risk)
+{
+  {
+    TrajectoryPoints points;
+    for (size_t i = 0; i < 100; i++) {
+      const auto time = builtin_interfaces::build<builtin_interfaces::msg::Duration>()
+                          .sec(static_cast<int32_t>(i / 10))
+                          .nanosec(static_cast<uint32_t>((i % 10) * 100000000));
+      const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
+                           .time_from_start(time)
+                           .pose(autoware::test_utils::createPose(
+                             static_cast<double>(i) * 0.1, 0.0, 0.0, 0.0, 0.0, 0.0))
+                           .longitudinal_velocity_mps(0.5)
+                           .lateral_velocity_mps(0.0)
+                           .acceleration_mps2(0.0)
+                           .heading_rate_rps(0.0)
+                           .front_wheel_angle_rad(0.0)
+                           .rear_wheel_angle_rad(0.0);
+      points.push_back(point);
+    }
   }
 }
 }  // namespace autoware::trajectory_selector::feasible_trajectory_filter
