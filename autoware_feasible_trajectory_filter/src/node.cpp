@@ -51,8 +51,7 @@ void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstShared
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
-  lanelet::utils::conversion::fromBinMsg(
-    *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
+  lanelet::utils::conversion::fromBinMsg(*msg, lanelet_map_ptr_);
 }
 
 Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(

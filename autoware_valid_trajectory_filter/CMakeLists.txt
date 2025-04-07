@@ -10,6 +10,7 @@ include_directories(
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/node.cpp
+  src/utils.cpp
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
