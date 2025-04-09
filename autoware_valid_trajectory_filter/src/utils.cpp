@@ -25,7 +25,7 @@ lanelet::ConstLanelets get_lanes_from_trajectory(
   lanelet::ConstLanelets lanes;
   for (const auto & point : trajectory) {
     lanelet::ConstLanelet closest_lanelet{};
-    if (!lanelet::utils::query::getClosestLanelet(lanelets, point.pose, &closest_lanelet))
+    if (lanelet::utils::query::getClosestLanelet(lanelets, point.pose, &closest_lanelet))
       lanes.push_back(closest_lanelet);
   }
 

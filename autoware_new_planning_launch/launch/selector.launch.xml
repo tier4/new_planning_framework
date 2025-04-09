@@ -51,6 +51,8 @@
     <!-- validate trajectory that it obeys traffic rules -->
     <composable_node pkg="autoware_valid_trajectory_filter" plugin="autoware::trajectory_selector::valid_trajectory_filter::ValidTrajectoryFilterNode" name="valid_trajectory_filter" namespace="">
       <remap from="~/input/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
+      <remap from="~/input/traffic_signals" to="/perception/traffic_light_recognition/traffic_signals"/>
+      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
     </composable_node>
 

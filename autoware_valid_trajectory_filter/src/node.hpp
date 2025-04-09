@@ -45,10 +45,9 @@ private:
 
   void map_callback(const LaneletMapBin::ConstSharedPtr msg);
 
-  void traffic_light_check(const Trajectories::ConstSharedPtr msg);
+  Trajectories::ConstSharedPtr traffic_light_check(const Trajectories::ConstSharedPtr msg);
 
   rclcpp::Subscription<autoware_map_msgs::msg::LaneletMapBin>::SharedPtr sub_map_;
-  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
   autoware_utils::InterProcessPollingSubscriber<
     autoware_perception_msgs::msg::TrafficLightGroupArray>
     traffic_signals_subscriber_{this, "~/input/traffic_signals"};

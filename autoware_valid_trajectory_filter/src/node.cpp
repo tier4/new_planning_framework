@@ -19,6 +19,7 @@
 #include <autoware/traffic_light_utils/traffic_light_utils.hpp>
 #include <autoware_lanelet2_extension/regulatory_elements/autoware_traffic_light.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <rclcpp/logging.hpp>
 
 #include <lanelet2_core/Forward.h>
 #include <lanelet2_core/LaneletMap.h>
@@ -41,7 +42,8 @@ ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions &
 
 void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  publish(msg);
+  const auto trajectories = traffic_light_check(msg);
+  publish(trajectories);
 }
 
 void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
@@ -51,7 +53,8 @@ void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr
     *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 }
 
-void ValidTrajectoryFilterNode::traffic_light_check(const Trajectories::ConstSharedPtr msg)
+Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
+  const Trajectories::ConstSharedPtr msg)
 {
   auto trajectories = msg->trajectories;
   const auto traffic_signal_msg = traffic_signals_subscriber_.take_data();
@@ -66,10 +69,12 @@ void ValidTrajectoryFilterNode::traffic_light_check(const Trajectories::ConstSha
     }
   }
 
-  auto itr =
-    std::remove_if(trajectories.begin(), trajectories.end(), [this](const auto & trajectory) {
-      const lanelet::ConstLanelets lanelets(
-        lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
+  if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
+  const lanelet::ConstLanelets lanelets(
+    lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
+
+  auto itr = std::remove_if(
+    trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
       const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
 
       for (const auto & lane : lanes) {
@@ -85,7 +90,13 @@ void ValidTrajectoryFilterNode::traffic_light_check(const Trajectories::ConstSha
 
       return false;
     });
-  trajectories.erase(itr);
+  trajectories.erase(itr, trajectories.end());
+
+  const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
+                                  .trajectories(trajectories)
+                                  .generator_info(msg->generator_info);
+
+  return std::make_shared<Trajectories>(new_trajectories);
 }
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
