@@ -14,17 +14,89 @@
 
 #include "node.hpp"
 
+#include "utils.hpp"
+
+#include <autoware/traffic_light_utils/traffic_light_utils.hpp>
+#include <autoware_lanelet2_extension/regulatory_elements/autoware_traffic_light.hpp>
+#include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <rclcpp/logging.hpp>
+
+#include <lanelet2_core/Forward.h>
+#include <lanelet2_core/LaneletMap.h>
+#include <lanelet2_core/primitives/BasicRegulatoryElements.h>
+#include <lanelet2_routing/Forward.h>
+
+#include <algorithm>
+#include <memory>
+
 namespace autoware::trajectory_selector::valid_trajectory_filter
 {
 
 ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions & node_options)
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options}
 {
+  sub_map_ = create_subscription<LaneletMapBin>(
+    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
+    std::bind(&ValidTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
 }
 
 void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  publish(msg);
+  const auto trajectories = traffic_light_check(msg);
+  publish(trajectories);
+}
+
+void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
+{
+  lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
+  lanelet::utils::conversion::fromBinMsg(
+    *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
+}
+
+Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
+  const Trajectories::ConstSharedPtr msg)
+{
+  auto trajectories = msg->trajectories;
+  const auto traffic_signal_msg = traffic_signals_subscriber_.take_data();
+
+  if (traffic_signal_msg) {
+    traffic_light_id_map_.clear();
+    for (const auto & signal : traffic_signal_msg->traffic_light_groups) {
+      TrafficSignalStamped traffic_signal;
+      traffic_signal.stamp = traffic_signal_msg->stamp;
+      traffic_signal.signal = signal;
+      traffic_light_id_map_[signal.traffic_light_group_id] = traffic_signal;
+    }
+  }
+
+  if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
+  const lanelet::ConstLanelets lanelets(
+    lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
+
+  auto itr = std::remove_if(
+    trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
+      const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
+
+      for (const auto & lane : lanes) {
+        for (const auto & element : lane.template regulatoryElementsAs<lanelet::TrafficLight>()) {
+          if (traffic_light_id_map_.count(element->id()) == 0) continue;
+
+          if (autoware::traffic_light_utils::isTrafficSignalStop(
+                lane, traffic_light_id_map_.at(element->id()).signal)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
+  trajectories.erase(itr, trajectories.end());
+
+  const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
+                                  .trajectories(trajectories)
+                                  .generator_info(msg->generator_info);
+
+  return std::make_shared<Trajectories>(new_trajectories);
 }
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
