@@ -92,6 +92,7 @@ protected:
                          .front_wheel_angle_rad(0.0)
                          .rear_wheel_angle_rad(0.0));
     }
+    autoware::motion_utils::calculate_time_from_start(points, points.front().pose.position);
     return points;
   }
 
@@ -100,12 +101,6 @@ protected:
   std::shared_ptr<DataInterface> get_best_trajectory()
   {
     return node_->evaluator_->best(get_parameters());
-  }
-
-  void call_evaluator()
-  {
-    const auto parameters = node_->parameters();
-    node_->evaluator_->best(parameters);
   }
 
   void TearDown() override { rclcpp::shutdown(); }
