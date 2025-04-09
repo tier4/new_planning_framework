@@ -36,6 +36,7 @@ public:
 private:
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<Trajectories>::SharedPtr pub_trajectores_;
+  rclcpp::Publisher<Trajectories>::SharedPtr pub_resampled_trajectores_;
   std::shared_ptr<route_handler::RouteHandler> route_handler_;
   TrajectoryPoints centerline_trajectory_;
 
