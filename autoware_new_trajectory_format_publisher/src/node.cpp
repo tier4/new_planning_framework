@@ -16,6 +16,7 @@
 
 #include "qnamespace.h"
 
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware/planning_test_manager/autoware_planning_test_manager_utils.hpp>
 #include <autoware/trajectory/trajectory_point.hpp>
 #include <autoware/trajectory/utils/shift.hpp>
@@ -50,12 +51,12 @@ NewTrajectoryFormatPublisher::NewTrajectoryFormatPublisher(const rclcpp::NodeOpt
   route_handler_{std::make_shared<route_handler::RouteHandler>()}
 {
   // Straight line keep
-  // const size_t start_lane_id = 9102;
-  // const size_t end_lane_id = 124;
+  const size_t start_lane_id = 9102;
+  const size_t end_lane_id = 124;
 
   // Curved line keep
-  const size_t start_lane_id = 9102;
-  const size_t end_lane_id = 112;
+  // const size_t start_lane_id = 9102;
+  // const size_t end_lane_id = 112;
 
   centerline_trajectory_ =
     generate_centerline_path("autoware_test_utils", "lanelet2_map.osm", start_lane_id, end_lane_id);
@@ -120,6 +121,7 @@ TrajectoryPoints NewTrajectoryFormatPublisher::generate_centerline_path(
                        .front_wheel_angle_rad(0.0)
                        .rear_wheel_angle_rad(0.0));
   }
+  motion_utils::calculate_time_from_start(points, points.front().pose.position);
   return points;
 }
 
