@@ -21,6 +21,8 @@
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <rclcpp/logging.hpp>
 
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
+
 #include <lanelet2_core/Forward.h>
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/primitives/BasicRegulatoryElements.h>
@@ -73,7 +75,7 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
   const lanelet::ConstLanelets lanelets(
     lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
 
-  auto itr = std::remove_if(
+  const auto itr = std::remove_if(
     trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
       const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
 
@@ -88,6 +90,36 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
         }
       }
 
+      return false;
+    });
+  trajectories.erase(itr, trajectories.end());
+
+  const auto new_trajectories = autoware_new_planning_msgs::build<Trajectories>()
+                                  .trajectories(trajectories)
+                                  .generator_info(msg->generator_info);
+
+  return std::make_shared<Trajectories>(new_trajectories);
+}
+
+Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::stop_line_check(
+  const Trajectories::ConstSharedPtr msg)
+{
+  auto trajectories = msg->trajectories;
+  if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
+  const lanelet::ConstLanelets lanelets(
+    lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
+
+  const auto itr = std::remove_if(
+    trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
+      const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
+      if (lanes.size() < 2) return false;
+      for (size_t i = 0; i < lanes.size() - 1; i++) {
+        for (const auto & reg_elem :
+             lanes[i].template regulatoryElementsAs<lanelet::TrafficSign>()) {
+          if (reg_elem->type() != "stop_sign") continue;
+          if (lanes[i].id() != lanes[i + 1].id()) return true;
+        }
+      }
       return false;
     });
   trajectories.erase(itr, trajectories.end());
