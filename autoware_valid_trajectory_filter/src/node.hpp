@@ -21,6 +21,7 @@
 #include <autoware_utils/ros/polling_subscriber.hpp>
 #include <rclcpp/subscription.hpp>
 
+#include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 #include <autoware_perception_msgs/msg/traffic_light_group_array.hpp>
 
 #include <map>
@@ -46,6 +47,7 @@ private:
   void map_callback(const LaneletMapBin::ConstSharedPtr msg);
 
   Trajectories::ConstSharedPtr traffic_light_check(const Trajectories::ConstSharedPtr msg);
+  Trajectories::ConstSharedPtr stop_line_check(const Trajectories::ConstSharedPtr msg);
 
   rclcpp::Subscription<autoware_map_msgs::msg::LaneletMapBin>::SharedPtr sub_map_;
   autoware_utils::InterProcessPollingSubscriber<
