@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace autoware::trajectory_selector::new_trajectory_format_publisher
 {
@@ -44,8 +45,8 @@ private:
   TrajectoryPoints generate_centerline_path(
     const std::string & package_name, const std::string & map_name, const int route_start_lane_id,
     const int route_goal_lane_id);
-  TrajectoryPoints generate_snake_path();
-  TrajectoryPoints generate_shifted_path(double shift_offset);
+  std::vector<TrajectoryPoints> generate_path();
+  std::vector<TrajectoryPoints> generate_resampled_path();
 };
 }  // namespace autoware::trajectory_selector::new_trajectory_format_publisher
 
