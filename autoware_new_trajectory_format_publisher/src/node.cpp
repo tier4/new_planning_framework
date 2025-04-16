@@ -152,39 +152,50 @@ TrajectoryPoints NewTrajectoryFormatPublisher::generate_centerline_path(
                        .front_wheel_angle_rad(0.0)
                        .rear_wheel_angle_rad(0.0));
   }
-  // motion_utils::calculate_time_from_start(points, points.front().pose.position);
+  motion_utils::calculate_time_from_start(points, points.front().pose.position);
   return points;
 }
 
-TrajectoryPoints NewTrajectoryFormatPublisher::generate_snake_path()
+std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_path()
 {
-  TrajectoryPoints new_points;
+  std::vector<TrajectoryPoints> trajectories;
 
-  const auto points = centerline_trajectory_;
-  const auto trajectory = Trajectory::Builder{}.build(points);
-
-  if (!trajectory.has_value()) return new_points;
+  const auto centerline_trajectory =
+    autoware::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>::Builder{}.build(
+      centerline_trajectory_);
 
   std::vector<trajectory::ShiftInterval> shift_intervals;
+  trajectory::ShiftInterval interval;
+  interval.start = 0.5 * centerline_trajectory->length();
+  interval.end = centerline_trajectory->length();
+  interval.lateral_offset = 0.3;
+  shift_intervals.push_back(interval);
 
-  double length = trajectory->length();
-  for (size_t i = 0; i < 4; i++) {
-    trajectory::ShiftInterval interval;
-    interval.start = 0.25 * length * static_cast<double>(i);
-    interval.end = 0.25 * length * static_cast<double>(i + 1);
-    if (i == 0)
-      interval.lateral_offset = 0.5;
-    else
-      interval.lateral_offset = std::pow(-1.0, i + 1);
-    shift_intervals.push_back(interval);
+  auto offset_trajectory =
+    autoware::trajectory::shift(centerline_trajectory.value(), shift_intervals).restore();
+  autoware::motion_utils::calculate_time_from_start(
+    offset_trajectory, offset_trajectory.begin()->pose.position);
+
+  TrajectoryPoints slow_trajectory;
+
+  for (const auto & point : centerline_trajectory_) {
+    slow_trajectory.push_back(autoware_planning_msgs::build<TrajectoryPoint>()
+                                .time_from_start(rclcpp::Duration(0, 0))
+                                .pose(point.pose)
+                                .longitudinal_velocity_mps(point.longitudinal_velocity_mps * 0.01)
+                                .lateral_velocity_mps(point.lateral_velocity_mps)
+                                .acceleration_mps2(0.0)
+                                .heading_rate_rps(0.0)
+                                .front_wheel_angle_rad(0.0)
+                                .rear_wheel_angle_rad(0.0));
   }
+  autoware::motion_utils::calculate_time_from_start(
+    slow_trajectory, slow_trajectory.front().pose.position);
 
-  const auto shifted_point = autoware::trajectory::shift(trajectory.value(), shift_intervals);
-
-  return shifted_point.restore();
+  trajectories.push_back(offset_trajectory);
 }
 
-TrajectoryPoints NewTrajectoryFormatPublisher::generate_shifted_path(double shift_offset)
+std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_resampled_path()
 {
   TrajectoryPoints new_points;
 
