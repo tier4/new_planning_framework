@@ -46,7 +46,8 @@ private:
     const std::string & package_name, const std::string & map_name, const int route_start_lane_id,
     const int route_goal_lane_id);
   std::vector<TrajectoryPoints> generate_path();
-  std::vector<TrajectoryPoints> generate_resampled_path();
+  std::vector<TrajectoryPoints> generate_resampled_path(
+    const std::vector<TrajectoryPoints> & trajectories);
 };
 }  // namespace autoware::trajectory_selector::new_trajectory_format_publisher
 

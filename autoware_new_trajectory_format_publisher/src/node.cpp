@@ -41,14 +41,15 @@ namespace autoware::trajectory_selector::new_trajectory_format_publisher
 {
 using namespace std::literals::chrono_literals;
 using autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo;
-using Trajectory = autoware::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>;
+using Trajectory =
+  autoware::experimental::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>;
 
 NewTrajectoryFormatPublisher::NewTrajectoryFormatPublisher(const rclcpp::NodeOptions & node_options)
 : Node{"new_trajectory_format_publisher", node_options},
   timer_{rclcpp::create_timer(
     this, get_clock(), 100ms, std::bind(&NewTrajectoryFormatPublisher::publish, this))},
   pub_trajectores_{this->create_publisher<autoware_new_planning_msgs::msg::Trajectories>(
-    "~/output/trajectories", 1)},
+    "/planning/candidate/trajectories", 1)},
   pub_resampled_trajectores_{this->create_publisher<autoware_new_planning_msgs::msg::Trajectories>(
     "~/output/resampled_trajectories", 1)},
   route_handler_{std::make_shared<route_handler::RouteHandler>()}
@@ -75,19 +76,20 @@ void NewTrajectoryFormatPublisher::publish()
                              .generator_id(autoware_utils::generate_uuid())
                              .generator_name(generator_name));
 
+  const auto generated_trajectories = generate_path();
+
   trajectories.push_back(
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
       .header(header)
       .generator_id(autoware_utils::generate_uuid())
-      .points(centerline_trajectory_)
+      .points(generated_trajectories.front())
       .score(0.0));
 
   trajectories.push_back(
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
       .header(header)
       .generator_id(autoware_utils::generate_uuid())
-      .points(generate_snake_path())  // Straight lane keep
-      // .points(generate_shifted_path(-1.0))  // Curved lane keep
+      .points(generated_trajectories.back())  // Straight lane keep
       .score(0.0));
 
   const auto output =
@@ -96,30 +98,25 @@ void NewTrajectoryFormatPublisher::publish()
       .generator_info(generator_info);
   pub_trajectores_->publish(output);
 
-  const auto current_pose =
-    geometry_msgs::build<geometry_msgs::msg::Pose>()
-      .position(
-        geometry_msgs::build<geometry_msgs::msg::Point>().x(3714.1552734375).y(73718.0).z(19.339))
-      .orientation(geometry_msgs::build<geometry_msgs::msg::Quaternion>()
-                     .x(0.00012232430968265882)
-                     .y(-0.0005086549380674299)
-                     .z(0.23381954091659465)
-                     .w(0.972279871535182));
+  const auto resampled_trajectories = generate_resampled_path(generated_trajectories);
 
-  const auto current_points =
-    autoware::trajectory_selector::utils::sampling(centerline_trajectory_, current_pose, 20, 0.5);
-
-  std::vector<autoware_new_planning_msgs::msg::Trajectory> resampled_trajectories{};
-  resampled_trajectories.push_back(
+  std::vector<autoware_new_planning_msgs::msg::Trajectory> evaluated_trajectories{};
+  evaluated_trajectories.push_back(
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
       .header(header)
       .generator_id(autoware_utils::generate_uuid())
-      .points(current_points)
+      .points(resampled_trajectories.front())
+      .score(0.0));
+  evaluated_trajectories.push_back(
+    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
+      .header(header)
+      .generator_id(autoware_utils::generate_uuid())
+      .points(resampled_trajectories.back())
       .score(0.0));
 
   const auto resampled_output =
     autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectories>()
-      .trajectories(resampled_trajectories)
+      .trajectories(evaluated_trajectories)
       .generator_info(generator_info);
 
   pub_resampled_trajectores_->publish(resampled_output);
@@ -160,19 +157,21 @@ std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_path()
 {
   std::vector<TrajectoryPoints> trajectories;
 
-  const auto centerline_trajectory =
-    autoware::trajectory::Trajectory<autoware_planning_msgs::msg::TrajectoryPoint>::Builder{}.build(
-      centerline_trajectory_);
+  const auto centerline_trajectory = autoware::experimental::trajectory::Trajectory<
+                                       autoware_planning_msgs::msg::TrajectoryPoint>::Builder{}
+                                       .build(centerline_trajectory_);
 
-  std::vector<trajectory::ShiftInterval> shift_intervals;
-  trajectory::ShiftInterval interval;
-  interval.start = 0.5 * centerline_trajectory->length();
-  interval.end = centerline_trajectory->length();
-  interval.lateral_offset = 0.3;
-  shift_intervals.push_back(interval);
+  autoware::experimental::trajectory::ShiftInterval interval{
+    0.5 * centerline_trajectory->length(), centerline_trajectory->length(), 0.3};
 
-  auto offset_trajectory =
-    autoware::trajectory::shift(centerline_trajectory.value(), shift_intervals).restore();
+  const autoware::experimental::trajectory::ShiftParameters shift_parameter{
+    40 / 3.6,
+    5.0,
+  };
+
+  auto offset_trajectory = autoware::experimental::trajectory::shift(
+                             centerline_trajectory.value(), interval, shift_parameter)
+                             ->trajectory.restore();
   autoware::motion_utils::calculate_time_from_start(
     offset_trajectory, offset_trajectory.begin()->pose.position);
 
@@ -193,28 +192,22 @@ std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_path()
     slow_trajectory, slow_trajectory.front().pose.position);
 
   trajectories.push_back(offset_trajectory);
+  trajectories.push_back(slow_trajectory);
+  return trajectories;
 }
 
-std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_resampled_path()
+std::vector<TrajectoryPoints> NewTrajectoryFormatPublisher::generate_resampled_path(
+  const std::vector<TrajectoryPoints> & trajectories)
 {
-  TrajectoryPoints new_points;
-
-  const auto points = centerline_trajectory_;
-  const auto trajectory = Trajectory::Builder{}.build(points);
-
-  if (!trajectory.has_value()) return new_points;
-
-  std::vector<trajectory::ShiftInterval> shift_intervals;
-
-  for (size_t i = 0; i < 2; i++) {
-    trajectory::ShiftInterval interval;
-    interval.start = trajectory->length() * 0.5 + 5.0 * static_cast<double>(i);
-    interval.end = trajectory->length() * 0.5 + 10.0 * static_cast<double>(i + 1);
-    interval.lateral_offset = std::pow(shift_offset, i);
-    shift_intervals.push_back(interval);
+  const auto current_pose = centerline_trajectory_.at(1).pose;
+  std::vector<TrajectoryPoints> resampled_trajectories;
+  for (const auto & trajectory : trajectories) {
+    const auto resampled_points =
+      autoware::trajectory_selector::utils::sampling(trajectory, current_pose, 20, 0.5);
+    resampled_trajectories.push_back(resampled_points);
   }
-  const auto shifted_point = autoware::trajectory::shift(trajectory.value(), shift_intervals);
-  return shifted_point.restore();
+
+  return resampled_trajectories;
 }
 }  // namespace autoware::trajectory_selector::new_trajectory_format_publisher
 
