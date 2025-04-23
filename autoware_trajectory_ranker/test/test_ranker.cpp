@@ -102,7 +102,14 @@ protected:
 
   std::shared_ptr<DataInterface> get_best_trajectory()
   {
-    return node_->evaluator_->best(get_parameters());
+    const auto best = node_->evaluator_->best(get_parameters());
+    for (const auto & result : node_->evaluator_->results()) {
+      for (size_t i = 0; i < 6; i++) {
+        RCLCPP_INFO(
+          rclcpp::get_logger(__func__), "%s score is %lf", result->tag().c_str(), result->score(i));
+      }
+    }
+    return best;
   }
 
   void TearDown() override { rclcpp::shutdown(); }
@@ -174,7 +181,7 @@ TEST_F(TestTrajectoryRanker, straight_lane_keep)
       std::make_shared<CoreData>(slow_points, previous_points, objects, preferred_lanes, "bad"));
 
     const auto best = get_best_trajectory();
-    EXPECT_NE(best->tag(), "bad");
+    ASSERT_NE(best->tag(), "bad");
   }
 
   {
@@ -185,17 +192,20 @@ TEST_F(TestTrajectoryRanker, straight_lane_keep)
     const auto offset_trajectory = autoware::experimental::trajectory::shift(
                                      centerline_trajectory.value(), shift_interval, shift_parameter)
                                      ->trajectory;
+    auto offset_points = offset_trajectory.restore();
+    autoware::motion_utils::calculate_time_from_start(
+      offset_points, offset_points.begin()->pose.position);
 
     const auto prev_pose = offset_trajectory.restore().at(0).pose;
     const auto current_pose = offset_trajectory.restore().at(1).pose;
 
     const auto previous_points =
       std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
-        offset_trajectory.restore(), prev_pose, sample_num, resolution));
+        offset_points, prev_pose, sample_num, resolution));
 
-    const auto offset_points =
+    const auto resampled_offset_points =
       std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
-        offset_trajectory.restore(), current_pose, sample_num, resolution));
+        offset_points, current_pose, sample_num, resolution));
 
     const autoware::experimental::trajectory::ShiftInterval interval{
       offset_trajectory.length() * 0.2, offset_trajectory.length() * 0.5, -3.0};
@@ -203,15 +213,18 @@ TEST_F(TestTrajectoryRanker, straight_lane_keep)
     const auto returning_to_center_trajectory =
       autoware::experimental::trajectory::shift(offset_trajectory, interval, shift_parameter)
         ->trajectory;
+    auto returning_to_center_point = returning_to_center_trajectory.restore();
+    autoware::motion_utils::calculate_time_from_start(
+      returning_to_center_point, returning_to_center_point.front().pose.position);
 
-    const auto returning_to_center_points =
+    const auto resampled_returning_to_center_points =
       std::make_shared<TrajectoryPoints>(autoware::trajectory_selector::utils::sampling(
         returning_to_center_trajectory.restore(), current_pose, sample_num, resolution));
 
-    add_data(
-      std::make_shared<CoreData>(offset_points, previous_points, objects, preferred_lanes, "bad"));
     add_data(std::make_shared<CoreData>(
-      returning_to_center_points, previous_points, objects, preferred_lanes, "possible"));
+      resampled_offset_points, previous_points, objects, preferred_lanes, "bad"));
+    add_data(std::make_shared<CoreData>(
+      resampled_returning_to_center_points, previous_points, objects, preferred_lanes, "possible"));
 
     const auto best = get_best_trajectory();
 
