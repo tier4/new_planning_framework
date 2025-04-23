@@ -79,7 +79,7 @@ protected:
 
   void compress(const std::vector<std::vector<double>> & weight);
 
-  void normalize();
+  void normalize(const std::vector<std::vector<double>> & weight);
 
   void weighting(const std::vector<double> & weight);
 

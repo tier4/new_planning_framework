@@ -82,7 +82,7 @@ void Evaluator::evaluate(const std::vector<double> & max_value)
   }
 }
 
-void Evaluator::normalize()
+void Evaluator::normalize(const std::vector<std::vector<double>> & weight)
 {
   if (results_.empty()) return;
 
@@ -94,13 +94,9 @@ void Evaluator::normalize()
     return;
   }
 
-  const auto range = [this](const size_t index) {
-    double min = std::numeric_limits<double>::max();
-    double max = std::numeric_limits<double>::lowest();
-    for (const auto & result : results_) {
-      min = std::min(min, result->score(index));
-      max = std::max(max, result->score(index));
-    }
+  const auto range = [weight](const size_t index) {
+    double min = 0.0;
+    double max = std::reduce(weight.at(index).begin(), weight.at(index).end());
     return std::make_pair(min, max);
   };
 
@@ -160,7 +156,7 @@ auto Evaluator::best(
 
   compress(parameters->time_decay_weight);
 
-  normalize();
+  normalize(parameters->time_decay_weight);
 
   weighting(parameters->score_weight);
 
