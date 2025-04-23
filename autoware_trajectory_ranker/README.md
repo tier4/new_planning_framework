@@ -56,3 +56,16 @@ The weighted traces are summed across metrics and time to form a single scalar.F
 | `metrics.maximum`   | double         | -                                                                                                             | Per‑metric clamp values                     |
 | `score_weight`      | double         | -                                                                                                             | Global scaling of final score               |
 | `time_decay_weight` | vector<double> | -                                                                                                             | Exponential decay applied to each time step |
+
+## Test
+
+Once you modify the weights, some simple test must be passed. Some `colcon test` are implemented, such as simple lane keep and right turn in intersection showed in the below figure.
+Here are brief explanation of the test:
+
+- Long trajectory vs short trajectory
+- Lane center trajectory vs offset trajectory (ref. lane keep image)
+- Cut in vs cut out (ref. intersection image)
+- Avoiding trajectory vs colliding trajectory
+
+![fig](./images/test/lane_keep.png)
+![fig](./images/test/intersection.png)
