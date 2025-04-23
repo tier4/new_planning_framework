@@ -40,7 +40,7 @@ void LateralAcceleration::evaluate(
     const auto lateral_acc = (result->points()->at(i + 1).lateral_velocity_mps -
                               result->points()->at(i).lateral_velocity_mps) /
                              time_resolution;
-    metric.push_back(std::min(max_value, std::abs(lateral_acc)));
+    metric.push_back(std::min(1.0, std::abs(lateral_acc) / max_value));
   }
   metric.push_back(metric.back());
 
@@ -69,7 +69,7 @@ void LongitudinalJerk::evaluate(
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < acceleration.size() - 1; i++) {
     const auto jerk = (acceleration.at(i + 1) - acceleration.at(i)) / time_resolution;
-    metric.push_back(std::min(max_value, std::abs(jerk)));
+    metric.push_back(std::min(1.0, std::abs(jerk) / max_value));
   }
   metric.push_back(metric.back());
 
@@ -84,7 +84,7 @@ void TimeToCollision::evaluate(
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size(); i++) {
     metric.push_back(
-      std::min(max_value, utils::time_to_collision(result->points(), result->objects(), i)));
+      std::min(1.0, utils::time_to_collision(result->points(), result->objects(), i) / max_value));
   }
 
   result->set_metric(index(), metric);
@@ -97,8 +97,8 @@ void TravelDistance::evaluate(
 
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size(); i++) {
-    metric.push_back(
-      std::min(max_value, autoware::motion_utils::calcSignedArcLength(*result->points(), 0L, i)));
+    metric.push_back(std::min(
+      1.0, autoware::motion_utils::calcSignedArcLength(*result->points(), 0L, i) / max_value));
   }
 
   result->set_metric(index(), metric);
@@ -113,7 +113,7 @@ void LateralDeviation::evaluate(
   for (size_t i = 0; i < result->points()->size(); i++) {
     const auto arc_coordinates = lanelet::utils::getArcCoordinates(
       *result->preferred_lanes(), autoware_utils::get_pose(result->points()->at(i)));
-    metric.push_back(std::min(max_value, std::abs(arc_coordinates.distance)));
+    metric.push_back(std::min(1.0, std::abs(arc_coordinates.distance) / max_value));
   }
 
   result->set_metric(index(), metric);
@@ -151,7 +151,7 @@ void SteeringConsistency::evaluate(
     const auto current = utils::steer_command(result->points(), point.pose, wheel_base);
     const auto previous = utils::steer_command(result->previous(), point.pose, wheel_base);
 
-    metric.push_back(std::min(max_value, std::abs(current - previous)));
+    metric.push_back(std::min(1.0, std::abs(current - previous) / max_value));
   }
 
   result->set_metric(index(), metric);
