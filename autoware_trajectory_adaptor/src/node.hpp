@@ -15,12 +15,14 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
 
-#include <autoware_utils/system/time_keeper.hpp>
+#include <autoware_utils_debug/time_keeper.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "autoware_new_planning_msgs/msg/trajectories.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
+
+#include <memory>
 
 namespace autoware::trajectory_selector::trajectory_adaptor
 {
@@ -44,9 +46,9 @@ private:
     hazard_signal_publisher_;  // To-do (go-sakayori): decide where to cope with turn indicator and
                                // hazard signal
 
-  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_adaptor
