@@ -18,8 +18,8 @@
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 #include "autoware_feasible_trajectory_filter_param.hpp"
 
-#include <autoware_utils/ros/polling_subscriber.hpp>
-#include <autoware_utils/system/time_keeper.hpp>
+#include <autoware_utils_debug/time_keeper.hpp>
+#include <autoware_utils_rclcpp/polling_subscriber.hpp>
 
 #include <memory>
 
@@ -40,13 +40,14 @@ private:
 
   std::unique_ptr<feasible::ParamListener> listener_;
 
-  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
-  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
-  autoware_utils::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
+  autoware_utils_rclcpp::InterProcessPollingSubscriber<Odometry> sub_odometry_{
+    this, "~/input/odometry"};
+  autoware_utils_rclcpp::InterProcessPollingSubscriber<PredictedObjects> sub_objects_{
     this, "~/input/objects"};
 
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
