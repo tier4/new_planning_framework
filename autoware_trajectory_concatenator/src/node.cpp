@@ -14,12 +14,12 @@
 
 #include "node.hpp"
 
-#include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "structs.hpp"
 
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
 #include <autoware/trajectory_selector_common/type_alias.hpp>
-#include <autoware_utils/ros/uuid_helper.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
 #include <builtin_interfaces/msg/detail/duration__builder.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logger.hpp>
@@ -54,19 +54,20 @@ TrajectoryConcatenatorNode::TrajectoryConcatenatorNode(const rclcpp::NodeOptions
   pub_trajectores_{this->create_publisher<Trajectories>("~/output/trajectories", 1)},
   listener_{std::make_unique<concatenator::ParamListener>(get_node_parameters_interface())}
 {
-  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils_debug::ProcessingTimeDetail>(
     "~/debug/processing_time_detail_ms/trajectory_concatenator", 1);
-  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  time_keeper_ =
+    std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::lock_guard<std::mutex> lock(mutex_);
 
   for (const auto & generator_info : msg->generator_info) {
-    const auto uuid = autoware_utils::to_hex_string(generator_info.generator_id);
+    const auto uuid = autoware_utils_uuid::to_hex_string(generator_info.generator_id);
 
     auto trajectories = msg->trajectories;
     const auto itr = std::remove_if(
@@ -90,7 +91,7 @@ void TrajectoryConcatenatorNode::on_trajectories(const Trajectories::ConstShared
 void TrajectoryConcatenatorNode::on_selected_trajectory(
   const autoware_planning_msgs::msg::Trajectory::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (!parameters()->use_feedback) return;
 
@@ -101,8 +102,8 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 
   std::lock_guard<std::mutex> lock(mutex_);
 
-  const auto uuid = autoware_utils::generate_default_uuid();
-  const auto hex_uuid = autoware_utils::to_hex_string(uuid);
+  const auto uuid = autoware_utils_uuid::generate_default_uuid();
+  const auto hex_uuid = autoware_utils_uuid::to_hex_string(uuid);
   const auto ego_seg_idx =
     autoware::motion_utils::findNearestIndex(msg->points, odometry_ptr->pose.pose, 10.0, M_PI_2);
   if (!ego_seg_idx.has_value()) {
@@ -153,7 +154,7 @@ void TrajectoryConcatenatorNode::on_selected_trajectory(
 
 void TrajectoryConcatenatorNode::publish()
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::vector<Trajectory> trajectories{};
   std::vector<TrajectoryGeneratorInfo> generator_info{};

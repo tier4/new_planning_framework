@@ -18,8 +18,8 @@
 #include "structs.hpp"
 
 #include <autoware_trajectory_concatenator_param.hpp>
-#include <autoware_utils/ros/polling_subscriber.hpp>
-#include <autoware_utils/system/time_keeper.hpp>
+#include <autoware_utils_debug/time_keeper.hpp>
+#include <autoware_utils_rclcpp/polling_subscriber.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/subscription.hpp>
 
@@ -61,7 +61,8 @@ private:
 
   rclcpp::Subscription<autoware_planning_msgs::msg::Trajectory>::SharedPtr sub_selected_trajectory_;
 
-  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_odometry_{this, "~/input/odometry"};
+  autoware_utils_rclcpp::InterProcessPollingSubscriber<Odometry> sub_odometry_{
+    this, "~/input/odometry"};
 
   rclcpp::Publisher<Trajectories>::SharedPtr pub_trajectores_;
 
@@ -71,9 +72,9 @@ private:
 
   mutable std::mutex mutex_;
 
-  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::trajectory_concatenator
