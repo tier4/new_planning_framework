@@ -16,6 +16,8 @@
 
   <depend>autoware_motion_utils</depend>
   <depend>autoware_trajectory_selector_common</depend>
+  <depend>autoware_utils_debug</depend>
+  <depend>autoware_utils_rclcpp</depend>
   <depend>generate_parameter_library</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>

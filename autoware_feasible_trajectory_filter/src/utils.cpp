@@ -75,7 +75,7 @@ bool is_trajectory_offtrack(
   const auto idx = autoware::motion_utils::findNearestIndex(points, ego_position);
   const auto target_position = points.at(idx).pose.position;
 
-  return autoware_utils::calc_squared_distance2d(ego_position, target_position) > epsilon;
+  return autoware_utils_geometry::calc_squared_distance2d(ego_position, target_position) > epsilon;
 }
 
 bool is_out_of_lane(

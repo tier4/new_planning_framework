@@ -31,9 +31,10 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
 : TrajectoryFilterInterface{"feasible_trajectory_filter_node", node_options},
   listener_{std::make_unique<feasible::ParamListener>(get_node_parameters_interface())}
 {
-  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils_debug::ProcessingTimeDetail>(
     "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
-  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  time_keeper_ =
+    std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&FeasibleTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
@@ -41,14 +42,14 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
 
 void FeasibleTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   publish(check_feasibility(msg));
 }
 
 void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(*msg, lanelet_map_ptr_);
@@ -57,7 +58,7 @@ void FeasibleTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstShared
 Trajectories::ConstSharedPtr FeasibleTrajectoryFilterNode::check_feasibility(
   const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   const auto odometry_ptr = std::const_pointer_cast<Odometry>(sub_odometry_.take_data());
   if (odometry_ptr == nullptr) {
