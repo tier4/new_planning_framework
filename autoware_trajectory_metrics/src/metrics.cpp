@@ -15,7 +15,7 @@
 #include "autoware/trajectory_metrics/metrics.hpp"
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware_utils/geometry/geometry.hpp"
+#include "autoware_utils_geometry/geometry.hpp"
 #include "utils.hpp"
 
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
@@ -112,7 +112,7 @@ void LateralDeviation::evaluate(
   metric.reserve(result->points()->size());
   for (size_t i = 0; i < result->points()->size(); i++) {
     const auto arc_coordinates = lanelet::utils::getArcCoordinates(
-      *result->preferred_lanes(), autoware_utils::get_pose(result->points()->at(i)));
+      *result->preferred_lanes(), autoware_utils_geometry::get_pose(result->points()->at(i)));
     metric.push_back(std::min(1.0, std::abs(arc_coordinates.distance) / max_value));
   }
 
@@ -130,7 +130,7 @@ void TrajectoryDeviation::evaluate(
   for (size_t i = 0; i < result->points()->size(); i++) {
     const auto & p1 = result->points()->at(i).pose;
     const auto & p2 = result->previous()->at(i).pose;
-    metric.push_back(std::min(max_value, autoware_utils::calc_squared_distance2d(p1, p2)));
+    metric.push_back(std::min(max_value, autoware_utils_geometry::calc_squared_distance2d(p1, p2)));
   }
 
   result->set_metric(index(), metric);
