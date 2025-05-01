@@ -15,16 +15,14 @@
 #include "utils.hpp"
 
 #include "autoware/motion_utils/trajectory/trajectory.hpp"
-#include "autoware_utils/geometry/boost_polygon_utils.hpp"
+#include "autoware_utils_geometry/boost_polygon_utils.hpp"
 
 #include <autoware/trajectory_selector_common/utils.hpp>
-#include <autoware_utils/geometry/geometry.hpp>
-#include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware_utils_geometry/geometry.hpp>
 
 #include <boost/geometry/algorithms/disjoint.hpp>
 
 #include <algorithm>
-#include <limits>
 
 namespace autoware::trajectory_selector::trajectory_metrics::utils
 {
@@ -54,7 +52,8 @@ double calcRadius(
 {
   constexpr double RADIUS_MAX = 1e9;
   const double denominator = 2 * transformToRelativeCoordinate2D(target, current_pose).y;
-  const double numerator = autoware_utils::calc_squared_distance2d(target, current_pose.position);
+  const double numerator =
+    autoware_utils_geometry::calc_squared_distance2d(target, current_pose.position);
 
   if (fabs(denominator) > 0) {
     return numerator / denominator;
@@ -83,7 +82,7 @@ auto pure_pursuit(const std::shared_ptr<TrajectoryPoints> & points, const Pose &
 
     if (p.has_value()) return p.value();
 
-    return autoware_utils::get_point(points->back());
+    return autoware_utils_geometry::get_point(points->back());
   }();
 
   return curvature(target_point, ego_pose);
@@ -132,7 +131,7 @@ auto time_to_collision(
   for (size_t i = 0; i < 20; i++) {
     const auto & ego_pose = points->at(i).pose;
     const auto ego_polygon =
-      autoware_utils::to_footprint(ego_pose, base_to_front, base_to_rear, width);
+      autoware_utils_geometry::to_footprint(ego_pose, base_to_front, base_to_rear, width);
 
     for (const auto & object : objects->objects) {
       const auto max_confidence_path = std::max_element(
@@ -144,7 +143,7 @@ auto time_to_collision(
       if (max_confidence_path->path.size() < i + 1) continue;
 
       const auto object_pose = max_confidence_path->path.at(i);
-      const auto object_polygon = autoware_utils::to_polygon2d(object_pose, object.shape);
+      const auto object_polygon = autoware_utils_geometry::to_polygon2d(object_pose, object.shape);
 
       if (!boost::geometry::disjoint(ego_polygon, object_polygon)) {
         std::reverse(time_to_collisions.begin(), time_to_collisions.end());
