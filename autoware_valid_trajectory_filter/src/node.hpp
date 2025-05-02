@@ -18,7 +18,7 @@
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 
 #include <autoware/trajectory_selector_common/type_alias.hpp>
-#include <autoware_utils/ros/polling_subscriber.hpp>
+#include <autoware_utils_rclcpp/polling_subscriber.hpp>
 #include <rclcpp/subscription.hpp>
 
 #include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
@@ -50,7 +50,7 @@ private:
   Trajectories::ConstSharedPtr stop_line_check(const Trajectories::ConstSharedPtr msg);
 
   rclcpp::Subscription<autoware_map_msgs::msg::LaneletMapBin>::SharedPtr sub_map_;
-  autoware_utils::InterProcessPollingSubscriber<
+  autoware_utils_rclcpp::InterProcessPollingSubscriber<
     autoware_perception_msgs::msg::TrafficLightGroupArray>
     traffic_signals_subscriber_{this, "~/input/traffic_signals"};
 

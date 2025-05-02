@@ -109,8 +109,8 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::stop_line_check(
   const lanelet::ConstLanelets lanelets(
     lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
 
-  const auto itr = std::remove_if(
-    trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
+  const auto itr =
+    std::remove_if(trajectories.begin(), trajectories.end(), [lanelets](const auto & trajectory) {
       const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
       if (lanes.size() < 2) return false;
       for (size_t i = 0; i < lanes.size() - 1; i++) {
