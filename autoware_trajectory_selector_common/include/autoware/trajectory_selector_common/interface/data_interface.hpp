@@ -15,11 +15,11 @@
 #ifndef AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE__DATA_INTERFACE_HPP_
 #define AUTOWARE__TRAJECTORY_SELECTOR_COMMON__INTERFACE__DATA_INTERFACE_HPP_
 
-#include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware_utils/geometry/geometry.hpp"
 
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware_utils_geometry/geometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include <limits>
