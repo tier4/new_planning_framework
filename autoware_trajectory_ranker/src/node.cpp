@@ -16,14 +16,13 @@
 
 #include "autoware/trajectory_selector_common/utils.hpp"
 
-#include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/logging.hpp>
 
 #include <algorithm>
-#include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace autoware::trajectory_selector::trajectory_ranker
 {
@@ -65,14 +64,15 @@ TrajectoryRankerNode::TrajectoryRankerNode(const rclcpp::NodeOptions & node_opti
     "~/input/route", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletRoute::ConstSharedPtr msg) { route_handler_->setRoute(*msg); });
 
-  debug_processing_time_detail_pub_ = create_publisher<autoware_utils::ProcessingTimeDetail>(
+  debug_processing_time_detail_pub_ = create_publisher<autoware_utils_debug::ProcessingTimeDetail>(
     "~/debug/processing_time_detail_ms/trajectory_ranker", 1);
-  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  time_keeper_ =
+    std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
 }
 
 void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   publish(score(msg));
   publish_resampled_trajectory(
@@ -82,7 +82,7 @@ void TrajectoryRankerNode::process(const Trajectories::ConstSharedPtr msg)
 auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
   -> Trajectories::ConstSharedPtr
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (!route_handler_->isHandlerReady()) {
     return msg;
@@ -145,7 +145,7 @@ auto TrajectoryRankerNode::score(const Trajectories::ConstSharedPtr msg)
 
 void TrajectoryRankerNode::publish_resampled_trajectory(const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
 
   std::vector<Trajectory> trajectories;
 
