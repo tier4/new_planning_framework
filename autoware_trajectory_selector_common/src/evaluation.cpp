@@ -19,7 +19,7 @@
 
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
-#include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware_utils_visualization/marker_helper.hpp>
 
 #include "autoware_new_planning_msgs/msg/evaluation_info.hpp"
 
@@ -216,11 +216,11 @@ void Evaluator::show() const
 
 auto Evaluator::marker() const -> std::shared_ptr<MarkerArray>
 {
-  using autoware_utils::create_marker_color;
+  using autoware_utils_visualization::create_marker_color;
 
   MarkerArray msg;
 
-  autoware_utils::append_marker_array(
+  autoware_utils_visualization::append_marker_array(
     lanelet::visualization::laneletsAsTriangleMarkerArray(
       "preferred_lanes", route_handler_->getPreferredLanelets(),
       create_marker_color(0.16, 1.0, 0.69, 0.2)),

@@ -14,14 +14,12 @@
 
 #include "autoware/trajectory_selector_common/utils.hpp"
 
-#include "autoware/interpolation/linear_interpolation.hpp"
-#include "autoware/motion_utils/trajectory/interpolation.hpp"
-#include "autoware/motion_utils/trajectory/trajectory.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware_utils/geometry/boost_polygon_utils.hpp"
 
-#include <autoware_utils/geometry/geometry.hpp>
-#include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware/interpolation/linear_interpolation.hpp>
+#include <autoware/motion_utils/trajectory/interpolation.hpp>
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware_utils_geometry/boost_polygon_utils.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
 #include <magic_enum.hpp>
 #include <rclcpp/duration.hpp>
@@ -47,7 +45,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
-#include <limits>
 #include <optional>
 #include <vector>
 
@@ -66,7 +63,8 @@ TrajectoryPoint calcInterpolatedPoint(
   TrajectoryPoint interpolated_point{};
 
   // pose interpolation
-  interpolated_point.pose = autoware_utils::calc_interpolated_pose(curr_pt, next_pt, ratio);
+  interpolated_point.pose =
+    autoware_utils_geometry::calc_interpolated_pose(curr_pt, next_pt, ratio);
 
   // twist interpolation
   if (use_zero_order_hold_for_twist) {
@@ -121,8 +119,8 @@ TrajectoryPoint calcInterpolatedPoint(
   // Calculate interpolation ratio
   const auto & curr_pt = points.at(segment_idx);
   const auto & next_pt = points.at(segment_idx + 1);
-  const auto v1 = autoware_utils::point_2_tf_vector(curr_pt, next_pt);
-  const auto v2 = autoware_utils::point_2_tf_vector(curr_pt, target_pose);
+  const auto v1 = autoware_utils_geometry::point_2_tf_vector(curr_pt, next_pt);
+  const auto v2 = autoware_utils_geometry::point_2_tf_vector(curr_pt, target_pose);
   if (v1.length2() < 1e-3) {
     return curr_pt;
   }
@@ -176,7 +174,7 @@ TrajectoryPoints create_trajectory_points(
 
 Point vector2point(const geometry_msgs::msg::Vector3 & v)
 {
-  return autoware_utils::create_point(v.x, v.y, v.z);
+  return autoware_utils_geometry::create_point(v.x, v.y, v.z);
 }
 
 tf2::Vector3 from_msg(const Point & p)
@@ -186,7 +184,7 @@ tf2::Vector3 from_msg(const Point & p)
 
 tf2::Vector3 get_velocity_in_world_coordinate(const Pose & p_world, const Vector3 & v_local)
 {
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), p_world);
+  const auto v_world = autoware_utils_geometry::transform_point(vector2point(v_local), p_world);
 
   return from_msg(v_world) - from_msg(p_world.position);
 }
@@ -195,7 +193,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const PredictedObjectKinematics & 
 {
   const auto pose = kinematics.initial_pose_with_covariance.pose;
   const auto v_local = kinematics.initial_twist_with_covariance.twist.linear;
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
+  const auto v_world = autoware_utils_geometry::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -204,7 +202,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const Odometry & odometry)
 {
   const auto pose = odometry.pose.pose;
   const auto v_local = odometry.twist.twist.linear;
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
+  const auto v_world = autoware_utils_geometry::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -216,7 +214,7 @@ tf2::Vector3 get_velocity_in_world_coordinate(const TrajectoryPoint & point)
                          .x(point.longitudinal_velocity_mps)
                          .y(point.lateral_velocity_mps)
                          .z(0.0);
-  const auto v_world = autoware_utils::transform_point(vector2point(v_local), pose);
+  const auto v_world = autoware_utils_geometry::transform_point(vector2point(v_local), pose);
 
   return from_msg(v_world) - from_msg(pose.position);
 }
@@ -291,7 +289,8 @@ double time_to_collision(
     }
   }
 
-  const auto vector_ego_object = autoware_utils::point_2_tf_vector(ego_point, object_point);
+  const auto vector_ego_object =
+    autoware_utils_geometry::point_2_tf_vector(ego_point, object_point);
 
   const auto ego_world_velocity = get_velocity_in_world_coordinate(ego_point);
   const auto object_world_velocity = get_velocity_in_world_coordinate(object_point);
