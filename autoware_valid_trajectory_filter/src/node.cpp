@@ -38,7 +38,7 @@ using autoware_internal_planning_msgs::msg::PathPointWithLaneId;
 using autoware_internal_planning_msgs::msg::PathWithLaneId;
 
 ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions & node_options)
-: TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
+: TrajectoryFilterInterface{"valid_trajectory_filter_node", node_options},
   vehicle_info_{autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo()}
 {
   debug_processing_time_detail_pub_ =
