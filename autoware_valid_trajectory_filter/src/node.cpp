@@ -121,11 +121,8 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
     std::remove_if(trajectories.begin(), trajectories.end(), [&](const auto & trajectory) {
       // TODO: this query is slow, consider using other methods similar to
       // BoundaryDepartureChecker::getFusedLaneletPolygonForPath?
-      time_keeper_->start_track("get_lanelets_from_trajectory");
       const auto lanes = get_lanelets_from_trajectory(trajectory.points);
-      time_keeper_->end_track("get_lanelets_from_trajectory");
 
-      time_keeper_->start_track("loop");
       for (const auto & lane : lanes) {
         for (const auto & element : lane.template regulatoryElementsAs<lanelet::TrafficLight>()) {
           if (traffic_light_id_map_.count(element->id()) == 0) continue;
@@ -136,8 +133,6 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
           }
         }
       }
-      time_keeper_->end_track("loop");
-
       return false;
     });
   trajectories.erase(itr, trajectories.end());

@@ -19,7 +19,7 @@
 
 #include <autoware/boundary_departure_checker/boundary_departure_checker.hpp>
 #include <autoware/trajectory_selector_common/type_alias.hpp>
-#include <autoware_utils/system/time_keeper.hpp>
+#include <autoware_utils_debug/time_keeper.hpp>
 #include <autoware_utils_rclcpp/polling_subscriber.hpp>
 #include <rclcpp/subscription.hpp>
 
