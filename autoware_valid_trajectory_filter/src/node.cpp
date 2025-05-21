@@ -41,9 +41,11 @@ ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions &
 : TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
   vehicle_info_{autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo()}
 {
-  debug_processing_time_detail_pub_ = this->create_publisher<autoware_utils::ProcessingTimeDetail>(
-    "~/debug/processing_time_detail_ms", 1);
-  time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
+  debug_processing_time_detail_pub_ =
+    this->create_publisher<autoware_utils_debug::ProcessingTimeDetail>(
+      "~/debug/processing_time_detail_ms", 1);
+  time_keeper_ =
+    std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&ValidTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
@@ -56,14 +58,14 @@ ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions &
 
 void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   const auto trajectories = traffic_light_check(msg);
   publish(trajectories);
 }
 
 void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(
     *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
@@ -72,7 +74,7 @@ void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr
 lanelet::ConstLanelets ValidTrajectoryFilterNode::get_lanelets_from_trajectory(
   const TrajectoryPoints & trajectory_points) const
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   lanelet::ConstLanelets lanes;
   PathWithLaneId path;
   path.points.reserve(trajectory_points.size());
@@ -101,7 +103,7 @@ lanelet::ConstLanelets ValidTrajectoryFilterNode::get_lanelets_from_trajectory(
 Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
   const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   auto trajectories = msg->trajectories;
   const auto traffic_signal_msg = traffic_signals_subscriber_.take_data();
 
@@ -119,7 +121,7 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
 
   const auto itr =
     std::remove_if(trajectories.begin(), trajectories.end(), [&](const auto & trajectory) {
-      // TODO: this query is slow, consider using other methods similar to
+      // TODO(go-sakayori): this query is slow, consider using other methods similar to
       // BoundaryDepartureChecker::getFusedLaneletPolygonForPath?
       const auto lanes = get_lanelets_from_trajectory(trajectory.points);
 
@@ -147,7 +149,7 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
 Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::stop_line_check(
   const Trajectories::ConstSharedPtr msg)
 {
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   auto trajectories = msg->trajectories;
   if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
   const lanelet::ConstLanelets lanelets(

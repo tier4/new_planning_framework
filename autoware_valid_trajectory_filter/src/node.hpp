@@ -70,11 +70,11 @@ private:
   std::map<int64_t, TrafficSignalStamped> traffic_light_id_map_;
 
   autoware::vehicle_info_utils::VehicleInfo vehicle_info_;
-  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+  rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   std::shared_ptr<BoundaryDepartureChecker> boundary_departure_checker_;
 
-  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
+  mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
