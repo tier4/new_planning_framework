@@ -17,18 +17,24 @@
 
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 
+#include <autoware/boundary_departure_checker/boundary_departure_checker.hpp>
 #include <autoware/trajectory_selector_common/type_alias.hpp>
+#include <autoware_utils/system/time_keeper.hpp>
 #include <autoware_utils_rclcpp/polling_subscriber.hpp>
 #include <rclcpp/subscription.hpp>
 
 #include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 #include <autoware_perception_msgs/msg/traffic_light_group_array.hpp>
 
+#include <lanelet2_core/Forward.h>
+
 #include <map>
 #include <memory>
+#include <optional>
 
 namespace autoware::trajectory_selector::valid_trajectory_filter
 {
+using autoware::boundary_departure_checker::BoundaryDepartureChecker;
 
 struct TrafficSignalStamped
 {
@@ -46,6 +52,9 @@ private:
 
   void map_callback(const LaneletMapBin::ConstSharedPtr msg);
 
+  lanelet::ConstLanelets get_lanelets_from_trajectory(
+    const TrajectoryPoints & trajectory_points) const;
+
   Trajectories::ConstSharedPtr traffic_light_check(const Trajectories::ConstSharedPtr msg);
   Trajectories::ConstSharedPtr stop_line_check(const Trajectories::ConstSharedPtr msg);
 
@@ -59,6 +68,13 @@ private:
   std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
 
   std::map<int64_t, TrafficSignalStamped> traffic_light_id_map_;
+
+  autoware::vehicle_info_utils::VehicleInfo vehicle_info_;
+  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+    debug_processing_time_detail_pub_;
+  std::shared_ptr<BoundaryDepartureChecker> boundary_departure_checker_;
+
+  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
 };
 
 }  // namespace autoware::trajectory_selector::valid_trajectory_filter
