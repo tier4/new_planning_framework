@@ -21,6 +21,7 @@
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <rclcpp/logging.hpp>
 
+#include <autoware_internal_planning_msgs/msg/detail/path_point_with_lane_id__struct.hpp>
 #include <autoware_new_planning_msgs/msg/detail/trajectories__struct.hpp>
 
 #include <lanelet2_core/Forward.h>
@@ -33,31 +34,76 @@
 
 namespace autoware::trajectory_selector::valid_trajectory_filter
 {
+using autoware_internal_planning_msgs::msg::PathPointWithLaneId;
+using autoware_internal_planning_msgs::msg::PathWithLaneId;
 
 ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions & node_options)
-: TrajectoryFilterInterface{"trajectory_ranker_node", node_options}
+: TrajectoryFilterInterface{"trajectory_ranker_node", node_options},
+  vehicle_info_{autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo()}
 {
+  debug_processing_time_detail_pub_ =
+    this->create_publisher<autoware_utils_debug::ProcessingTimeDetail>(
+      "~/debug/processing_time_detail_ms", 1);
+  time_keeper_ =
+    std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&ValidTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
+
+  autoware::boundary_departure_checker::Param boundary_departure_checker_params;
+  boundary_departure_checker_ =
+    std::make_shared<autoware::boundary_departure_checker::BoundaryDepartureChecker>(
+      boundary_departure_checker_params, vehicle_info_, time_keeper_);
 }
 
 void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
 {
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   const auto trajectories = traffic_light_check(msg);
   publish(trajectories);
 }
 
 void ValidTrajectoryFilterNode::map_callback(const LaneletMapBin::ConstSharedPtr msg)
 {
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(
     *msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 }
 
+lanelet::ConstLanelets ValidTrajectoryFilterNode::get_lanelets_from_trajectory(
+  const TrajectoryPoints & trajectory_points) const
+{
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
+  lanelet::ConstLanelets lanes;
+  PathWithLaneId path;
+  path.points.reserve(trajectory_points.size());
+  for (const auto & point : trajectory_points) {
+    PathPointWithLaneId path_point;
+    path_point.point.pose = point.pose;
+    path_point.point.longitudinal_velocity_mps = point.longitudinal_velocity_mps;
+    path_point.point.lateral_velocity_mps = point.lateral_velocity_mps;
+    path_point.point.heading_rate_rps = point.heading_rate_rps;
+    path.points.push_back(path_point);
+  }
+  const auto lanelet_distance_pair =
+    boundary_departure_checker_->getLaneletsFromPath(lanelet_map_ptr_, path);
+  if (lanelet_distance_pair.empty()) {
+    RCLCPP_WARN(get_logger(), "No lanelets found in the map");
+    return lanes;
+  }
+
+  for (const auto & lanelet_distance : lanelet_distance_pair) {
+    const auto & lanelet = lanelet_distance.second;
+    lanes.push_back(lanelet);
+  }
+  return lanes;
+}
+
 Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
   const Trajectories::ConstSharedPtr msg)
 {
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   auto trajectories = msg->trajectories;
   const auto traffic_signal_msg = traffic_signals_subscriber_.take_data();
 
@@ -72,12 +118,12 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
   }
 
   if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
-  const lanelet::ConstLanelets lanelets(
-    lanelet_map_ptr_->laneletLayer.begin(), lanelet_map_ptr_->laneletLayer.end());
 
-  const auto itr = std::remove_if(
-    trajectories.begin(), trajectories.end(), [this, lanelets](const auto & trajectory) {
-      const auto lanes = utils::get_lanes_from_trajectory(trajectory.points, lanelets);
+  const auto itr =
+    std::remove_if(trajectories.begin(), trajectories.end(), [&](const auto & trajectory) {
+      // TODO(go-sakayori): this query is slow, consider using other methods similar to
+      // BoundaryDepartureChecker::getFusedLaneletPolygonForPath?
+      const auto lanes = get_lanelets_from_trajectory(trajectory.points);
 
       for (const auto & lane : lanes) {
         for (const auto & element : lane.template regulatoryElementsAs<lanelet::TrafficLight>()) {
@@ -89,7 +135,6 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
           }
         }
       }
-
       return false;
     });
   trajectories.erase(itr, trajectories.end());
@@ -104,6 +149,7 @@ Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::traffic_light_check(
 Trajectories::ConstSharedPtr ValidTrajectoryFilterNode::stop_line_check(
   const Trajectories::ConstSharedPtr msg)
 {
+  autoware_utils_debug::ScopedTimeTrack st(__func__, *time_keeper_);
   auto trajectories = msg->trajectories;
   if (!lanelet_map_ptr_) return std::make_shared<Trajectories>();
   const lanelet::ConstLanelets lanelets(
