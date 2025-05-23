@@ -35,7 +35,7 @@
     </composable_node>
 
     <!-- check trajectory safety -->
-    <composable_node
+    <!-- <composable_node
       pkg="autoware_feasible_trajectory_filter"
       plugin="autoware::trajectory_selector::feasible_trajectory_filter::FeasibleTrajectoryFilterNode"
       name="feasible_trajectory_filter"
@@ -46,21 +46,22 @@
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
-    </composable_node>
+    </composable_node> -->
 
     <!-- validate trajectory that it obeys traffic rules -->
-    <composable_node pkg="autoware_valid_trajectory_filter" plugin="autoware::trajectory_selector::valid_trajectory_filter::ValidTrajectoryFilterNode" name="valid_trajectory_filter" namespace="">
+    <!-- <composable_node pkg="autoware_valid_trajectory_filter" plugin="autoware::trajectory_selector::valid_trajectory_filter::ValidTrajectoryFilterNode" name="valid_trajectory_filter" namespace="">
       <remap from="~/input/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
       <remap from="~/input/traffic_signals" to="/perception/traffic_light_recognition/traffic_signals"/>
       <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
-    </composable_node>
+    </composable_node> -->
 
     <!-- evaluate trajectory and calculate score for each trajectories -->
     <composable_node pkg="autoware_trajectory_ranker" plugin="autoware::trajectory_selector::trajectory_ranker::TrajectoryRankerNode" name="trajectory_ranker" namespace="">
       <param from="$(var evaluator_weight_param_path)"/>
 
-      <remap from="~/input/trajectories" to="/planning/trajectory_selector/validated/trajectories"/>
+      <!-- Disabled for now <remap from="~/input/trajectories" to="/planning/trajectory_selector/validated/trajectories"/> -->
+      <remap from="~/input/trajectories" to="/planning/trajectory_selector/concatenate/trajectories"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
 
       <remap from="~/input/route" to="/planning/mission_planning/route"/>
