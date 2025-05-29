@@ -16,6 +16,7 @@
 
 #include "utils.hpp"
 
+#include <autoware/lane_departure_checker/lane_departure_checker.hpp>
 #include <autoware/traffic_light_utils/traffic_light_utils.hpp>
 #include <autoware_lanelet2_extension/regulatory_elements/autoware_traffic_light.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
@@ -50,10 +51,10 @@ ValidTrajectoryFilterNode::ValidTrajectoryFilterNode(const rclcpp::NodeOptions &
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&ValidTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
 
-  autoware::boundary_departure_checker::Param boundary_departure_checker_params;
-  boundary_departure_checker_ =
-    std::make_shared<autoware::boundary_departure_checker::BoundaryDepartureChecker>(
-      boundary_departure_checker_params, vehicle_info_, time_keeper_);
+  autoware::lane_departure_checker::Param lane_departure_checker_params;
+  lane_departure_checker_ =
+    std::make_shared<autoware::lane_departure_checker::LaneDepartureChecker>(
+      lane_departure_checker_params, vehicle_info_, time_keeper_);
 }
 
 void ValidTrajectoryFilterNode::process(const Trajectories::ConstSharedPtr msg)
@@ -87,7 +88,7 @@ lanelet::ConstLanelets ValidTrajectoryFilterNode::get_lanelets_from_trajectory(
     path.points.push_back(path_point);
   }
   const auto lanelet_distance_pair =
-    boundary_departure_checker_->getLaneletsFromPath(lanelet_map_ptr_, path);
+    lane_departure_checker_->getLaneletsFromPath(lanelet_map_ptr_, path);
   if (lanelet_distance_pair.empty()) {
     RCLCPP_WARN(get_logger(), "No lanelets found in the map");
     return lanes;
