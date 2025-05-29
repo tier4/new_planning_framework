@@ -17,7 +17,7 @@
 
 #include "autoware/trajectory_selector_common/interface/node_interface.hpp"
 
-#include <autoware/boundary_departure_checker/boundary_departure_checker.hpp>
+#include <autoware/lane_departure_checker/lane_departure_checker.hpp>
 #include <autoware/trajectory_selector_common/type_alias.hpp>
 #include <autoware_utils_debug/time_keeper.hpp>
 #include <autoware_utils_rclcpp/polling_subscriber.hpp>
@@ -34,7 +34,7 @@
 
 namespace autoware::trajectory_selector::valid_trajectory_filter
 {
-using autoware::boundary_departure_checker::BoundaryDepartureChecker;
+using autoware::lane_departure_checker::LaneDepartureChecker;
 
 struct TrafficSignalStamped
 {
@@ -72,7 +72,7 @@ private:
   autoware::vehicle_info_utils::VehicleInfo vehicle_info_;
   rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
-  std::shared_ptr<BoundaryDepartureChecker> boundary_departure_checker_;
+  std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
 };
