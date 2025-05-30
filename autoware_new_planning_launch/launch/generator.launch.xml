@@ -11,7 +11,7 @@
     <arg name="map_path" value="$(var map_path)"/>
   </include>
 
-  <include file="$(find-pkg-share autoware_trajectory_interpolator)/launch/trajectory_interpolator.launch.xml">
+  <include file="$(find-pkg-share autoware_trajectory_optimizer)/launch/trajectory_optimizer.launch.xml">
   </include>
 
   <group if="$(var launch_hierarchy_planning)">
