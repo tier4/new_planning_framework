@@ -21,19 +21,18 @@
     </include>
   </group>
 
-
-<include file="$(find-pkg-share autoware_trajectory_ranker)/launch/trajectory_ranker.launch.xml">
+  <!-- Add feasible and valid trajectory filters once they are fixed -->
+  <include file="$(find-pkg-share autoware_trajectory_ranker)/launch/trajectory_ranker.launch.xml">
       <arg name="evaluator_weight_param_path" value="$(var evaluator_weight_param_path)"/>
       <arg name="input_trajectories_topic" value="/planning/trajectory_selector/concatenate/trajectories"/>
-</include>
+  </include>
 
-
-<include file="$(find-pkg-share autoware_trajectory_concatenator)/launch/trajectory_concatenator.launch.xml">
+  <include file="$(find-pkg-share autoware_trajectory_concatenator)/launch/trajectory_concatenator.launch.xml">
    <arg name="selector_component_input" value="$(var selector_component_input)"/>
    <arg name="control_component_input" value="$(var control_component_input)"/>
-</include>
+  </include>
 
-<include file="$(find-pkg-share autoware_trajectory_adaptor)/launch/trajectory_adaptor.launch.xml">
+  <include file="$(find-pkg-share autoware_trajectory_adaptor)/launch/trajectory_adaptor.launch.xml">
    <arg name="control_component_input" value="$(var control_component_input)"/>
   </include>
-</launch>
+  </launch>
