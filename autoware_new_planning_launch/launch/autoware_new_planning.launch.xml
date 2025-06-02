@@ -24,15 +24,6 @@
       </include>
   </group>
 
-
-
-  <!-- <group> -->
-  <!--   <push-ros-namespace namespace="planning/external_generator"/> -->
-  <!--   <include file="$(find-pkg-share autoware_new_planning_launch)/launch/sampling_base_planner.launch.xml"> -->
-  <!--     <arg name="vehicle_model" value="$(var vehicle_model)"/> -->
-  <!--   </include> -->
-  <!-- </group> -->
-
   <group>
     <include file="$(find-pkg-share autoware_new_planning_launch)/launch/temp_autoware_selector.launch.xml">
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
