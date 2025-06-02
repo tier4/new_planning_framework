@@ -23,6 +23,10 @@
     </include>
   </group>
 
-  <include file="$(find-pkg-share autoware_trajectory_adaptor)/launch/trajectory_adaptor.launch.xml">
+<include file="$(find-pkg-share autoware_trajectory_concatenator)/launch/trajectory_concatenator.launch.xml">
+  </include>
+</launch>
+
+<include file="$(find-pkg-share autoware_trajectory_adaptor)/launch/trajectory_adaptor.launch.xml">
   </include>
 </launch>

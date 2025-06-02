@@ -2,7 +2,7 @@
 <launch>
 
   <node pkg="autoware_trajectory_adaptor" exec="autoware_trajectory_adaptor_node" name="trajectory_adaptor_node" output="screen">
-     <remap from="~/input/trajectories" to="/planning/candidate/trajectories"/>
+     <remap from="~/input/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
       <remap from="~/output/hazard_lights_cmd" to="/planning/hazard_lights_cmd"/>
       <remap from="~/output/trajectory" to="$(var control_component_input)"/>
       <remap from="~/output/markers" to="/planning/trajectory_selector/markers"/>
