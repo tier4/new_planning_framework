@@ -2,7 +2,7 @@
 <launch>
 
   <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
-  <arg name="trajectory_concatenator_param_path" default="$(find-pkg-share autoware_trajectory_concatenator)/config/trajectory_concatenator.param.yaml"/>
+  <arg name="trajectory_concatenator_param_path" default="$(find-pkg-share autoware_trajectory_concatenator)/config/concatenator.param.yaml"/>
 
   <node pkg="autoware_trajectory_concatenator" exec="autoware_trajectory_concatenator_node" name="trajectory_concatenator_node" output="screen">
       <param from="$(var trajectory_concatenator_param_path)" allow_substs="true"/>

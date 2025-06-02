@@ -4,5 +4,5 @@
 
     selected_trajectory:
       use: false
-      endpoint_time_min: 10 #[s]
+      endpoint_time_min: 10.0 #[s]
       extension_interval: 0.1 # [s]
