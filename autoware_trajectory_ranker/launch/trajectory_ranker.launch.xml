@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="trajectory_ranker_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/evaluation.param.yaml"/>
+  <arg name="input_trajectories_topic" default="/planning/trajectory_selector/validated/trajectories"/>
+
+  <node pkg="autoware_trajectory_ranker" exec="autoware_trajectory_ranker_node" name="trajectory_ranker_node" output="screen">
+    <param from="$(var trajectory_ranker_param_path)" allow_substs="true"/>
+    <param from="$(var evaluator_weight_param_path)"/>
+
+      <!-- Disabled for now <remap from="~/input/trajectories" to="/planning/trajectory_selector/validated/trajectories"/> -->
+      <remap from="~/input/trajectories" to="$(var input_trajectories_topic)"/>
+      <remap from="~/output/trajectories" to="/planning/trajectory_selector/scored/trajectories"/>
+
+      <remap from="~/input/route" to="/planning/mission_planning/route"/>
+      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+      <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
+      <remap from="~/input/steering" to="/vehicle/status/steering_status"/>
+      <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
+  </node>
+</launch>
