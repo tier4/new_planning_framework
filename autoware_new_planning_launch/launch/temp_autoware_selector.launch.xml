@@ -1,0 +1,28 @@
+<launch>
+  <!-- essential params -->
+  <arg name="vehicle_model" description="vehicle model name"/>
+
+  <!-- param path -->
+  <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
+  <arg name="evaluator_weight_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/evaluation.param.yaml"/>
+
+  <!-- topic name -->
+  <arg name="control_component_input" default="/planning/scenario_planning/trajectory"/>
+  <arg name="selector_component_input" default="/planning/candidate/trajectories"/>
+
+  <!-- option -->
+  <arg name="container_type" default="component_container_mt"/>
+  <arg name="stand_alone" default="true"/>
+  <arg name="use_dummy_trajectory" default="true"/>
+  <arg name="use_sim_time" default="false" description="use_sim_time"/>
+
+  <group if="$(var stand_alone)" scoped="false">
+    <include file="$(find-pkg-share global_parameter_loader)/launch/global_params.launch.py">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="vehicle_model" value="$(var vehicle_model)"/>
+    </include>
+  </group>
+
+  <include file="$(find-pkg-share autoware_trajectory_adaptor)/launch/trajectory_adaptor.launch.xml">
+  </include>
+</launch>
