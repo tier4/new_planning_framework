@@ -35,7 +35,7 @@
     </composable_node>
 
     <!-- check trajectory safety -->
-    <!-- <composable_node
+    <composable_node
       pkg="autoware_feasible_trajectory_filter"
       plugin="autoware::trajectory_selector::feasible_trajectory_filter::FeasibleTrajectoryFilterNode"
       name="feasible_trajectory_filter"
@@ -46,7 +46,8 @@
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
-    </composable_node> -->
+      <remap from="~/output/current_velocity_limit_mps" to="/planning/scenario_planning/current_max_velocity"/>
+    </composable_node>
 
     <!-- validate trajectory that it obeys traffic rules -->
     <!-- <composable_node pkg="autoware_valid_trajectory_filter" plugin="autoware::trajectory_selector::valid_trajectory_filter::ValidTrajectoryFilterNode" name="valid_trajectory_filter" namespace="">

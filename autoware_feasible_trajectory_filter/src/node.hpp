@@ -21,10 +21,13 @@
 #include <autoware_utils_debug/time_keeper.hpp>
 #include <autoware_utils_rclcpp/polling_subscriber.hpp>
 
+#include <autoware_internal_planning_msgs/msg/velocity_limit.hpp>
+
 #include <memory>
 
 namespace autoware::trajectory_selector::feasible_trajectory_filter
 {
+using autoware_internal_planning_msgs::msg::VelocityLimit;  // temporary
 
 class FeasibleTrajectoryFilterNode : public TrajectoryFilterInterface
 {
@@ -43,6 +46,8 @@ private:
   rclcpp::Publisher<autoware_utils_debug::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{nullptr};
+
+  rclcpp::Publisher<VelocityLimit>::SharedPtr pub_velocity_limit_;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
   autoware_utils_rclcpp::InterProcessPollingSubscriber<Odometry> sub_odometry_{

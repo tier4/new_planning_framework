@@ -35,6 +35,15 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
     "~/debug/processing_time_detail_ms/feasible_trajectory_filter", 1);
   time_keeper_ =
     std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
+
+  pub_velocity_limit_ = create_publisher<VelocityLimit>("~/output/current_velocity_limit_mps", 1);
+
+  // publish default max velocity
+  VelocityLimit max_vel_msg{};
+  max_vel_msg.stamp = this->now();
+  max_vel_msg.max_velocity = listener_->get_params().max_velocity;
+  pub_velocity_limit_->publish(max_vel_msg);
+
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&FeasibleTrajectoryFilterNode::map_callback, this, std::placeholders::_1));
