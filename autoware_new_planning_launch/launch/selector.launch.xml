@@ -46,6 +46,8 @@
       <remap from="~/input/odometry" to="/localization/kinematic_state"/>
       <remap from="~/input/objects" to="/perception/object_recognition/objects"/>
       <remap from="~/output/trajectories" to="/planning/trajectory_selector/feasible/trajectories"/>
+      +
+      <remap from="~/output/current_velocity_limit_mps" to="/planning/scenario_planning/current_max_velocity"/>
     </composable_node>
 
     <!-- validate trajectory that it obeys traffic rules -->
