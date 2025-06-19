@@ -36,7 +36,7 @@ FeasibleTrajectoryFilterNode::FeasibleTrajectoryFilterNode(const rclcpp::NodeOpt
   time_keeper_ =
     std::make_shared<autoware_utils_debug::TimeKeeper>(debug_processing_time_detail_pub_);
 
-  pub_velocity_limit_ = create_publisher<VelocityLimit>("~/output/current_velocity_limit_mps", 1);
+  pub_velocity_limit_ = create_publisher<VelocityLimit>("~/output/current_velocity_limit_mps", rclcpp::QoS{1}.transient_local());
 
   // publish default max velocity
   VelocityLimit max_vel_msg{};
