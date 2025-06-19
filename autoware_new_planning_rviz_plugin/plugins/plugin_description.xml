@@ -1,0 +1,8 @@
+<library path="autoware_new_planning_rviz_plugin">
+  <class name="rviz_plugins/Trajectories"
+    type="autoware_new_planning_rviz_plugin::TrajectoriesDisplay"
+    base_class_type="rviz_common::Display">
+    <description>Display multiple trajectories from autoware_new_planning_msgs::Trajectories</description>
+    <message_type>autoware_new_planning_msgs/msg/Trajectories</message_type>
+  </class>
+</library>
