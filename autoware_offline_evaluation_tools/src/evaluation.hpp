@@ -21,8 +21,11 @@
 
 #include <autoware/trajectory_selector_common/evaluation.hpp>
 
-#include "autoware_new_planning_msgs/msg/trajectory_displacement_error.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
+#include <geometry_msgs/msg/point.hpp>
+#include <std_msgs/msg/float64.hpp>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <rosbag2_cpp/writer.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -119,6 +122,19 @@ private:
     const std::shared_ptr<TrajectoryPoints> & trajectory,
     const std::shared_ptr<PredictedObjects> & objects,
     const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const;
+
+  void evaluate_and_save_trajectory_safety(
+    const std::shared_ptr<TrajectoryPoints> & trajectory,
+    const std::shared_ptr<PredictedObjects> & objects,
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
+    const std::shared_ptr<TrajectoryPoints> & ground_truth,
+    rosbag2_cpp::Writer & bag_writer) const;
+
+  void save_evaluation_results_to_bag(
+    const double ttc, const std::pair<double, double> & displacement_errors,
+    const std::pair<bool, double> & speed_check, const std::pair<bool, double> & lane_check,
+    const std::tuple<double, double, double> & comfort_metrics,
+    rosbag2_cpp::Writer & bag_writer) const;
 
 
   auto augment_data(

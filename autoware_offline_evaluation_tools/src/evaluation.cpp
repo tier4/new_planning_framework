@@ -524,15 +524,15 @@ void BagEvaluator::evaluate_trajectory_safety(
   
   RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "=== Trajectory Safety Evaluation ===");
   
-  // Calculate TTC
+  // Calculate all metrics
   const double min_ttc = calculate_minimum_ttc(trajectory, objects);
+  const auto speed_check = check_speed_limit_violations(trajectory);
+  const auto lane_check = check_lane_keeping_violations(trajectory, preferred_lanes);
+  const auto comfort_metrics = calculate_comfort_metrics(trajectory);
   
-  // Check traffic rule compliance
-  const auto [speed_violation, max_speed_violation] = check_speed_limit_violations(trajectory);
-  const auto [lane_violation, max_lateral_deviation] = check_lane_keeping_violations(trajectory, preferred_lanes);
-  
-  // Calculate comfort metrics
-  const auto [max_lat_accel, max_lon_accel, max_jerk] = calculate_comfort_metrics(trajectory);
+  const auto [speed_violation, max_speed_violation] = speed_check;
+  const auto [lane_violation, max_lateral_deviation] = lane_check;
+  const auto [max_lat_accel, max_lon_accel, max_jerk] = comfort_metrics;
   
   // Log comprehensive summary
   RCLCPP_INFO(
@@ -561,10 +561,126 @@ void BagEvaluator::evaluate_trajectory_safety(
   }
   
   if (is_safe) {
-    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "\u2713 Trajectory is SAFE");
+    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "✓ Trajectory is SAFE");
   } else {
-    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "\u26a0 Trajectory has SAFETY ISSUES");
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "⚠ Trajectory has SAFETY ISSUES");
   }
+}
+
+void BagEvaluator::save_evaluation_results_to_bag(
+  const double ttc, const std::pair<double, double> & displacement_errors,
+  const std::pair<bool, double> & speed_check, const std::pair<bool, double> & lane_check,
+  const std::tuple<double, double, double> & comfort_metrics,
+  rosbag2_cpp::Writer & bag_writer) const
+{
+  const auto timestamp = rclcpp::Clock().now();
+  
+  // Save TTC as Float64
+  std_msgs::msg::Float64 ttc_msg;
+  ttc_msg.data = ttc;
+  bag_writer.write(ttc_msg, "/evaluation/ttc", timestamp);
+  
+  // Save displacement errors as Point (x=ADE, y=FDE, z=unused)
+  geometry_msgs::msg::Point displacement_msg;
+  displacement_msg.x = displacement_errors.first;  // ADE
+  displacement_msg.y = displacement_errors.second; // FDE
+  displacement_msg.z = 0.0;
+  bag_writer.write(displacement_msg, "/evaluation/displacement_errors", timestamp);
+  
+  // Save speed violation info as Point (x=violation_bool, y=max_violation, z=unused)
+  geometry_msgs::msg::Point speed_msg;
+  speed_msg.x = speed_check.first ? 1.0 : 0.0;
+  speed_msg.y = speed_check.second;
+  speed_msg.z = 0.0;
+  bag_writer.write(speed_msg, "/evaluation/speed_violations", timestamp);
+  
+  // Save lane violation info as Point (x=violation_bool, y=max_deviation, z=unused)
+  geometry_msgs::msg::Point lane_msg;
+  lane_msg.x = lane_check.first ? 1.0 : 0.0;
+  lane_msg.y = lane_check.second;
+  lane_msg.z = 0.0;
+  bag_writer.write(lane_msg, "/evaluation/lane_violations", timestamp);
+  
+  // Save comfort metrics as Point (x=lat_accel, y=lon_accel, z=jerk)
+  geometry_msgs::msg::Point comfort_msg;
+  comfort_msg.x = std::get<0>(comfort_metrics); // max_lateral_accel
+  comfort_msg.y = std::get<1>(comfort_metrics); // max_longitudinal_accel
+  comfort_msg.z = std::get<2>(comfort_metrics); // max_jerk
+  bag_writer.write(comfort_msg, "/evaluation/comfort_metrics", timestamp);
+  
+  // Save comprehensive status as DiagnosticStatus
+  diagnostic_msgs::msg::DiagnosticStatus status_msg;
+  status_msg.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+  status_msg.name = "trajectory_safety_evaluation";
+  status_msg.message = "Trajectory safety metrics";
+  
+  // Add key-value pairs
+  diagnostic_msgs::msg::KeyValue kv;
+  kv.key = "ttc_seconds";
+  kv.value = std::to_string(ttc);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "ade_meters";
+  kv.value = std::to_string(displacement_errors.first);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "fde_meters";
+  kv.value = std::to_string(displacement_errors.second);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "speed_violation";
+  kv.value = speed_check.first ? "true" : "false";
+  status_msg.values.push_back(kv);
+  
+  kv.key = "lane_violation";
+  kv.value = lane_check.first ? "true" : "false";
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_lateral_accel";
+  kv.value = std::to_string(std::get<0>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_longitudinal_accel";
+  kv.value = std::to_string(std::get<1>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_jerk";
+  kv.value = std::to_string(std::get<2>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  bag_writer.write(status_msg, "/evaluation/status", timestamp);
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Evaluation results saved to MCAP bag");
+}
+
+void BagEvaluator::evaluate_and_save_trajectory_safety(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
+  const std::shared_ptr<TrajectoryPoints> & ground_truth,
+  rosbag2_cpp::Writer & bag_writer) const
+{
+  if (!trajectory || trajectory->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Empty trajectory provided for safety evaluation");
+    return;
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "=== Trajectory Safety Evaluation with MCAP Storage ===");
+  
+  // Calculate all metrics
+  const double min_ttc = calculate_minimum_ttc(trajectory, objects);
+  const auto displacement_errors = ground_truth ? 
+    calculate_displacement_errors(trajectory, ground_truth) : std::make_pair(0.0, 0.0);
+  const auto speed_check = check_speed_limit_violations(trajectory);
+  const auto lane_check = check_lane_keeping_violations(trajectory, preferred_lanes);
+  const auto comfort_metrics = calculate_comfort_metrics(trajectory);
+  
+  // Save results to MCAP bag
+  save_evaluation_results_to_bag(
+    min_ttc, displacement_errors, speed_check, lane_check, comfort_metrics, bag_writer);
+  
+  // Also do the regular logging evaluation
+  evaluate_trajectory_safety(trajectory, objects, preferred_lanes);
 }
 
 double BagEvaluator::calculate_euclidean_distance(

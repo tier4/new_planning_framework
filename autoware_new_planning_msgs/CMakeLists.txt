@@ -10,8 +10,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Trajectory.msg"
   "msg/EvaluationInfo.msg"
   "msg/TrajectoriesDebug.msg"
-  "msg/TrajectoryDisplacementError.msg"
-  "msg/TrajectorySafetyMetrics.msg"
   DEPENDENCIES
   geometry_msgs
   std_msgs
