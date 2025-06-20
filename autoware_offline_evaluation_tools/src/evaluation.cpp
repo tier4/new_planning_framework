@@ -405,6 +405,168 @@ std::pair<double, double> BagEvaluator::calculate_displacement_errors(
   return std::make_pair(ade, fde);
 }
 
+std::pair<bool, double> BagEvaluator::check_speed_limit_violations(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const double speed_limit_mps) const
+{
+  if (!trajectory || trajectory->empty()) {
+    return std::make_pair(false, 0.0);
+  }
+
+  bool has_violation = false;
+  double max_violation = 0.0;
+  
+  for (const auto & point : *trajectory) {
+    const double speed = std::abs(point.longitudinal_velocity_mps);
+    if (speed > speed_limit_mps) {
+      has_violation = true;
+      const double violation_amount = speed - speed_limit_mps;
+      max_violation = std::max(max_violation, violation_amount);
+    }
+  }
+  
+  if (has_violation) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("BagEvaluator"), 
+      "Speed limit violation detected: max %.2f m/s over limit (%.2f km/h over)", 
+      max_violation, max_violation * 3.6);
+  }
+  
+  return std::make_pair(has_violation, max_violation);
+}
+
+std::pair<bool, double> BagEvaluator::check_lane_keeping_violations(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const
+{
+  if (!trajectory || trajectory->empty() || !preferred_lanes || preferred_lanes->empty()) {
+    return std::make_pair(false, 0.0);
+  }
+
+  bool has_violation = false;
+  double max_deviation = 0.0;
+  
+  for (const auto & point : *trajectory) {
+    // Use existing lanelet2 utility to calculate lateral deviation
+    const auto arc_coordinates = lanelet::utils::getArcCoordinates(
+      *preferred_lanes, point.pose);
+    
+    const double lateral_deviation = std::abs(arc_coordinates.distance);
+    max_deviation = std::max(max_deviation, lateral_deviation);
+    
+    // Assume lane width of 3.5m, violation if more than 1.75m from center
+    const double lane_half_width = 1.75;
+    if (lateral_deviation > lane_half_width) {
+      has_violation = true;
+    }
+  }
+  
+  if (has_violation) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("BagEvaluator"), 
+      "Lane keeping violation detected: max %.2fm lateral deviation", 
+      max_deviation);
+  }
+  
+  return std::make_pair(has_violation, max_deviation);
+}
+
+std::tuple<double, double, double> BagEvaluator::calculate_comfort_metrics(
+  const std::shared_ptr<TrajectoryPoints> & trajectory) const
+{
+  if (!trajectory || trajectory->size() < 2) {
+    return std::make_tuple(0.0, 0.0, 0.0);
+  }
+  
+  double max_lateral_accel = 0.0;
+  double max_longitudinal_accel = 0.0;
+  double max_jerk = 0.0;
+  
+  std::vector<double> longitudinal_accels;
+  longitudinal_accels.reserve(trajectory->size());
+  
+  // Calculate maximum accelerations
+  for (const auto & point : *trajectory) {
+    // Direct acceleration from trajectory point
+    const double lon_accel = std::abs(point.acceleration_mps2);
+    max_longitudinal_accel = std::max(max_longitudinal_accel, lon_accel);
+    longitudinal_accels.push_back(point.acceleration_mps2);
+    
+    // Lateral acceleration (simplified using lateral velocity)
+    const double lat_accel = std::abs(point.lateral_velocity_mps);
+    max_lateral_accel = std::max(max_lateral_accel, lat_accel);
+  }
+  
+  // Calculate maximum jerk (rate of acceleration change)
+  constexpr double dt = 0.1; // Assume 100ms time resolution
+  for (size_t i = 1; i < longitudinal_accels.size(); ++i) {
+    const double jerk = std::abs((longitudinal_accels[i] - longitudinal_accels[i-1]) / dt);
+    max_jerk = std::max(max_jerk, jerk);
+  }
+  
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Comfort metrics - Max lateral accel: %.2f m/s², Max longitudinal accel: %.2f m/s², Max jerk: %.2f m/s³", 
+    max_lateral_accel, max_longitudinal_accel, max_jerk);
+  
+  return std::make_tuple(max_lateral_accel, max_longitudinal_accel, max_jerk);
+}
+
+void BagEvaluator::evaluate_trajectory_safety(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const
+{
+  if (!trajectory || trajectory->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Empty trajectory provided for safety evaluation");
+    return;
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "=== Trajectory Safety Evaluation ===");
+  
+  // Calculate TTC
+  const double min_ttc = calculate_minimum_ttc(trajectory, objects);
+  
+  // Check traffic rule compliance
+  const auto [speed_violation, max_speed_violation] = check_speed_limit_violations(trajectory);
+  const auto [lane_violation, max_lateral_deviation] = check_lane_keeping_violations(trajectory, preferred_lanes);
+  
+  // Calculate comfort metrics
+  const auto [max_lat_accel, max_lon_accel, max_jerk] = calculate_comfort_metrics(trajectory);
+  
+  // Log comprehensive summary
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Safety Summary - TTC: %.2fs, Speed violation: %s (%.2f m/s), Lane violation: %s (%.2fm)",
+    min_ttc, 
+    speed_violation ? "YES" : "NO", max_speed_violation,
+    lane_violation ? "YES" : "NO", max_lateral_deviation);
+  
+  // Evaluate against thresholds
+  bool is_safe = true;
+  if (min_ttc < 3.0) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: TTC below 3 seconds!");
+    is_safe = false;
+  }
+  if (speed_violation) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: Speed limit violation!");
+    is_safe = false;
+  }
+  if (lane_violation) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: Lane keeping violation!");
+    is_safe = false;
+  }
+  if (max_lat_accel > 3.0 || max_lon_accel > 4.0 || max_jerk > 3.0) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNCOMFORTABLE: High accelerations/jerk!");
+  }
+  
+  if (is_safe) {
+    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "\u2713 Trajectory is SAFE");
+  } else {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "\u26a0 Trajectory has SAFETY ISSUES");
+  }
+}
+
 double BagEvaluator::calculate_euclidean_distance(
   const geometry_msgs::msg::Pose & pose1,
   const geometry_msgs::msg::Pose & pose2) const

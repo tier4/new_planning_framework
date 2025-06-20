@@ -104,6 +104,22 @@ private:
     const std::shared_ptr<TrajectoryPoints> & trajectory,
     const std::shared_ptr<PredictedObjects> & objects) const;
 
+  std::pair<bool, double> check_speed_limit_violations(
+    const std::shared_ptr<TrajectoryPoints> & trajectory,
+    const double speed_limit_mps = 13.89) const; // Default 50 km/h
+
+  std::pair<bool, double> check_lane_keeping_violations(
+    const std::shared_ptr<TrajectoryPoints> & trajectory,
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const;
+
+  std::tuple<double, double, double> calculate_comfort_metrics(
+    const std::shared_ptr<TrajectoryPoints> & trajectory) const;
+
+  void evaluate_trajectory_safety(
+    const std::shared_ptr<TrajectoryPoints> & trajectory,
+    const std::shared_ptr<PredictedObjects> & objects,
+    const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const;
+
 
   auto augment_data(
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
