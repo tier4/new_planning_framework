@@ -39,7 +39,16 @@ BagEvaluator::BagEvaluator(
   const std::shared_ptr<RouteHandler> & route_handler,
   const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters)
-: Evaluator{route_handler, vehicle_info}, parameters_{parameters}
+: Evaluator{route_handler, vehicle_info}, parameters_{parameters}, evaluation_bag_writer_{nullptr}
+{
+}
+
+BagEvaluator::BagEvaluator(
+  const std::shared_ptr<RouteHandler> & route_handler,
+  const std::shared_ptr<VehicleInfo> & vehicle_info,
+  const std::shared_ptr<DataAugmentParameters> & parameters,
+  rosbag2_cpp::Writer * bag_writer)
+: Evaluator{route_handler, vehicle_info}, parameters_{parameters}, evaluation_bag_writer_{bag_writer}
 {
 }
 
@@ -76,6 +85,17 @@ void BagEvaluator::setup(
   }
 
   // Evaluator::setup(previous_points);
+  
+  // Perform safety evaluation if bag writer is available
+  if (evaluation_bag_writer_) {
+    const auto ground_truth_data = get("ground_truth");
+    if (ground_truth_data && ground_truth_data->points()) {
+      RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Performing safety evaluation during setup");
+      evaluate_and_save_trajectory_safety(
+        ground_truth_data->points(), objects_, preferred_lanes_, 
+        ground_truth_data->points(), *evaluation_bag_writer_);
+    }
+  }
 }
 
 auto BagEvaluator::preferred_lanes(
@@ -681,6 +701,55 @@ void BagEvaluator::evaluate_and_save_trajectory_safety(
   
   // Also do the regular logging evaluation
   evaluate_trajectory_safety(trajectory, objects, preferred_lanes);
+}
+
+void BagEvaluator::setup_with_live_trajectory_evaluation(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const std::shared_ptr<TrajectoryPoints> & previous_points,
+  const Trajectory & live_trajectory)
+{
+  // First do regular setup
+  setup(replay_data, previous_points);
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Starting live trajectory evaluation");
+  
+  // Generate ground truth from live trajectory using localization
+  const auto ground_truth_traj = ground_truth_from_live_trajectory(replay_data, live_trajectory);
+  
+  if (!ground_truth_traj || ground_truth_traj->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Failed to generate ground truth from live trajectory");
+    return;
+  }
+  
+  // Convert live trajectory to TrajectoryPoints for evaluation
+  auto live_traj_points = std::make_shared<TrajectoryPoints>(live_trajectory.points);
+  
+  // Calculate displacement errors between live trajectory and ground truth
+  const auto displacement_errors = calculate_displacement_errors(live_traj_points, ground_truth_traj);
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Live trajectory evaluation - ADE: %.3fm, FDE: %.3fm", 
+    displacement_errors.first, displacement_errors.second);
+  
+  // Perform comprehensive safety evaluation
+  if (evaluation_bag_writer_) {
+    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Saving live trajectory evaluation to MCAP");
+    
+    // Calculate all safety metrics for live trajectory
+    const double min_ttc = calculate_minimum_ttc(live_traj_points, objects_);
+    const auto speed_check = check_speed_limit_violations(live_traj_points);
+    const auto lane_check = check_lane_keeping_violations(live_traj_points, preferred_lanes_);
+    const auto comfort_metrics = calculate_comfort_metrics(live_traj_points);
+    
+    // Save all results to MCAP
+    save_evaluation_results_to_bag(
+      min_ttc, displacement_errors, speed_check, lane_check, comfort_metrics, *evaluation_bag_writer_);
+  } else {
+    // Just do logging evaluation
+    evaluate_trajectory_safety(live_traj_points, objects_, preferred_lanes_);
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Live trajectory evaluation completed");
 }
 
 double BagEvaluator::calculate_euclidean_distance(

@@ -157,15 +157,25 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
     
     evaluation_bag_writer_->open(storage_options, converter_options);
     
-    // Create topic for displacement errors
-    const auto topic_info = rosbag2_storage::TopicMetadata{
-      "/trajectory_evaluation/displacement_errors",
-      "autoware_new_planning_msgs/msg/TrajectoryDisplacementError",
-      rmw_get_serialization_format(),
-      ""
+    // Create topics for evaluation results
+    const std::vector<std::pair<std::string, std::string>> topics = {
+      {"/evaluation/ttc", "std_msgs/msg/Float64"},
+      {"/evaluation/displacement_errors", "geometry_msgs/msg/Point"},
+      {"/evaluation/speed_violations", "geometry_msgs/msg/Point"},
+      {"/evaluation/lane_violations", "geometry_msgs/msg/Point"},
+      {"/evaluation/comfort_metrics", "geometry_msgs/msg/Point"},
+      {"/evaluation/status", "diagnostic_msgs/msg/DiagnosticStatus"}
     };
     
-    evaluation_bag_writer_->create_topic(topic_info);
+    for (const auto& [topic_name, topic_type] : topics) {
+      const auto topic_info = rosbag2_storage::TopicMetadata{
+        topic_name,
+        topic_type,
+        rmw_get_serialization_format(),
+        ""
+      };
+      evaluation_bag_writer_->create_topic(topic_info);
+    }
     
     RCLCPP_INFO(get_logger(), "Evaluation bag writer initialized: %s", output_bag_path.c_str());
   } catch (const std::exception& e) {
@@ -504,7 +514,7 @@ void OfflineEvaluatorNode::play(
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
 
   const auto bag_evaluator =
-    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
+    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters(), evaluation_bag_writer_.get());
 
   const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {
@@ -558,39 +568,9 @@ void OfflineEvaluatorNode::play(
             const auto displacement_errors = bag_evaluator->calculate_displacement_errors(
               candidate_trajectory, ground_truth_trajectory);
             
-            // Log evaluation results
-            RCLCPP_INFO(get_logger(), 
-              "Displacement errors - ADE: %.3f, FDE: %.3f, Max: %.3f, Min: %.3f",
-              displacement_errors.average_displacement_error,
-              displacement_errors.final_displacement_error,
-              displacement_errors.max_displacement_error,
-              displacement_errors.min_displacement_error);
-            
-            // Store results in evaluation bag
-            if (evaluation_bag_writer_) {
-              try {
-                // Serialize the message
-                rclcpp::Serialization<autoware_new_planning_msgs::msg::TrajectoryDisplacementError> serializer;
-                rclcpp::SerializedMessage serialized_msg;
-                serializer.serialize_message(&displacement_errors, &serialized_msg);
-                
-                // Write to bag with current timestamp
-                evaluation_bag_writer_->write(
-                  serialized_msg,
-                  "/trajectory_evaluation/displacement_errors",
-                  rclcpp::Clock().now()
-                );
-                
-                RCLCPP_DEBUG(get_logger(), "Stored displacement errors in evaluation bag");
-              } catch (const std::exception& e) {
-                RCLCPP_ERROR(get_logger(), "Failed to store displacement errors: %s", e.what());
-              }
-            }
-          } else {
-            RCLCPP_WARN(get_logger(), "Failed to generate ground truth trajectory");
-          }
+          RCLCPP_INFO(get_logger(), "Live trajectory evaluation completed and results saved to MCAP");
         } catch (const std::exception& e) {
-          RCLCPP_ERROR(get_logger(), "Error generating ground truth: %s", e.what());
+          RCLCPP_ERROR(get_logger(), "Live trajectory evaluation failed: %s", e.what());
         }
       }
     }
@@ -699,7 +679,7 @@ void OfflineEvaluatorNode::weight(
     autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.time_step");
 
   const auto bag_evaluator =
-    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
+    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters(), evaluation_bag_writer_.get());
 
   const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
   for (size_t i = 0; i < metrics.size(); i++) {

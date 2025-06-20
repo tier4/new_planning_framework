@@ -46,9 +46,20 @@ public:
     const std::shared_ptr<VehicleInfo> & vehicle_info,
     const std::shared_ptr<DataAugmentParameters> & parameters);
 
+  BagEvaluator(
+    const std::shared_ptr<RouteHandler> & route_handler,
+    const std::shared_ptr<VehicleInfo> & vehicle_info,
+    const std::shared_ptr<DataAugmentParameters> & parameters,
+    rosbag2_cpp::Writer * bag_writer);
+
   void setup(
     const std::shared_ptr<BagData> & bag_data,
     const std::shared_ptr<TrajectoryPoints> & previous_points);
+
+  void setup_with_live_trajectory_evaluation(
+    const std::shared_ptr<ReplayEvaluationData> & replay_data,
+    const std::shared_ptr<TrajectoryPoints> & previous_points,
+    const Trajectory & live_trajectory);
 
   auto loss(const std::shared_ptr<EvaluatorParameters> & parameters)
     -> std::pair<double, std::shared_ptr<TrajectoryPoints>>;
@@ -153,6 +164,8 @@ private:
   std::shared_ptr<PredictedObjects> objects_;
 
   std::shared_ptr<lanelet::ConstLanelets> preferred_lanes_;
+
+  rosbag2_cpp::Writer * evaluation_bag_writer_; // Optional bag writer for storing results
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
