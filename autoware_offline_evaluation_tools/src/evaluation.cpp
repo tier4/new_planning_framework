@@ -366,44 +366,19 @@ auto BagEvaluator::convert_localization_to_trajectory_point(
   return traj_point;
 }
 
-auto BagEvaluator::calculate_displacement_errors(
+std::pair<double, double> BagEvaluator::calculate_displacement_errors(
   const std::shared_ptr<TrajectoryPoints> & candidate_trajectory,
   const std::shared_ptr<TrajectoryPoints> & ground_truth_trajectory) const
-  -> autoware_new_planning_msgs::msg::TrajectoryDisplacementError
 {
-  autoware_new_planning_msgs::msg::TrajectoryDisplacementError error_msg;
-  
-  // Set header
-  error_msg.header.stamp = rclcpp::Clock().now();
-  error_msg.header.frame_id = "map";
-  
-  // Trajectory identification
-  error_msg.trajectory_id = "live_trajectory";
-  error_msg.trajectory_sequence_number = 0; // Could be incremented for multiple evaluations
-  
-  // Trajectory information
-  error_msg.ground_truth_points_count = ground_truth_trajectory ? ground_truth_trajectory->size() : 0;
-  error_msg.candidate_points_count = candidate_trajectory ? candidate_trajectory->size() : 0;
-  
   if (!candidate_trajectory || !ground_truth_trajectory || 
       candidate_trajectory->empty() || ground_truth_trajectory->empty()) {
-    error_msg.evaluation_successful = false;
-    error_msg.error_message = "Empty or null trajectory provided";
-    return error_msg;
+    return std::make_pair(0.0, 0.0);
   }
-  
-  const auto start_time = std::chrono::high_resolution_clock::now();
   
   // Find minimum size for comparison
   const auto min_size = std::min(candidate_trajectory->size(), ground_truth_trajectory->size());
-  error_msg.evaluated_points_count = static_cast<uint32_t>(min_size);
-  
-  std::vector<double> point_errors;
-  point_errors.reserve(min_size);
   
   double sum_errors = 0.0;
-  double max_error = 0.0;
-  double min_error = std::numeric_limits<double>::max();
   
   // Calculate point-wise displacement errors
   for (size_t i = 0; i < min_size; ++i) {
@@ -411,59 +386,28 @@ auto BagEvaluator::calculate_displacement_errors(
     const auto& ground_truth_pose = ground_truth_trajectory->at(i).pose;
     
     const double displacement_error = calculate_euclidean_distance(candidate_pose, ground_truth_pose);
-    
-    point_errors.push_back(displacement_error);
     sum_errors += displacement_error;
-    max_error = std::max(max_error, displacement_error);
-    min_error = std::min(min_error, displacement_error);
   }
   
   // Calculate ADE (Average Displacement Error)
-  error_msg.average_displacement_error = min_size > 0 ? sum_errors / min_size : 0.0;
+  const double ade = min_size > 0 ? sum_errors / static_cast<double>(min_size) : 0.0;
   
   // Calculate FDE (Final Displacement Error)
+  double fde = 0.0;
   if (min_size > 0) {
     const auto& final_candidate_pose = candidate_trajectory->at(min_size - 1).pose;
     const auto& final_ground_truth_pose = ground_truth_trajectory->at(min_size - 1).pose;
-    error_msg.final_displacement_error = calculate_euclidean_distance(
-      final_candidate_pose, final_ground_truth_pose);
-  } else {
-    error_msg.final_displacement_error = 0.0;
+    fde = calculate_euclidean_distance(final_candidate_pose, final_ground_truth_pose);
   }
   
-  // Set min/max errors
-  error_msg.max_displacement_error = max_error;
-  error_msg.min_displacement_error = min_size > 0 ? min_error : 0.0;
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "ADE: %.3fm, FDE: %.3fm", ade, fde);
   
-  // Calculate standard deviation
-  if (min_size > 1) {
-    double variance = 0.0;
-    const double mean = error_msg.average_displacement_error;
-    for (const auto& error : point_errors) {
-      variance += (error - mean) * (error - mean);
-    }
-    error_msg.displacement_error_std = std::sqrt(variance / (min_size - 1));
-  } else {
-    error_msg.displacement_error_std = 0.0;
-  }
-  
-  // Store point-wise errors
-  error_msg.point_wise_errors = point_errors;
-  
-  // Evaluation metadata
-  const auto end_time = std::chrono::high_resolution_clock::now();
-  const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-  error_msg.evaluation_duration_seconds = duration.count() / 1000000.0;
-  error_msg.evaluation_successful = true;
-  error_msg.error_message = "";
-  
-  return error_msg;
+  return std::make_pair(ade, fde);
 }
 
-auto BagEvaluator::calculate_euclidean_distance(
+double BagEvaluator::calculate_euclidean_distance(
   const geometry_msgs::msg::Pose & pose1,
   const geometry_msgs::msg::Pose & pose2) const
-  -> double
 {
   const double dx = pose1.position.x - pose2.position.x;
   const double dy = pose1.position.y - pose2.position.y;
@@ -471,6 +415,38 @@ auto BagEvaluator::calculate_euclidean_distance(
   
   return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
+
+double BagEvaluator::calculate_minimum_ttc(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects) const
+{
+  if (!trajectory || !objects || trajectory->empty() || objects->objects.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  double min_ttc = std::numeric_limits<double>::infinity();
+  
+  // Calculate TTC for each trajectory point using existing autoware utilities
+  for (size_t i = 0; i < trajectory->size(); ++i) {
+    const auto & traj_point = trajectory->at(i);
+    
+    // Calculate TTC for all objects at this trajectory point
+    for (const auto & object : objects->objects) {
+      // Use existing autoware TTC implementation
+      const double ttc = autoware::trajectory_selector::utils::time_to_collision(
+        traj_point, traj_point.time_from_start, object);
+      
+      if (std::isfinite(ttc) && ttc > 0.0) {
+        min_ttc = std::min(min_ttc, ttc);
+      }
+    }
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Minimum TTC: %.2f seconds", min_ttc);
+  return min_ttc;
+}
+
+
 
 auto BagEvaluator::augment_data(
   const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
