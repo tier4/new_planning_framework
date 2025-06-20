@@ -70,6 +70,27 @@ private:
     const std::shared_ptr<DataAugmentParameters> & parameters) const
     -> std::shared_ptr<TrajectoryPoints>;
 
+  auto ground_truth_from_live_trajectory(
+    const std::shared_ptr<ReplayEvaluationData> & replay_data,
+    const Trajectory & live_trajectory) const
+    -> std::shared_ptr<TrajectoryPoints>;
+
+  auto get_localization_at_time(
+    const std::shared_ptr<ReplayEvaluationData> & replay_data,
+    const rcutils_time_point_value_t target_timestamp) const
+    -> std::shared_ptr<Odometry>;
+
+  auto interpolate_localization(
+    const std::shared_ptr<Odometry> & odom1,
+    const std::shared_ptr<Odometry> & odom2,
+    const double ratio) const
+    -> std::shared_ptr<Odometry>;
+
+  auto convert_localization_to_trajectory_point(
+    const Odometry & localization,
+    const builtin_interfaces::msg::Duration & time_from_start) const
+    -> autoware_planning_msgs::msg::TrajectoryPoint;
+
   auto augment_data(
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
     const std::shared_ptr<DataAugmentParameters> & parameters) const

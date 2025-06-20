@@ -200,6 +200,172 @@ auto BagEvaluator::ground_truth(
   return std::make_shared<TrajectoryPoints>(points);
 }
 
+auto BagEvaluator::ground_truth_from_live_trajectory(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const Trajectory & live_trajectory) const
+  -> std::shared_ptr<TrajectoryPoints>
+{
+  auto ground_truth_points = std::make_shared<TrajectoryPoints>();
+  ground_truth_points->reserve(live_trajectory.points.size());
+
+  for (const auto & traj_point : live_trajectory.points) {
+    // Calculate target timestamp: current replay time + time_from_start
+    const auto time_from_start_ns = static_cast<rcutils_time_point_value_t>(
+      traj_point.time_from_start.sec) * 1000000000LL + 
+      static_cast<rcutils_time_point_value_t>(traj_point.time_from_start.nanosec);
+    
+    const auto target_timestamp = replay_data->timestamp + time_from_start_ns;
+
+    // Get localization data at target time
+    const auto localization_msg = get_localization_at_time(replay_data, target_timestamp);
+    
+    if (localization_msg) {
+      // Convert localization to trajectory point
+      const auto ground_truth_point = convert_localization_to_trajectory_point(
+        *localization_msg, traj_point.time_from_start);
+      ground_truth_points->push_back(ground_truth_point);
+    } else {
+      RCLCPP_WARN(
+        rclcpp::get_logger("BagEvaluator"), 
+        "No localization data found for timestamp %lld", target_timestamp);
+    }
+  }
+
+  return ground_truth_points;
+}
+
+auto BagEvaluator::get_localization_at_time(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const rcutils_time_point_value_t target_timestamp) const
+  -> std::shared_ptr<Odometry>
+{
+  const auto odometry_buffer = 
+    std::dynamic_pointer_cast<Buffer<Odometry>>(replay_data->buffers.at(TOPIC::ODOMETRY));
+
+  if (!odometry_buffer || odometry_buffer->msgs.empty()) {
+    return nullptr;
+  }
+
+  // Find the closest message by timestamp
+  std::shared_ptr<Odometry> closest_before = nullptr;
+  std::shared_ptr<Odometry> closest_after = nullptr;
+  rcutils_time_point_value_t min_diff_before = std::numeric_limits<rcutils_time_point_value_t>::max();
+  rcutils_time_point_value_t min_diff_after = std::numeric_limits<rcutils_time_point_value_t>::max();
+
+  for (const auto & odom_msg : odometry_buffer->msgs) {
+    const auto msg_timestamp = rclcpp::Time(odom_msg.header.stamp).nanoseconds();
+    
+    if (msg_timestamp <= target_timestamp) {
+      const auto diff = target_timestamp - msg_timestamp;
+      if (diff < min_diff_before) {
+        min_diff_before = diff;
+        closest_before = std::make_shared<Odometry>(odom_msg);
+      }
+    } else {
+      const auto diff = msg_timestamp - target_timestamp;
+      if (diff < min_diff_after) {
+        min_diff_after = diff;
+        closest_after = std::make_shared<Odometry>(odom_msg);
+      }
+    }
+  }
+
+  // If we have both before and after, interpolate
+  if (closest_before && closest_after) {
+    const auto before_time = rclcpp::Time(closest_before->header.stamp).nanoseconds();
+    const auto after_time = rclcpp::Time(closest_after->header.stamp).nanoseconds();
+    const auto total_diff = after_time - before_time;
+    
+    if (total_diff > 0) {
+      const auto ratio = static_cast<double>(target_timestamp - before_time) / total_diff;
+      return interpolate_localization(closest_before, closest_after, ratio);
+    }
+  }
+
+  // Return the closest available message
+  if (closest_before && (!closest_after || min_diff_before <= min_diff_after)) {
+    return closest_before;
+  } else if (closest_after) {
+    return closest_after;
+  }
+
+  return nullptr;
+}
+
+auto BagEvaluator::interpolate_localization(
+  const std::shared_ptr<Odometry> & odom1,
+  const std::shared_ptr<Odometry> & odom2,
+  const double ratio) const
+  -> std::shared_ptr<Odometry>
+{
+  auto interpolated = std::make_shared<Odometry>();
+  
+  // Copy header from first message and interpolate timestamp
+  interpolated->header = odom1->header;
+  const auto time1 = rclcpp::Time(odom1->header.stamp).nanoseconds();
+  const auto time2 = rclcpp::Time(odom2->header.stamp).nanoseconds();
+  const auto interpolated_time = time1 + static_cast<rcutils_time_point_value_t>((time2 - time1) * ratio);
+  interpolated->header.stamp = rclcpp::Time(interpolated_time);
+
+  // Interpolate position
+  interpolated->pose.pose.position.x = odom1->pose.pose.position.x + 
+    (odom2->pose.pose.position.x - odom1->pose.pose.position.x) * ratio;
+  interpolated->pose.pose.position.y = odom1->pose.pose.position.y + 
+    (odom2->pose.pose.position.y - odom1->pose.pose.position.y) * ratio;
+  interpolated->pose.pose.position.z = odom1->pose.pose.position.z + 
+    (odom2->pose.pose.position.z - odom1->pose.pose.position.z) * ratio;
+
+  // For orientation, use SLERP (simplified linear interpolation for small angles)
+  interpolated->pose.pose.orientation.x = odom1->pose.pose.orientation.x + 
+    (odom2->pose.pose.orientation.x - odom1->pose.pose.orientation.x) * ratio;
+  interpolated->pose.pose.orientation.y = odom1->pose.pose.orientation.y + 
+    (odom2->pose.pose.orientation.y - odom1->pose.pose.orientation.y) * ratio;
+  interpolated->pose.pose.orientation.z = odom1->pose.pose.orientation.z + 
+    (odom2->pose.pose.orientation.z - odom1->pose.pose.orientation.z) * ratio;
+  interpolated->pose.pose.orientation.w = odom1->pose.pose.orientation.w + 
+    (odom2->pose.pose.orientation.w - odom1->pose.pose.orientation.w) * ratio;
+
+  // Interpolate velocity
+  interpolated->twist.twist.linear.x = odom1->twist.twist.linear.x + 
+    (odom2->twist.twist.linear.x - odom1->twist.twist.linear.x) * ratio;
+  interpolated->twist.twist.linear.y = odom1->twist.twist.linear.y + 
+    (odom2->twist.twist.linear.y - odom1->twist.twist.linear.y) * ratio;
+  interpolated->twist.twist.angular.z = odom1->twist.twist.angular.z + 
+    (odom2->twist.twist.angular.z - odom1->twist.twist.angular.z) * ratio;
+
+  // Copy covariance from first message
+  interpolated->pose.covariance = odom1->pose.covariance;
+  interpolated->twist.covariance = odom1->twist.covariance;
+
+  return interpolated;
+}
+
+auto BagEvaluator::convert_localization_to_trajectory_point(
+  const Odometry & localization,
+  const builtin_interfaces::msg::Duration & time_from_start) const
+  -> autoware_planning_msgs::msg::TrajectoryPoint
+{
+  autoware_planning_msgs::msg::TrajectoryPoint traj_point;
+  
+  // Set timing
+  traj_point.time_from_start = time_from_start;
+  
+  // Copy pose
+  traj_point.pose = localization.pose.pose;
+  
+  // Copy velocities
+  traj_point.longitudinal_velocity_mps = localization.twist.twist.linear.x;
+  traj_point.lateral_velocity_mps = localization.twist.twist.linear.y;
+  
+  // Set other fields to default values
+  traj_point.acceleration_mps2 = 0.0;
+  traj_point.heading_rate_rps = localization.twist.twist.angular.z;
+  traj_point.front_wheel_angle_rad = 0.0;
+  traj_point.rear_wheel_angle_rad = 0.0;
+
+  return traj_point;
+}
+
 auto BagEvaluator::augment_data(
   const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters) const

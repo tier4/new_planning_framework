@@ -473,6 +473,24 @@ void OfflineEvaluatorNode::play(
       const auto live_trajectory = current_replay_data_->get_live_trajectory(current_replay_data_->timestamp);
       if (live_trajectory) {
         RCLCPP_INFO(get_logger(), "Evaluating live trajectory with %zu points", live_trajectory->points.size());
+        
+        // Generate ground truth trajectory from localization data
+        try {
+          const auto ground_truth_trajectory = bag_evaluator->ground_truth_from_live_trajectory(
+            current_replay_data_, *live_trajectory);
+          
+          if (ground_truth_trajectory && !ground_truth_trajectory->empty()) {
+            RCLCPP_INFO(get_logger(), "Generated ground truth trajectory with %zu points", 
+                       ground_truth_trajectory->size());
+            
+            // TODO: Add comparison metrics between live trajectory and ground truth
+            // This could include position deviation, velocity difference, etc.
+          } else {
+            RCLCPP_WARN(get_logger(), "Failed to generate ground truth trajectory");
+          }
+        } catch (const std::exception& e) {
+          RCLCPP_ERROR(get_logger(), "Error generating ground truth: %s", e.what());
+        }
       }
     }
   }
