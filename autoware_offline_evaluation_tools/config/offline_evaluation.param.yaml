@@ -39,3 +39,41 @@
 
     play:
       time_step: 0.1
+
+    # Topics to publish during replay
+    publish_topics:
+      route:
+        topic: "/planning/mission_planning/route"
+        qos: 1
+        enabled: true
+        publish_once: true  # Publish once at start
+      tf:
+        topic: "/tf"
+        qos: 1
+        enabled: true
+        publish_once: false  # Publish continuously
+      objects:
+        topic: "/perception/object_recognition/objects"
+        qos: 1
+        enabled: true
+        publish_once: false
+      odometry:
+        topic: "/localization/kinematic_state"
+        qos: 1
+        enabled: false  # Set to true if you want to republish odometry
+        publish_once: false
+      acceleration:
+        topic: "/localization/acceleration"
+        qos: 1
+        enabled: false  # Set to true if you want to republish acceleration
+        publish_once: false
+      steering:
+        topic: "/vehicle/status/steering_status"
+        qos: 1
+        enabled: false  # Set to true if you want to republish steering
+        publish_once: false
+      markers:
+        topic: "/planning/trajectory_selector/ranker/markers"
+        qos: 1
+        enabled: true
+        publish_once: false

@@ -33,15 +33,15 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   vehicle_info_{std::make_shared<VehicleInfo>(
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
 {
-  pub_marker_ = create_publisher<MarkerArray>("~/output/markers", 1);
-
-  pub_objects_ = create_publisher<PredictedObjects>(TOPIC::OBJECTS, rclcpp::QoS(1));
-
-  pub_tf_ = create_publisher<TFMessage>(TOPIC::TF, rclcpp::QoS(1));
+  setup_publishers();
 
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
+
+  sub_live_trajectory_ = create_subscription<Trajectory>(
+    "~/input/live_trajectory", rclcpp::QoS(10),
+    std::bind(&OfflineEvaluatorNode::on_live_trajectory, this, std::placeholders::_1));
 
   srv_play_ = this->create_service<Trigger>(
     "play",
@@ -64,7 +64,59 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile());
 
-  reader_.open(get_or_declare_parameter<std::string>(*this, "bag_path"));
+  replay_reader_.open(get_or_declare_parameter<std::string>(*this, "replay_bag_path"));
+  route_reader_.open(get_or_declare_parameter<std::string>(*this, "route_bag_path"));
+}
+
+void OfflineEvaluatorNode::setup_publishers()
+{
+  // Read publisher configuration from parameters
+  const auto topic_configs = {
+    std::make_tuple("route", TOPIC::ROUTE),
+    std::make_tuple("tf", TOPIC::TF),
+    std::make_tuple("objects", TOPIC::OBJECTS),
+    std::make_tuple("odometry", TOPIC::ODOMETRY),
+    std::make_tuple("acceleration", TOPIC::ACCELERATION),
+    std::make_tuple("steering", TOPIC::STEERING),
+    std::make_tuple("markers", "~/output/markers")
+  };
+
+  for (const auto& [config_name, default_topic] : topic_configs) {
+    const auto param_prefix = "publish_topics." + config_name;
+    
+    try {
+      const auto enabled = get_or_declare_parameter<bool>(*this, param_prefix + ".enabled");
+      const auto publish_once = get_or_declare_parameter<bool>(*this, param_prefix + ".publish_once");
+      const auto topic = get_or_declare_parameter<std::string>(*this, param_prefix + ".topic");
+      const auto qos = get_or_declare_parameter<int>(*this, param_prefix + ".qos");
+
+      publish_enabled_[config_name] = enabled;
+      publish_once_[config_name] = publish_once;
+
+      if (enabled) {
+        if (config_name == "route") {
+          publishers_[config_name] = create_publisher<LaneletRoute>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "tf") {
+          publishers_[config_name] = create_publisher<TFMessage>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "objects") {
+          publishers_[config_name] = create_publisher<PredictedObjects>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "odometry") {
+          publishers_[config_name] = create_publisher<Odometry>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "acceleration") {
+          publishers_[config_name] = create_publisher<AccelWithCovarianceStamped>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "steering") {
+          publishers_[config_name] = create_publisher<SteeringReport>(topic, rclcpp::QoS(qos));
+        } else if (config_name == "markers") {
+          publishers_[config_name] = create_publisher<MarkerArray>(topic, rclcpp::QoS(qos));
+        }
+
+        RCLCPP_INFO(get_logger(), "Created publisher for %s: %s (QoS: %d, publish_once: %s)", 
+                    config_name.c_str(), topic.c_str(), qos, publish_once ? "true" : "false");
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Failed to setup publisher for %s: %s", config_name.c_str(), e.what());
+    }
+  }
 }
 
 auto OfflineEvaluatorNode::evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>
@@ -115,17 +167,17 @@ auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
 {
   rosbag2_storage::StorageFilter filter;
   filter.topics.emplace_back("/planning/mission_planning/route");
-  reader_.set_filter(filter);
+  replay_reader_.set_filter(filter);
 
-  if (!reader_.has_next()) {
+  if (!replay_reader_.has_next()) {
     throw std::domain_error("not found route msg.");
   }
 
   rclcpp::Serialization<LaneletRoute> serializer;
 
   const auto deserialized_message = std::make_shared<LaneletRoute>();
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
+  while (replay_reader_.has_next()) {
+    const auto next_data = replay_reader_.read_next();
     if (next_data->topic_name == TOPIC::ROUTE) {
       rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
       serializer.deserialize_message(&serialized_msg, deserialized_message.get());
@@ -134,6 +186,147 @@ auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
   }
 
   return deserialized_message;
+}
+
+auto OfflineEvaluatorNode::get_route_from_bag() -> LaneletRoute::ConstSharedPtr
+{
+  rosbag2_storage::StorageFilter filter;
+  filter.topics.emplace_back("/planning/mission_planning/route");
+  route_reader_.set_filter(filter);
+
+  if (!route_reader_.has_next()) {
+    throw std::domain_error("not found route msg in route bag.");
+  }
+
+  rclcpp::Serialization<LaneletRoute> serializer;
+
+  const auto deserialized_message = std::make_shared<LaneletRoute>();
+  while (route_reader_.has_next()) {
+    const auto next_data = route_reader_.read_next();
+    if (next_data->topic_name == TOPIC::ROUTE) {
+      rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      break;
+    }
+  }
+
+  return deserialized_message;
+}
+
+void OfflineEvaluatorNode::on_live_trajectory(const Trajectory::ConstSharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (current_replay_data_) {
+    current_replay_data_->append_live_trajectory(*msg);
+  }
+}
+
+void OfflineEvaluatorNode::update_replay_data(const std::shared_ptr<ReplayEvaluationData> & replay_data, const double dt) const
+{
+  rosbag2_storage::StorageFilter filter;
+  filter.topics.emplace_back(TOPIC::TF);
+  filter.topics.emplace_back(TOPIC::ODOMETRY);
+  filter.topics.emplace_back(TOPIC::ACCELERATION);
+  filter.topics.emplace_back(TOPIC::OBJECTS);
+  filter.topics.emplace_back(TOPIC::STEERING);
+  replay_reader_.set_filter(filter);
+
+  replay_data->update(dt * 1e9);
+
+  while (replay_reader_.has_next()) {
+    const auto next_data = replay_reader_.read_next();
+    rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
+
+    if (replay_data->ready()) {
+      break;
+    }
+
+    if (next_data->topic_name == TOPIC::TF) {
+      rclcpp::Serialization<TFMessage> serializer;
+      const auto deserialized_message = std::make_shared<TFMessage>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<TFMessage>>(replay_data->buffers.at(TOPIC::TF))
+        ->append(*deserialized_message);
+    }
+
+    if (next_data->topic_name == TOPIC::ODOMETRY) {
+      rclcpp::Serialization<Odometry> serializer;
+      const auto deserialized_message = std::make_shared<Odometry>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<Odometry>>(replay_data->buffers.at(TOPIC::ODOMETRY))
+        ->append(*deserialized_message);
+    }
+
+    if (next_data->topic_name == TOPIC::ACCELERATION) {
+      rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
+      const auto deserialized_message = std::make_shared<AccelWithCovarianceStamped>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
+        replay_data->buffers.at(TOPIC::ACCELERATION))
+        ->append(*deserialized_message);
+    }
+
+    if (next_data->topic_name == TOPIC::OBJECTS) {
+      rclcpp::Serialization<PredictedObjects> serializer;
+      const auto deserialized_message = std::make_shared<PredictedObjects>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<PredictedObjects>>(replay_data->buffers.at(TOPIC::OBJECTS))
+        ->append(*deserialized_message);
+    }
+
+    if (next_data->topic_name == TOPIC::STEERING) {
+      rclcpp::Serialization<SteeringReport> serializer;
+      const auto deserialized_message = std::make_shared<SteeringReport>();
+      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+      std::dynamic_pointer_cast<Buffer<SteeringReport>>(replay_data->buffers.at(TOPIC::STEERING))
+        ->append(*deserialized_message);
+    }
+  }
+}
+
+void OfflineEvaluatorNode::publish_replay_topics(const std::shared_ptr<ReplayEvaluationData> & replay_data) const
+{
+  // Publish topics based on configuration (excluding publish_once topics)
+  
+  if (publish_enabled_.count("tf") && publish_enabled_.at("tf") && !publish_once_.at("tf")) {
+    const auto tf_msg = std::dynamic_pointer_cast<Buffer<TFMessage>>(
+      replay_data->buffers.at(TOPIC::TF))->get(replay_data->timestamp);
+    if (tf_msg && publishers_.count("tf")) {
+      std::static_pointer_cast<rclcpp::Publisher<TFMessage>>(publishers_.at("tf"))->publish(*tf_msg);
+    }
+  }
+
+  if (publish_enabled_.count("objects") && publish_enabled_.at("objects") && !publish_once_.at("objects")) {
+    const auto objects_msg = std::dynamic_pointer_cast<Buffer<PredictedObjects>>(
+      replay_data->buffers.at(TOPIC::OBJECTS))->get(replay_data->timestamp);
+    if (objects_msg && publishers_.count("objects")) {
+      std::static_pointer_cast<rclcpp::Publisher<PredictedObjects>>(publishers_.at("objects"))->publish(*objects_msg);
+    }
+  }
+
+  if (publish_enabled_.count("odometry") && publish_enabled_.at("odometry") && !publish_once_.at("odometry")) {
+    const auto odometry_msg = std::dynamic_pointer_cast<Buffer<Odometry>>(
+      replay_data->buffers.at(TOPIC::ODOMETRY))->get(replay_data->timestamp);
+    if (odometry_msg && publishers_.count("odometry")) {
+      std::static_pointer_cast<rclcpp::Publisher<Odometry>>(publishers_.at("odometry"))->publish(*odometry_msg);
+    }
+  }
+
+  if (publish_enabled_.count("acceleration") && publish_enabled_.at("acceleration") && !publish_once_.at("acceleration")) {
+    const auto accel_msg = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
+      replay_data->buffers.at(TOPIC::ACCELERATION))->get(replay_data->timestamp);
+    if (accel_msg && publishers_.count("acceleration")) {
+      std::static_pointer_cast<rclcpp::Publisher<AccelWithCovarianceStamped>>(publishers_.at("acceleration"))->publish(*accel_msg);
+    }
+  }
+
+  if (publish_enabled_.count("steering") && publish_enabled_.at("steering") && !publish_once_.at("steering")) {
+    const auto steering_msg = std::dynamic_pointer_cast<Buffer<SteeringReport>>(
+      replay_data->buffers.at(TOPIC::STEERING))->get(replay_data->timestamp);
+    if (steering_msg && publishers_.count("steering")) {
+      std::static_pointer_cast<rclcpp::Publisher<SteeringReport>>(publishers_.at("steering"))->publish(*steering_msg);
+    }
+  }
 }
 
 void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
@@ -145,12 +338,12 @@ void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, con
   filter.topics.emplace_back(TOPIC::OBJECTS);
   filter.topics.emplace_back(TOPIC::STEERING);
   filter.topics.emplace_back(TOPIC::TRAJECTORY);
-  reader_.set_filter(filter);
+  replay_reader_.set_filter(filter);
 
   bag_data->update(dt * 1e9);
 
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
+  while (replay_reader_.has_next()) {
+    const auto next_data = replay_reader_.read_next();
     rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
 
     if (bag_data->ready()) {
@@ -213,12 +406,32 @@ void OfflineEvaluatorNode::play(
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  const auto bag_data = std::make_shared<BagData>(
-    duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
+  // Initialize replay data with ReplayEvaluationData instead of BagData
+  current_replay_data_ = std::make_shared<ReplayEvaluationData>(
+    duration_cast<nanoseconds>(replay_reader_.get_metadata().starting_time.time_since_epoch()).count());
+
+  // First, read and publish route from route bag - this must happen before replay starts
+  if (publish_enabled_.count("route") && publish_enabled_.at("route")) {
+    try {
+      const auto route = get_route_from_bag();
+      route_handler_->setRoute(*route);
+      if (publishers_.count("route")) {
+        std::static_pointer_cast<rclcpp::Publisher<LaneletRoute>>(publishers_.at("route"))->publish(*route);
+        RCLCPP_INFO(get_logger(), "Published route from route bag, waiting for processing...");
+        
+        // Wait a bit for route to be processed by other nodes
+        rclcpp::sleep_for(std::chrono::milliseconds(500));
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "Failed to read route: %s", e.what());
+      res->success = false;
+      return;
+    }
+  }
 
   const auto time_step = get_or_declare_parameter<double>(*this, "play.time_step");
 
-  RCLCPP_INFO(get_logger(), "rosbag play now...");
+  RCLCPP_INFO(get_logger(), "Starting rosbag replay now...");
 
   std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
 
@@ -232,27 +445,40 @@ void OfflineEvaluatorNode::play(
 
   const auto parameters = evaluator_parameters();
 
-  while (reader_.has_next() && rclcpp::ok()) {
-    update(bag_data, time_step);
+  while (replay_reader_.has_next() && rclcpp::ok()) {
+    update_replay_data(current_replay_data_, time_step);
 
+    // Cast ReplayEvaluationData to BagData for compatibility with existing evaluator
+    auto bag_data = std::static_pointer_cast<BagData>(current_replay_data_);
     bag_evaluator->setup(bag_data, previous_points);
 
     const auto best_data = bag_evaluator->best(parameters);
 
     previous_points = best_data == nullptr ? nullptr : best_data->points();
 
-    pub_tf_->publish(*bag_evaluator->tf());
+    // Publish all configured topics
+    publish_replay_topics(current_replay_data_);
 
-    pub_objects_->publish(*bag_evaluator->objects());
-
-    pub_marker_->publish(*bag_evaluator->marker());
+    // Publish markers if enabled
+    if (publish_enabled_.count("markers") && publish_enabled_.at("markers") && publishers_.count("markers")) {
+      std::static_pointer_cast<rclcpp::Publisher<MarkerArray>>(publishers_.at("markers"))->publish(*bag_evaluator->marker());
+    }
 
     bag_evaluator->show();
 
     bag_evaluator->clear();
+
+    // Check if we have live trajectory data for evaluation
+    if (current_replay_data_->live_trajectory_ready()) {
+      const auto live_trajectory = current_replay_data_->get_live_trajectory(current_replay_data_->timestamp);
+      if (live_trajectory) {
+        RCLCPP_INFO(get_logger(), "Evaluating live trajectory with %zu points", live_trajectory->points.size());
+      }
+    }
   }
 
   res->success = true;
+  current_replay_data_ = nullptr;
 
   RCLCPP_INFO(get_logger(), "finish.");
 }
@@ -262,11 +488,12 @@ void OfflineEvaluatorNode::rewind(
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  reader_.seek(0);
+  replay_reader_.seek(0);
+  route_reader_.seek(0);
 
   res->success = true;
 
-  RCLCPP_INFO(get_logger(), "rewind rosbag.");
+  RCLCPP_INFO(get_logger(), "rewind rosbags.");
 }
 
 void OfflineEvaluatorNode::next_route(
@@ -274,21 +501,28 @@ void OfflineEvaluatorNode::next_route(
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  route_handler_->setRoute(*get_route());
+  try {
+    const auto route = get_route_from_bag();
+    route_handler_->setRoute(*route);
+    pub_route_->publish(*route);
 
-  MarkerArray msg;
+    MarkerArray msg;
 
-  autoware_utils::append_marker_array(
-    lanelet::visualization::laneletsAsTriangleMarkerArray(
-      "preferred_lanes", route_handler_->getPreferredLanelets(),
-      create_marker_color(0.16, 1.0, 0.69, 0.2)),
-    &msg);
+    autoware_utils::append_marker_array(
+      lanelet::visualization::laneletsAsTriangleMarkerArray(
+        "preferred_lanes", route_handler_->getPreferredLanelets(),
+        create_marker_color(0.16, 1.0, 0.69, 0.2)),
+      &msg);
 
-  pub_marker_->publish(msg);
+    pub_marker_->publish(msg);
 
-  res->success = true;
+    res->success = true;
 
-  RCLCPP_INFO(get_logger(), "update route.");
+    RCLCPP_INFO(get_logger(), "update route from route bag.");
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to update route: %s", e.what());
+    res->success = false;
+  }
 }
 
 void OfflineEvaluatorNode::weight(
@@ -301,9 +535,9 @@ void OfflineEvaluatorNode::weight(
 
   stop_watch.tic("total_time");
 
-  reader_.seek(0);
+  replay_reader_.seek(0);
   const auto bag_data = std::make_shared<BagData>(
-    duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
+    duration_cast<nanoseconds>(replay_reader_.get_metadata().starting_time.time_since_epoch()).count());
 
   std::vector<Result> weight_grid;
 
@@ -354,7 +588,7 @@ void OfflineEvaluatorNode::weight(
   }
 
   // start grid search
-  while (reader_.has_next() && rclcpp::ok()) {
+  while (replay_reader_.has_next() && rclcpp::ok()) {
     stop_watch.tic("one_step");
     update(bag_data, time_step);
 

@@ -144,6 +144,31 @@ struct BagData
   }
 };
 
+struct ReplayEvaluationData : public BagData
+{
+  explicit ReplayEvaluationData(const rcutils_time_point_value_t timestamp) : BagData(timestamp)
+  {
+    live_trajectory_buffer = std::make_shared<Buffer<Trajectory>>();
+  }
+
+  std::shared_ptr<Buffer<Trajectory>> live_trajectory_buffer;
+
+  void append_live_trajectory(const Trajectory & trajectory)
+  {
+    live_trajectory_buffer->append(trajectory);
+  }
+
+  auto get_live_trajectory(const rcutils_time_point_value_t now) const -> Trajectory::SharedPtr
+  {
+    return live_trajectory_buffer->get(now);
+  }
+
+  bool live_trajectory_ready() const
+  {
+    return live_trajectory_buffer->ready();
+  }
+};
+
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
 #endif  // BAG_HANDLER_HPP_

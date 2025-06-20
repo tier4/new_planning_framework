@@ -1,5 +1,7 @@
 <launch>
-  <arg name="bag_path" description="bagfile path"/>
+  <arg name="replay_bag_path" description="bagfile path for replay data (odometry, objects, etc.)"/>
+  <arg name="route_bag_path" description="bagfile path for route information"/>
+  <arg name="bag_path" default="$(var replay_bag_path)" description="DEPRECATED: use replay_bag_path instead"/>
 
   <arg name="map_path" description="point cloud and lanelet2 map directory path"/>
   <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
@@ -18,9 +20,11 @@
   <arg name="input/odometry" default="/localization/kinematic_state"/>
   <arg name="input/acceleration" default="/localization/acceleration"/>
   <arg name="input/trajectory" default="/planning/scenario_planning/trajectory"/>
+  <arg name="input/live_trajectory" default="/planning/scenario_planning/live_trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
   <arg name="input/map_topic" default="/map/vector_map"/>
   <arg name="input/route_topic" default="/planning/mission_planning/route"/>
+  <arg name="output/route_topic" default="/planning/mission_planning/route"/>
 
   <group scoped="false">
     <include file="$(find-pkg-share global_parameter_loader)/launch/global_params.launch.py">
@@ -31,10 +35,13 @@
 
   <node_container pkg="rclcpp_components" exec="component_container" name="offline_evaluator_container" namespace="" output="screen">
     <composable_node pkg="autoware_offline_evaluation_tools" plugin="autoware::trajectory_selector::offline_evaluation_tools::OfflineEvaluatorNode" name="offline_evaluator">
-      <param name="bag_path" value="$(var bag_path)"/>
+      <param name="replay_bag_path" value="$(var replay_bag_path)"/>
+      <param name="route_bag_path" value="$(var route_bag_path)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
-      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/input/lanelet2_map" to="$(var input/map_topic)"/>
+      <remap from="~/input/live_trajectory" to="$(var input/live_trajectory)"/>
       <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
+      <remap from="/planning/mission_planning/route" to="$(var output/route_topic)"/>
     </composable_node>
 
     <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>

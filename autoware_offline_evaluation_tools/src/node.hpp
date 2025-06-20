@@ -58,7 +58,17 @@ private:
 
   auto get_route() -> LaneletRoute::ConstSharedPtr;
 
+  auto get_route_from_bag() -> LaneletRoute::ConstSharedPtr;
+
   void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
+
+  void update_replay_data(const std::shared_ptr<ReplayEvaluationData> & replay_data, const double dt) const;
+
+  void on_live_trajectory(const Trajectory::ConstSharedPtr msg);
+
+  void setup_publishers();
+
+  void publish_replay_topics(const std::shared_ptr<ReplayEvaluationData> & replay_data) const;
 
   void analyze(const std::shared_ptr<BagData> & bag_data) const;
 
@@ -70,13 +80,15 @@ private:
 
   auto data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>;
 
-  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
+  std::map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
 
-  rclcpp::Publisher<PredictedObjects>::SharedPtr pub_objects_;
+  std::map<std::string, bool> publish_enabled_;
 
-  rclcpp::Publisher<TFMessage>::SharedPtr pub_tf_;
+  std::map<std::string, bool> publish_once_;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
+
+  rclcpp::Subscription<Trajectory>::SharedPtr sub_live_trajectory_;
 
   rclcpp::Service<Trigger>::SharedPtr srv_play_;
 
@@ -92,7 +104,11 @@ private:
 
   mutable std::mutex mutex_;
 
-  mutable rosbag2_cpp::Reader reader_;
+  mutable rosbag2_cpp::Reader replay_reader_;
+
+  mutable rosbag2_cpp::Reader route_reader_;
+
+  std::shared_ptr<ReplayEvaluationData> current_replay_data_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
