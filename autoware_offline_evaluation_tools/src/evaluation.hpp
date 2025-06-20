@@ -21,6 +21,7 @@
 
 #include <autoware/trajectory_selector_common/evaluation.hpp>
 
+#include "autoware_new_planning_msgs/msg/trajectory_displacement_error.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 
 #include <algorithm>
@@ -90,6 +91,16 @@ private:
     const Odometry & localization,
     const builtin_interfaces::msg::Duration & time_from_start) const
     -> autoware_planning_msgs::msg::TrajectoryPoint;
+
+  auto calculate_displacement_errors(
+    const std::shared_ptr<TrajectoryPoints> & candidate_trajectory,
+    const std::shared_ptr<TrajectoryPoints> & ground_truth_trajectory) const
+    -> autoware_new_planning_msgs::msg::TrajectoryDisplacementError;
+
+  auto calculate_euclidean_distance(
+    const geometry_msgs::msg::Pose & pose1,
+    const geometry_msgs::msg::Pose & pose2) const
+    -> double;
 
   auto augment_data(
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,

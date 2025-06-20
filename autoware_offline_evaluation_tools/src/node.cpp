@@ -20,6 +20,8 @@
 
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <rmw/rmw.h>
+#include <rosbag2_storage/topic_metadata.hpp>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -34,6 +36,8 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
 {
   setup_publishers();
+
+  setup_evaluation_bag_writer();
 
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
@@ -66,6 +70,18 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
 
   replay_reader_.open(get_or_declare_parameter<std::string>(*this, "replay_bag_path"));
   route_reader_.open(get_or_declare_parameter<std::string>(*this, "route_bag_path"));
+}
+
+OfflineEvaluatorNode::~OfflineEvaluatorNode()
+{
+  if (evaluation_bag_writer_) {
+    try {
+      evaluation_bag_writer_->close();
+      RCLCPP_INFO(get_logger(), "Evaluation bag writer closed successfully");
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(get_logger(), "Error closing evaluation bag writer: %s", e.what());
+    }
+  }
 }
 
 void OfflineEvaluatorNode::setup_publishers()
@@ -116,6 +132,45 @@ void OfflineEvaluatorNode::setup_publishers()
     } catch (const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Failed to setup publisher for %s: %s", config_name.c_str(), e.what());
     }
+  }
+}
+
+void OfflineEvaluatorNode::setup_evaluation_bag_writer()
+{
+  try {
+    evaluation_bag_writer_ = std::make_unique<rosbag2_cpp::Writer>();
+    
+    // Get output bag path from parameters
+    const auto output_bag_path = get_or_declare_parameter<std::string>(
+      *this, "evaluation_output_bag_path");
+    
+    // Setup bag writer
+    const rosbag2_storage::StorageOptions storage_options{
+      output_bag_path,
+      "sqlite3"
+    };
+    
+    const rosbag2_cpp::ConverterOptions converter_options{
+      rmw_get_serialization_format(),
+      rmw_get_serialization_format()
+    };
+    
+    evaluation_bag_writer_->open(storage_options, converter_options);
+    
+    // Create topic for displacement errors
+    const auto topic_info = rosbag2_storage::TopicMetadata{
+      "/trajectory_evaluation/displacement_errors",
+      "autoware_new_planning_msgs/msg/TrajectoryDisplacementError",
+      rmw_get_serialization_format(),
+      ""
+    };
+    
+    evaluation_bag_writer_->create_topic(topic_info);
+    
+    RCLCPP_INFO(get_logger(), "Evaluation bag writer initialized: %s", output_bag_path.c_str());
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to setup evaluation bag writer: %s", e.what());
+    evaluation_bag_writer_ = nullptr;
   }
 }
 
@@ -329,6 +384,19 @@ void OfflineEvaluatorNode::publish_replay_topics(const std::shared_ptr<ReplayEva
   }
 }
 
+auto OfflineEvaluatorNode::convert_trajectory_to_points(const Trajectory & trajectory) const 
+  -> std::shared_ptr<TrajectoryPoints>
+{
+  auto trajectory_points = std::make_shared<TrajectoryPoints>();
+  trajectory_points->reserve(trajectory.points.size());
+  
+  for (const auto & point : trajectory.points) {
+    trajectory_points->push_back(point);
+  }
+  
+  return trajectory_points;
+}
+
 void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
 {
   rosbag2_storage::StorageFilter filter;
@@ -483,8 +551,41 @@ void OfflineEvaluatorNode::play(
             RCLCPP_INFO(get_logger(), "Generated ground truth trajectory with %zu points", 
                        ground_truth_trajectory->size());
             
-            // TODO: Add comparison metrics between live trajectory and ground truth
-            // This could include position deviation, velocity difference, etc.
+            // Convert live trajectory to TrajectoryPoints format
+            const auto candidate_trajectory = convert_trajectory_to_points(*live_trajectory);
+            
+            // Calculate displacement errors (ADE, FDE, etc.)
+            const auto displacement_errors = bag_evaluator->calculate_displacement_errors(
+              candidate_trajectory, ground_truth_trajectory);
+            
+            // Log evaluation results
+            RCLCPP_INFO(get_logger(), 
+              "Displacement errors - ADE: %.3f, FDE: %.3f, Max: %.3f, Min: %.3f",
+              displacement_errors.average_displacement_error,
+              displacement_errors.final_displacement_error,
+              displacement_errors.max_displacement_error,
+              displacement_errors.min_displacement_error);
+            
+            // Store results in evaluation bag
+            if (evaluation_bag_writer_) {
+              try {
+                // Serialize the message
+                rclcpp::Serialization<autoware_new_planning_msgs::msg::TrajectoryDisplacementError> serializer;
+                rclcpp::SerializedMessage serialized_msg;
+                serializer.serialize_message(&displacement_errors, &serialized_msg);
+                
+                // Write to bag with current timestamp
+                evaluation_bag_writer_->write(
+                  serialized_msg,
+                  "/trajectory_evaluation/displacement_errors",
+                  rclcpp::Clock().now()
+                );
+                
+                RCLCPP_DEBUG(get_logger(), "Stored displacement errors in evaluation bag");
+              } catch (const std::exception& e) {
+                RCLCPP_ERROR(get_logger(), "Failed to store displacement errors: %s", e.what());
+              }
+            }
           } else {
             RCLCPP_WARN(get_logger(), "Failed to generate ground truth trajectory");
           }

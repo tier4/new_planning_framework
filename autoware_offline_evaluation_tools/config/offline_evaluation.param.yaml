@@ -40,6 +40,9 @@
     play:
       time_step: 0.1
 
+    # Evaluation output configuration
+    evaluation_output_bag_path: "/tmp/trajectory_evaluation_results.bag"
+
     # Topics to publish during replay
     publish_topics:
       route:

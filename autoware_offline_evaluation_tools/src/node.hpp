@@ -19,6 +19,7 @@
 #include "bag_handler.hpp"
 #include "evaluation.hpp"
 #include "rosbag2_cpp/reader.hpp"
+#include "rosbag2_cpp/writer.hpp"
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
@@ -46,6 +47,8 @@ class OfflineEvaluatorNode : public rclcpp::Node
 {
 public:
   explicit OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options);
+  
+  ~OfflineEvaluatorNode();
 
 private:
   void play(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
@@ -68,7 +71,11 @@ private:
 
   void setup_publishers();
 
+  void setup_evaluation_bag_writer();
+
   void publish_replay_topics(const std::shared_ptr<ReplayEvaluationData> & replay_data) const;
+
+  auto convert_trajectory_to_points(const Trajectory & trajectory) const -> std::shared_ptr<TrajectoryPoints>;
 
   void analyze(const std::shared_ptr<BagData> & bag_data) const;
 
@@ -107,6 +114,8 @@ private:
   mutable rosbag2_cpp::Reader replay_reader_;
 
   mutable rosbag2_cpp::Reader route_reader_;
+
+  std::unique_ptr<rosbag2_cpp::Writer> evaluation_bag_writer_;
 
   std::shared_ptr<ReplayEvaluationData> current_replay_data_;
 };
