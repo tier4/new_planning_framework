@@ -18,7 +18,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/frame_manager_iface.hpp>
-#include <rviz_common/message_filter_display.hpp>
+#include <rviz_common/ros_topic_display.hpp>
+#include <rviz_common/properties/string_property.hpp>
 #include <rviz_common/properties/bool_property.hpp>
 #include <rviz_common/properties/color_property.hpp>
 #include <rviz_common/properties/enum_property.hpp>
@@ -42,10 +43,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include <QObject>
+
 namespace autoware_new_planning_rviz_plugin
 {
 class TrajectoriesDisplay
-: public rviz_common::MessageFilterDisplay<autoware_new_planning_msgs::msg::Trajectories>
+: public rviz_common::RosTopicDisplay<autoware_new_planning_msgs::msg::Trajectories>
 {
   Q_OBJECT
 
@@ -59,6 +62,10 @@ public:
 private Q_SLOTS:
   void updateColorScheme();
   void updateTrajectorySelection();
+
+protected:
+  void onEnable() override;
+  void onDisable() override;
 
 private:
   void processMessage(
@@ -82,7 +89,9 @@ private:
 
   std::string getGeneratorName(
     const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr,
-    const std::string & generator_id);
+    const unique_identifier_msgs::msg::UUID & generator_id);
+  
+  std::string uuidToString(const unique_identifier_msgs::msg::UUID & uuid);
 
   // Manual objects for visualization
   std::vector<Ogre::ManualObject *> trajectory_manual_objects_;
@@ -94,6 +103,9 @@ private:
   std::vector<rviz_rendering::MovableText *> score_texts_;
   std::vector<Ogre::SceneNode *> score_text_nodes_;
 
+  // Frame property
+  rviz_common::properties::StringProperty property_frame_;
+  
   // Properties
   rviz_common::properties::BoolProperty property_view_all_trajectories_;
   rviz_common::properties::IntProperty property_selected_trajectory_index_;

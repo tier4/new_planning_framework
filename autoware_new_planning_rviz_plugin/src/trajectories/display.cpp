@@ -20,12 +20,16 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <numeric>
+#include <rviz_common/display_context.hpp>
 
 namespace autoware_new_planning_rviz_plugin
 {
 
 TrajectoriesDisplay::TrajectoriesDisplay()
-: property_view_all_trajectories_("View All Trajectories", true, 
+: property_frame_("Fixed Frame", "map",
+    "The frame in which to display the trajectories", this),
+  property_view_all_trajectories_("View All Trajectories", true, 
     "Display all trajectories or only selected one", this, SLOT(updateTrajectorySelection())),
   property_selected_trajectory_index_("Selected Trajectory", 0,
     "Index of trajectory to display when not viewing all", &property_view_all_trajectories_),
@@ -104,12 +108,22 @@ TrajectoriesDisplay::~TrajectoriesDisplay()
 
 void TrajectoriesDisplay::onInitialize()
 {
-  MFDClass::onInitialize();
+  RTDClass::onInitialize();
+}
+
+void TrajectoriesDisplay::onEnable()
+{
+  subscribe();
+}
+
+void TrajectoriesDisplay::onDisable()
+{
+  unsubscribe();
 }
 
 void TrajectoriesDisplay::reset()
 {
-  MFDClass::reset();
+  RTDClass::reset();
 
   // Clear all manual objects
   for (auto * manual_object : trajectory_manual_objects_) {
@@ -162,12 +176,24 @@ bool TrajectoriesDisplay::validateFloats(
   return true;
 }
 
+std::string TrajectoriesDisplay::uuidToString(const unique_identifier_msgs::msg::UUID & uuid)
+{
+  std::stringstream ss;
+  for (size_t i = 0; i < uuid.uuid.size(); ++i) {
+    ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(uuid.uuid[i]);
+    if (i == 3 || i == 5 || i == 7 || i == 9) {
+      ss << "-";
+    }
+  }
+  return ss.str();
+}
+
 std::string TrajectoriesDisplay::getGeneratorName(
   const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr,
-  const std::string & generator_id)
+  const unique_identifier_msgs::msg::UUID & generator_id)
 {
   for (const auto & info : msg_ptr->generator_info) {
-    if (info.generator_id.uuid == generator_id) {
+    if (info.generator_id.uuid == generator_id.uuid) {
       return info.generator_name.data;
     }
   }
@@ -189,11 +215,11 @@ Ogre::ColourValue TrajectoriesDisplay::getTrajectoryColor(
     }
   } else if (color_scheme == 1) {  // By Generator
     // Use cached color or generate new one
-    std::string generator_id = trajectory.generator_id.uuid;
-    if (generator_color_map_.find(generator_id) == generator_color_map_.end()) {
+    std::string generator_id_str = uuidToString(trajectory.generator_id);
+    if (generator_color_map_.find(generator_id_str) == generator_color_map_.end()) {
       // Generate a color based on generator ID hash
       std::hash<std::string> hasher;
-      size_t hash = hasher(generator_id);
+      size_t hash = hasher(generator_id_str);
       float hue = (hash % 360) / 360.0f;
       
       // Convert HSV to RGB (S=0.8, V=0.8 for pleasant colors)
@@ -218,9 +244,9 @@ Ogre::ColourValue TrajectoriesDisplay::getTrajectoryColor(
         r = c; g = 0; b = x;
       }
       
-      generator_color_map_[generator_id] = Ogre::ColourValue(r + m, g + m, b + m);
+      generator_color_map_[generator_id_str] = Ogre::ColourValue(r + m, g + m, b + m);
     }
-    return generator_color_map_[generator_id];
+    return generator_color_map_[generator_id_str];
   } else {  // Uniform
     return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
   }
@@ -357,7 +383,7 @@ void TrajectoriesDisplay::visualizeGeneratorInfo(
         generator_text_nodes_[i]->setPosition(position);
         rviz_rendering::MovableText * text = generator_texts_[i];
         
-        std::string generator_name = getGeneratorName(msg_ptr, trajectory.generator_id.uuid);
+        std::string generator_name = getGeneratorName(msg_ptr, trajectory.generator_id);
         text->setCaption(generator_name);
         text->setCharacterHeight(property_generator_text_scale_.getFloat());
         text->setColor(getTrajectoryColor(trajectory, i));
@@ -415,7 +441,7 @@ void TrajectoriesDisplay::processMessage(
       msg_ptr->trajectories[0].header, position, orientation)) {
     std::string error;
     if (context_->getFrameManager()->transformHasProblems(
-        msg_ptr->trajectories[0].header.frame_id, ros::Time(), error)) {
+        msg_ptr->trajectories[0].header.frame_id, rclcpp::Time(0, 0, RCL_ROS_TIME), error)) {
       setStatus(rviz_common::properties::StatusProperty::Error, "Transform", 
         QString::fromStdString(error));
     } else {
