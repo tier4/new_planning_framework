@@ -25,6 +25,7 @@
 #include <rviz_common/properties/enum_property.hpp>
 #include <rviz_common/properties/float_property.hpp>
 #include <rviz_common/properties/int_property.hpp>
+#include <rviz_common/properties/property.hpp>
 #include <rviz_common/validate_floats.hpp>
 #include <rviz_rendering/objects/movable_text.hpp>
 
@@ -62,6 +63,7 @@ public:
 private Q_SLOTS:
   void updateColorScheme();
   void updateTrajectorySelection();
+  void updateVisualization();
 
 protected:
   void onEnable() override;
@@ -92,6 +94,9 @@ private:
     const unique_identifier_msgs::msg::UUID & generator_id);
   
   std::string uuidToString(const unique_identifier_msgs::msg::UUID & uuid);
+  
+  void updateGeneratorColorProperties(
+    const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr);
 
   // Manual objects for visualization
   std::vector<Ogre::ManualObject *> trajectory_manual_objects_;
@@ -126,7 +131,10 @@ private:
   // Color properties for different color schemes
   rviz_common::properties::ColorProperty property_best_trajectory_color_;
   rviz_common::properties::ColorProperty property_other_trajectories_color_;
-  std::vector<rviz_common::properties::ColorProperty *> property_generator_colors_;
+  
+  // Property group for generator colors
+  rviz_common::properties::Property * property_generator_colors_group_;
+  std::unordered_map<std::string, rviz_common::properties::ColorProperty *> property_generator_colors_;
 
   // Cache for generator colors
   std::unordered_map<std::string, Ogre::ColourValue> generator_color_map_;
