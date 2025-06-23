@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <sstream>
 #include <numeric>
+#include <set>
 #include <rviz_common/display_context.hpp>
 
 namespace autoware_new_planning_rviz_plugin
@@ -36,25 +37,25 @@ TrajectoriesDisplay::TrajectoriesDisplay()
   property_color_scheme_("Color Scheme", "By Score",
     "How to color trajectories", this, SLOT(updateColorScheme())),
   property_line_width_("Line Width", 0.1f,
-    "Width of trajectory lines", this),
+    "Width of trajectory lines", this, SLOT(updateVisualization())),
   property_alpha_("Alpha", 0.7f,
-    "Transparency of trajectories", this),
+    "Transparency of trajectories", this, SLOT(updateVisualization())),
   property_show_points_("Show Points", true,
-    "Display individual trajectory points", this),
+    "Display individual trajectory points", this, SLOT(updateVisualization())),
   property_point_size_("Point Size", 0.05f,
-    "Size of trajectory points", &property_show_points_),
+    "Size of trajectory points", &property_show_points_, SLOT(updateVisualization())),
   property_show_generator_info_("Show Generator Info", true,
-    "Display generator names", this),
+    "Display generator names", this, SLOT(updateVisualization())),
   property_generator_text_scale_("Generator Text Scale", 0.5f,
-    "Scale of generator name text", &property_show_generator_info_),
+    "Scale of generator name text", &property_show_generator_info_, SLOT(updateVisualization())),
   property_show_scores_("Show Scores", true,
-    "Display trajectory scores", this),
+    "Display trajectory scores", this, SLOT(updateVisualization())),
   property_score_text_scale_("Score Text Scale", 0.3f,
-    "Scale of score text", &property_show_scores_),
+    "Scale of score text", &property_show_scores_, SLOT(updateVisualization())),
   property_best_trajectory_color_("Best Trajectory Color", QColor(0, 255, 0),
-    "Color for best scoring trajectory", this),
+    "Color for best scoring trajectory", this, SLOT(updateVisualization())),
   property_other_trajectories_color_("Other Trajectories Color", QColor(128, 128, 128),
-    "Color for other trajectories", this)
+    "Color for other trajectories", this, SLOT(updateVisualization()))
 {
   // Set property constraints
   property_selected_trajectory_index_.setMin(0);
@@ -72,6 +73,10 @@ TrajectoriesDisplay::TrajectoriesDisplay()
 
   // Initially hide selected trajectory index when viewing all
   property_selected_trajectory_index_.setHidden(property_view_all_trajectories_.getBool());
+  
+  // Create generator colors group
+  property_generator_colors_group_ = new rviz_common::properties::Property(
+    "Generator Colors", QVariant(), "Colors for each trajectory generator", this);
 }
 
 TrajectoriesDisplay::~TrajectoriesDisplay()
@@ -100,8 +105,8 @@ TrajectoriesDisplay::~TrajectoriesDisplay()
     }
 
     // Clean up generator color properties
-    for (auto * color_prop : property_generator_colors_) {
-      delete color_prop;
+    for (auto & pair : property_generator_colors_) {
+      delete pair.second;
     }
   }
 }
@@ -144,6 +149,10 @@ void TrajectoriesDisplay::reset()
 
 void TrajectoriesDisplay::updateColorScheme()
 {
+  // Update visibility of generator colors group
+  property_generator_colors_group_->setHidden(
+    property_color_scheme_.getOptionInt() != 1);
+    
   if (last_msg_ptr_) {
     processMessage(last_msg_ptr_);
   }
@@ -152,6 +161,13 @@ void TrajectoriesDisplay::updateColorScheme()
 void TrajectoriesDisplay::updateTrajectorySelection()
 {
   property_selected_trajectory_index_.setHidden(property_view_all_trajectories_.getBool());
+  if (last_msg_ptr_) {
+    processMessage(last_msg_ptr_);
+  }
+}
+
+void TrajectoriesDisplay::updateVisualization()
+{
   if (last_msg_ptr_) {
     processMessage(last_msg_ptr_);
   }
@@ -188,6 +204,56 @@ std::string TrajectoriesDisplay::uuidToString(const unique_identifier_msgs::msg:
   return ss.str();
 }
 
+void TrajectoriesDisplay::updateGeneratorColorProperties(
+  const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr)
+{
+  // Collect unique generator IDs
+  std::set<std::string> current_generators;
+  for (const auto & info : msg_ptr->generator_info) {
+    std::string id_str = uuidToString(info.generator_id);
+    current_generators.insert(id_str);
+    
+    // Add color property if it doesn't exist
+    if (property_generator_colors_.find(id_str) == property_generator_colors_.end()) {
+      // Generate initial color
+      std::hash<std::string> hasher;
+      size_t hash = hasher(id_str);
+      int hue = hash % 360;
+      QColor initial_color = QColor::fromHsv(hue, 200, 200);
+      
+      // Create color property
+      std::string name = info.generator_name.data;
+      if (name.empty()) {
+        name = "Generator " + id_str.substr(0, 8);
+      }
+      
+      auto * color_prop = new rviz_common::properties::ColorProperty(
+        QString::fromStdString(name), initial_color,
+        QString::fromStdString("Color for " + name), property_generator_colors_group_,
+        SLOT(updateVisualization()), this);
+      
+      property_generator_colors_[id_str] = color_prop;
+    }
+  }
+  
+  // Remove properties for generators that no longer exist
+  std::vector<std::string> to_remove;
+  for (const auto & pair : property_generator_colors_) {
+    if (current_generators.find(pair.first) == current_generators.end()) {
+      to_remove.push_back(pair.first);
+    }
+  }
+  
+  for (const auto & id : to_remove) {
+    delete property_generator_colors_[id];
+    property_generator_colors_.erase(id);
+  }
+  
+  // Update visibility based on color scheme
+  property_generator_colors_group_->setHidden(
+    property_color_scheme_.getOptionInt() != 1);  // Show only for "By Generator"
+}
+
 std::string TrajectoriesDisplay::getGeneratorName(
   const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr,
   const unique_identifier_msgs::msg::UUID & generator_id)
@@ -214,39 +280,15 @@ Ogre::ColourValue TrajectoriesDisplay::getTrajectoryColor(
       return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
     }
   } else if (color_scheme == 1) {  // By Generator
-    // Use cached color or generate new one
+    // Use color from property if available
     std::string generator_id_str = uuidToString(trajectory.generator_id);
-    if (generator_color_map_.find(generator_id_str) == generator_color_map_.end()) {
-      // Generate a color based on generator ID hash
-      std::hash<std::string> hasher;
-      size_t hash = hasher(generator_id_str);
-      float hue = (hash % 360) / 360.0f;
-      
-      // Convert HSV to RGB (S=0.8, V=0.8 for pleasant colors)
-      float s = 0.8f;
-      float v = 0.8f;
-      float c = v * s;
-      float x = c * (1 - std::abs(std::fmod(hue * 6, 2) - 1));
-      float m = v - c;
-      
-      float r, g, b;
-      if (hue < 1.0f/6) {
-        r = c; g = x; b = 0;
-      } else if (hue < 2.0f/6) {
-        r = x; g = c; b = 0;
-      } else if (hue < 3.0f/6) {
-        r = 0; g = c; b = x;
-      } else if (hue < 4.0f/6) {
-        r = 0; g = x; b = c;
-      } else if (hue < 5.0f/6) {
-        r = x; g = 0; b = c;
-      } else {
-        r = c; g = 0; b = x;
-      }
-      
-      generator_color_map_[generator_id_str] = Ogre::ColourValue(r + m, g + m, b + m);
+    auto it = property_generator_colors_.find(generator_id_str);
+    if (it != property_generator_colors_.end()) {
+      return rviz_common::properties::qtToOgre(it->second->getColor());
+    } else {
+      // Fallback to default color
+      return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
     }
-    return generator_color_map_[generator_id_str];
   } else {  // Uniform
     return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
   }
@@ -287,18 +329,71 @@ void TrajectoriesDisplay::visualizeTrajectory(
 
   // Draw trajectory line
   traj_manual_object->clear();
-  traj_manual_object->estimateVertexCount(trajectory.points.size());
-  traj_manual_object->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_LINE_STRIP);
-
+  
+  const float line_width = property_line_width_.getFloat();
   Ogre::ColourValue traj_color = color;
   traj_color.a = alpha;
 
-  for (const auto & point : trajectory.points) {
-    traj_manual_object->position(
-      point.pose.position.x,
-      point.pose.position.y,
-      point.pose.position.z);
-    traj_manual_object->colour(traj_color);
+  if (line_width > 0.01f && trajectory.points.size() > 1) {
+    // For wider lines, create a ribbon using triangles
+    traj_manual_object->estimateVertexCount(trajectory.points.size() * 2);
+    traj_manual_object->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
+    
+    for (size_t i = 0; i < trajectory.points.size(); ++i) {
+      const auto & point = trajectory.points[i];
+      
+      // Calculate perpendicular direction for ribbon width
+      Ogre::Vector3 direction;
+      if (i == 0) {
+        const auto & next = trajectory.points[i + 1];
+        direction = Ogre::Vector3(
+          next.pose.position.x - point.pose.position.x,
+          next.pose.position.y - point.pose.position.y,
+          0);
+      } else if (i == trajectory.points.size() - 1) {
+        const auto & prev = trajectory.points[i - 1];
+        direction = Ogre::Vector3(
+          point.pose.position.x - prev.pose.position.x,
+          point.pose.position.y - prev.pose.position.y,
+          0);
+      } else {
+        const auto & prev = trajectory.points[i - 1];
+        const auto & next = trajectory.points[i + 1];
+        direction = Ogre::Vector3(
+          next.pose.position.x - prev.pose.position.x,
+          next.pose.position.y - prev.pose.position.y,
+          0);
+      }
+      
+      direction.normalise();
+      Ogre::Vector3 perpendicular(-direction.y, direction.x, 0);
+      perpendicular *= line_width / 2.0f;
+      
+      // Add two vertices for the ribbon
+      traj_manual_object->position(
+        point.pose.position.x + perpendicular.x,
+        point.pose.position.y + perpendicular.y,
+        point.pose.position.z);
+      traj_manual_object->colour(traj_color);
+      
+      traj_manual_object->position(
+        point.pose.position.x - perpendicular.x,
+        point.pose.position.y - perpendicular.y,
+        point.pose.position.z);
+      traj_manual_object->colour(traj_color);
+    }
+  } else {
+    // For thin lines, use line strip
+    traj_manual_object->estimateVertexCount(trajectory.points.size());
+    traj_manual_object->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_LINE_STRIP);
+    
+    for (const auto & point : trajectory.points) {
+      traj_manual_object->position(
+        point.pose.position.x,
+        point.pose.position.y,
+        point.pose.position.z);
+      traj_manual_object->colour(traj_color);
+    }
   }
   traj_manual_object->end();
 
@@ -371,16 +466,16 @@ void TrajectoriesDisplay::visualizeGeneratorInfo(
     const auto & trajectory = msg_ptr->trajectories[i];
     
     if (!trajectory.points.empty()) {
-      // Position at first point of trajectory
-      const auto & first_point = trajectory.points.front();
+      // Position at last point of trajectory
+      const auto & last_point = trajectory.points.back();
       Ogre::Vector3 position(
-        first_point.pose.position.x,
-        first_point.pose.position.y,
-        first_point.pose.position.z);
+        last_point.pose.position.x,
+        last_point.pose.position.y,
+        last_point.pose.position.z + 0.5);  // Offset above the trajectory
 
       // Generator info
       if (property_show_generator_info_.getBool() && i < generator_texts_.size()) {
-        generator_text_nodes_[i]->setPosition(position);
+        generator_text_nodes_[i]->setPosition(position + Ogre::Vector3(0, 0, 0.3));
         rviz_rendering::MovableText * text = generator_texts_[i];
         
         std::string generator_name = getGeneratorName(msg_ptr, trajectory.generator_id);
@@ -495,6 +590,9 @@ void TrajectoriesDisplay::processMessage(
   // Visualize generator info and scores
   visualizeGeneratorInfo(msg_ptr);
 
+  // Update generator color properties
+  updateGeneratorColorProperties(msg_ptr);
+  
   // Store message for updates
   last_msg_ptr_ = msg_ptr;
 
