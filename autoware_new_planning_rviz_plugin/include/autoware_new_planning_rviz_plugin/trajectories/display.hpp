@@ -97,6 +97,8 @@ private:
   
   void updateGeneratorColorProperties(
     const autoware_new_planning_msgs::msg::Trajectories::ConstSharedPtr & msg_ptr);
+  
+  void updateColorSchemeVisibility();
 
   // Manual objects for visualization
   std::vector<Ogre::ManualObject *> trajectory_manual_objects_;
@@ -128,11 +130,13 @@ private:
   rviz_common::properties::BoolProperty property_show_scores_;
   rviz_common::properties::FloatProperty property_score_text_scale_;
   
-  // Color properties for different color schemes
-  rviz_common::properties::ColorProperty property_best_trajectory_color_;
-  rviz_common::properties::ColorProperty property_other_trajectories_color_;
+  // Property groups for different color schemes
+  rviz_common::properties::Property * property_score_colors_group_;
+  rviz_common::properties::ColorProperty * property_best_trajectory_color_;
+  rviz_common::properties::ColorProperty * property_other_trajectories_color_;
   
-  // Property group for generator colors
+  rviz_common::properties::ColorProperty * property_uniform_color_;
+  
   rviz_common::properties::Property * property_generator_colors_group_;
   std::unordered_map<std::string, rviz_common::properties::ColorProperty *> property_generator_colors_;
 

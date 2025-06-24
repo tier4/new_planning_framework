@@ -51,11 +51,7 @@ TrajectoriesDisplay::TrajectoriesDisplay()
   property_show_scores_("Show Scores", true,
     "Display trajectory scores", this, SLOT(updateVisualization())),
   property_score_text_scale_("Score Text Scale", 0.3f,
-    "Scale of score text", &property_show_scores_, SLOT(updateVisualization())),
-  property_best_trajectory_color_("Best Trajectory Color", QColor(0, 255, 0),
-    "Color for best scoring trajectory", this, SLOT(updateVisualization())),
-  property_other_trajectories_color_("Other Trajectories Color", QColor(128, 128, 128),
-    "Color for other trajectories", this, SLOT(updateVisualization()))
+    "Scale of score text", &property_show_scores_, SLOT(updateVisualization()))
 {
   // Set property constraints
   property_selected_trajectory_index_.setMin(0);
@@ -74,9 +70,32 @@ TrajectoriesDisplay::TrajectoriesDisplay()
   // Initially hide selected trajectory index when viewing all
   property_selected_trajectory_index_.setHidden(property_view_all_trajectories_.getBool());
   
+  // Create score colors group
+  property_score_colors_group_ = new rviz_common::properties::Property(
+    "Score Colors", QVariant(), "Colors based on trajectory scores", this);
+    
+  property_best_trajectory_color_ = new rviz_common::properties::ColorProperty(
+    "Best Trajectory Color", QColor(0, 255, 0),
+    "Color for best scoring trajectory", property_score_colors_group_,
+    SLOT(updateVisualization()), this);
+    
+  property_other_trajectories_color_ = new rviz_common::properties::ColorProperty(
+    "Other Trajectories Color", QColor(128, 128, 128),
+    "Color for other trajectories", property_score_colors_group_,
+    SLOT(updateVisualization()), this);
+  
+  // Create uniform color property
+  property_uniform_color_ = new rviz_common::properties::ColorProperty(
+    "Uniform Color", QColor(100, 100, 255),
+    "Color for all trajectories", this,
+    SLOT(updateVisualization()), this);
+  
   // Create generator colors group
   property_generator_colors_group_ = new rviz_common::properties::Property(
     "Generator Colors", QVariant(), "Colors for each trajectory generator", this);
+    
+  // Initially hide color groups based on default color scheme
+  updateColorSchemeVisibility();
 }
 
 TrajectoriesDisplay::~TrajectoriesDisplay()
@@ -149,13 +168,21 @@ void TrajectoriesDisplay::reset()
 
 void TrajectoriesDisplay::updateColorScheme()
 {
-  // Update visibility of generator colors group
-  property_generator_colors_group_->setHidden(
-    property_color_scheme_.getOptionInt() != 1);
+  updateColorSchemeVisibility();
     
   if (last_msg_ptr_) {
     processMessage(last_msg_ptr_);
   }
+}
+
+void TrajectoriesDisplay::updateColorSchemeVisibility()
+{
+  int color_scheme = property_color_scheme_.getOptionInt();
+  
+  // Show/hide color properties based on selected scheme
+  property_score_colors_group_->setHidden(color_scheme != 0);  // Show for "By Score"
+  property_generator_colors_group_->setHidden(color_scheme != 1);  // Show for "By Generator"
+  property_uniform_color_->setHidden(color_scheme != 2);  // Show for "Uniform"
 }
 
 void TrajectoriesDisplay::updateTrajectorySelection()
@@ -275,9 +302,9 @@ Ogre::ColourValue TrajectoriesDisplay::getTrajectoryColor(
   if (color_scheme == 0) {  // By Score
     // Assume first trajectory has best score
     if (index == 0) {
-      return rviz_common::properties::qtToOgre(property_best_trajectory_color_.getColor());
+      return rviz_common::properties::qtToOgre(property_best_trajectory_color_->getColor());
     } else {
-      return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
+      return rviz_common::properties::qtToOgre(property_other_trajectories_color_->getColor());
     }
   } else if (color_scheme == 1) {  // By Generator
     // Use color from property if available
@@ -286,11 +313,11 @@ Ogre::ColourValue TrajectoriesDisplay::getTrajectoryColor(
     if (it != property_generator_colors_.end()) {
       return rviz_common::properties::qtToOgre(it->second->getColor());
     } else {
-      // Fallback to default color
-      return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
+      // Fallback to uniform color
+      return rviz_common::properties::qtToOgre(property_uniform_color_->getColor());
     }
   } else {  // Uniform
-    return rviz_common::properties::qtToOgre(property_other_trajectories_color_.getColor());
+    return rviz_common::properties::qtToOgre(property_uniform_color_->getColor());
   }
 }
 
