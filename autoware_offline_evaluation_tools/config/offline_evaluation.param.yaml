@@ -40,6 +40,14 @@
     play:
       time_step: 0.1
 
+    # Evaluation configuration
+    evaluation:
+      mode: "closed_loop"  # Options: "open_loop" or "closed_loop"
+      
+      # Placeholder for metrics configuration
+      metrics:
+        enabled: true
+
     # Evaluation output configuration
     evaluation_output_bag_path: "/tmp/trajectory_evaluation_results.bag"
 

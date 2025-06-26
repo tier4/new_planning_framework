@@ -51,7 +51,15 @@ public:
   ~OfflineEvaluatorNode();
 
 private:
+  enum class EvaluationMode {
+    OPEN_LOOP,
+    CLOSED_LOOP
+  };
+
   void setup_evaluation_bag_writer();
+  void run_evaluation();
+  void run_open_loop_evaluation();
+  void run_closed_loop_evaluation();
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
   
@@ -75,6 +83,8 @@ private:
   std::string tf_topic_name_;
   std::string acceleration_topic_name_;
   std::string steering_topic_name_;
+  
+  EvaluationMode evaluation_mode_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

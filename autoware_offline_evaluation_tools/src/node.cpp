@@ -56,7 +56,6 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   const auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   try {
     bag_reader_.open(bag_path);
-    RCLCPP_INFO(get_logger(), "Successfully opened bag file: %s", bag_path.c_str());
   } catch (const std::exception& e) {
     RCLCPP_ERROR(get_logger(), "Failed to open bag file: %s", e.what());
     throw;
@@ -79,6 +78,22 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   TOPIC::TF = tf_topic_name_;
   TOPIC::ACCELERATION = acceleration_topic_name_;
   TOPIC::STEERING = steering_topic_name_;
+  
+  // Read evaluation mode
+  const auto mode_str = get_parameter_or_default<std::string>(*this, "evaluation.mode", "closed_loop");
+  if (mode_str == "open_loop") {
+    evaluation_mode_ = EvaluationMode::OPEN_LOOP;
+    RCLCPP_INFO(get_logger(), "Evaluation mode: OPEN_LOOP");
+  } else if (mode_str == "closed_loop") {
+    evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
+    RCLCPP_INFO(get_logger(), "Evaluation mode: CLOSED_LOOP");
+  } else {
+    RCLCPP_ERROR(get_logger(), "Invalid evaluation mode: %s. Using CLOSED_LOOP.", mode_str.c_str());
+    evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
+  }
+  
+  // Automatically start evaluation
+  run_evaluation();
 }
 
 OfflineEvaluatorNode::~OfflineEvaluatorNode()
@@ -161,16 +176,52 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
   }
 }
 
-// Removed unused parameter functions
+void OfflineEvaluatorNode::run_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Starting evaluation...");
+  
+  switch (evaluation_mode_) {
+    case EvaluationMode::OPEN_LOOP:
+      run_open_loop_evaluation();
+      break;
+    case EvaluationMode::CLOSED_LOOP:
+      run_closed_loop_evaluation();
+      break;
+  }
+  
+  RCLCPP_INFO(get_logger(), "Evaluation complete");
+}
 
-// Removed unused get_route function
+void OfflineEvaluatorNode::run_open_loop_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Running open-loop evaluation");
+  
+  // TODO: Implement open-loop evaluation
+  // - Read pre-recorded trajectories from bag
+  // - Evaluate trajectories using metrics
+  // - Save results to evaluation bag
+  
+  RCLCPP_INFO(get_logger(), "Open-loop evaluation complete");
+}
 
-
-// Removed unused data processing functions
-
-// Removed unused service functions
-
-// Removed unused validation functions
+void OfflineEvaluatorNode::run_closed_loop_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Running closed-loop evaluation");
+  
+  
+  // TODO: Implement closed-loop evaluation
+  // Main evaluation loop
+  
+  // Placeholder for evaluation loop
+  // while (bag_reader_.has_next() && rclcpp::ok()) {
+  //   // Read sensor data from bag
+  //   // Re-run planner
+  //   // Evaluate generated trajectory
+  //   // Save results
+  // }
+  
+  RCLCPP_INFO(get_logger(), "Closed-loop evaluation complete");
+}
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
 #include <rclcpp_components/register_node_macro.hpp>
