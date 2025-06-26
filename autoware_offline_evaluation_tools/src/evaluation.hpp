@@ -70,6 +70,15 @@ public:
 
   auto marker() const -> std::shared_ptr<MarkerArray>;
 
+  std::pair<double, double> calculate_displacement_errors(
+    const std::shared_ptr<TrajectoryPoints> & candidate_trajectory,
+    const std::shared_ptr<TrajectoryPoints> & ground_truth_trajectory) const;
+
+  auto ground_truth_from_live_trajectory(
+    const std::shared_ptr<ReplayEvaluationData> & replay_data,
+    const Trajectory & live_trajectory) const
+    -> std::shared_ptr<TrajectoryPoints>;
+
 private:
   auto preferred_lanes(
     const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<RouteHandler> & route_handler)
@@ -83,11 +92,6 @@ private:
   auto ground_truth(
     const std::shared_ptr<BagData> & bag_data,
     const std::shared_ptr<DataAugmentParameters> & parameters) const
-    -> std::shared_ptr<TrajectoryPoints>;
-
-  auto ground_truth_from_live_trajectory(
-    const std::shared_ptr<ReplayEvaluationData> & replay_data,
-    const Trajectory & live_trajectory) const
     -> std::shared_ptr<TrajectoryPoints>;
 
   auto get_localization_at_time(
@@ -105,10 +109,6 @@ private:
     const Odometry & localization,
     const builtin_interfaces::msg::Duration & time_from_start) const
     -> autoware_planning_msgs::msg::TrajectoryPoint;
-
-  std::pair<double, double> calculate_displacement_errors(
-    const std::shared_ptr<TrajectoryPoints> & candidate_trajectory,
-    const std::shared_ptr<TrajectoryPoints> & ground_truth_trajectory) const;
 
   double calculate_euclidean_distance(
     const geometry_msgs::msg::Pose & pose1,

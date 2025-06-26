@@ -52,7 +52,8 @@ struct Buffer : BufferBase
 {
   std::vector<T> msgs;
 
-  const double BUFFER_TIME = 20.0 * 1e9;
+  double buffer_time_ns = 20.0 * 1e9;  // Made configurable, default 20 seconds
+  size_t max_buffer_size = 10000;  // Maximum number of messages to keep
 
   bool ready() const override
   {
@@ -62,7 +63,7 @@ struct Buffer : BufferBase
 
     return rclcpp::Time(msgs.back().header.stamp).nanoseconds() -
              rclcpp::Time(msgs.front().header.stamp).nanoseconds() >
-           BUFFER_TIME;
+           buffer_time_ns;
   }
 
   void remove_old_data(const rcutils_time_point_value_t now) override
@@ -73,7 +74,17 @@ struct Buffer : BufferBase
     msgs.erase(itr, msgs.end());
   }
 
-  void append(const T & msg) { msgs.push_back(msg); }
+  void append(const T & msg) 
+  { 
+    msgs.push_back(msg);
+    
+    // Prevent unbounded growth by removing old messages if buffer is too large
+    if (msgs.size() > max_buffer_size) {
+      // Remove oldest 10% of messages
+      const size_t remove_count = max_buffer_size / 10;
+      msgs.erase(msgs.begin(), msgs.begin() + remove_count);
+    }
+  }
 
   auto get(const rcutils_time_point_value_t now) const -> typename T::SharedPtr
   {
@@ -110,14 +121,40 @@ auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMes
 
 struct BagData
 {
-  explicit BagData(const rcutils_time_point_value_t timestamp) : timestamp{timestamp}
+  explicit BagData(const rcutils_time_point_value_t timestamp, 
+                   const double buffer_duration_sec = 20.0,
+                   const size_t max_buffer_msgs = 10000) : timestamp{timestamp}
   {
-    buffers.emplace(TOPIC::TF, std::make_shared<Buffer<TFMessage>>());
-    buffers.emplace(TOPIC::ODOMETRY, std::make_shared<Buffer<Odometry>>());
-    buffers.emplace(TOPIC::ACCELERATION, std::make_shared<Buffer<AccelWithCovarianceStamped>>());
-    buffers.emplace(TOPIC::TRAJECTORY, std::make_shared<Buffer<Trajectory>>());
-    buffers.emplace(TOPIC::OBJECTS, std::make_shared<Buffer<PredictedObjects>>());
-    buffers.emplace(TOPIC::STEERING, std::make_shared<Buffer<SteeringReport>>());
+    // Helper to create buffer with configuration
+    auto create_tf_buffer = std::make_shared<Buffer<TFMessage>>();
+    create_tf_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_tf_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::TF, create_tf_buffer);
+    
+    auto create_odom_buffer = std::make_shared<Buffer<Odometry>>();
+    create_odom_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_odom_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::ODOMETRY, create_odom_buffer);
+    
+    auto create_accel_buffer = std::make_shared<Buffer<AccelWithCovarianceStamped>>();
+    create_accel_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_accel_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::ACCELERATION, create_accel_buffer);
+    
+    auto create_traj_buffer = std::make_shared<Buffer<Trajectory>>();
+    create_traj_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_traj_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::TRAJECTORY, create_traj_buffer);
+    
+    auto create_obj_buffer = std::make_shared<Buffer<PredictedObjects>>();
+    create_obj_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_obj_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::OBJECTS, create_obj_buffer);
+    
+    auto create_steer_buffer = std::make_shared<Buffer<SteeringReport>>();
+    create_steer_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    create_steer_buffer->max_buffer_size = max_buffer_msgs;
+    buffers.emplace(TOPIC::STEERING, create_steer_buffer);
   }
 
   rcutils_time_point_value_t timestamp;
@@ -146,9 +183,14 @@ struct BagData
 
 struct ReplayEvaluationData : public BagData
 {
-  explicit ReplayEvaluationData(const rcutils_time_point_value_t timestamp) : BagData(timestamp)
+  explicit ReplayEvaluationData(const rcutils_time_point_value_t timestamp,
+                               const double buffer_duration_sec = 20.0,
+                               const size_t max_buffer_msgs = 10000) 
+    : BagData(timestamp, buffer_duration_sec, max_buffer_msgs)
   {
     live_trajectory_buffer = std::make_shared<Buffer<Trajectory>>();
+    live_trajectory_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
+    live_trajectory_buffer->max_buffer_size = max_buffer_msgs;
   }
 
   std::shared_ptr<Buffer<Trajectory>> live_trajectory_buffer;

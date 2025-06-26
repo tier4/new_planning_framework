@@ -43,40 +43,16 @@
     # Evaluation output configuration
     evaluation_output_bag_path: "/tmp/trajectory_evaluation_results.bag"
 
-    # Topics to publish during replay
-    publish_topics:
-      route:
-        topic: "/planning/mission_planning/route"
-        qos: 1
-        enabled: true
-        publish_once: true  # Publish once at start
-      tf:
-        topic: "/tf"
-        qos: 1
-        enabled: true
-        publish_once: false  # Publish continuously
-      objects:
-        topic: "/perception/object_recognition/objects"
-        qos: 1
-        enabled: true
-        publish_once: false
-      odometry:
-        topic: "/localization/kinematic_state"
-        qos: 1
-        enabled: false  # Set to true if you want to republish odometry
-        publish_once: false
-      acceleration:
-        topic: "/localization/acceleration"
-        qos: 1
-        enabled: false  # Set to true if you want to republish acceleration
-        publish_once: false
-      steering:
-        topic: "/vehicle/status/steering_status"
-        qos: 1
-        enabled: false  # Set to true if you want to republish steering
-        publish_once: false
-      markers:
-        topic: "/planning/trajectory_selector/ranker/markers"
-        qos: 1
-        enabled: true
-        publish_once: false
+    # Memory management configuration
+    buffer_duration_sec: 20.0  # Buffer duration in seconds
+    max_buffer_messages: 10000  # Maximum messages per buffer
+
+    # Topic name configuration (optional - uses defaults if not specified)
+    # route_topic: "/planning/mission_planning/route"
+    # odometry_topic: "/localization/kinematic_state"
+    # trajectory_topic: "/planning/scenario_planning/trajectory"
+    # objects_topic: "/perception/object_recognition/objects"
+    # tf_topic: "/tf"
+    # acceleration_topic: "/localization/acceleration"
+    # steering_topic: "/vehicle/status/steering_status"
+    # live_trajectory_topic: "/planning/scenario_planning/live_trajectory"

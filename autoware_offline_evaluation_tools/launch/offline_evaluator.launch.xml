@@ -1,7 +1,5 @@
 <launch>
-  <arg name="replay_bag_path" description="bagfile path for replay data (odometry, objects, etc.)"/>
-  <arg name="route_bag_path" description="bagfile path for route information"/>
-  <arg name="bag_path" default="$(var replay_bag_path)" description="DEPRECATED: use replay_bag_path instead"/>
+  <arg name="bag_path" description="bagfile path containing route and replay data (odometry, objects, etc.)"/>
 
   <arg name="map_path" description="point cloud and lanelet2 map directory path"/>
   <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
@@ -35,8 +33,10 @@
 
   <node_container pkg="rclcpp_components" exec="component_container" name="offline_evaluator_container" namespace="" output="screen">
     <composable_node pkg="autoware_offline_evaluation_tools" plugin="autoware::trajectory_selector::offline_evaluation_tools::OfflineEvaluatorNode" name="offline_evaluator">
-      <param name="replay_bag_path" value="$(var replay_bag_path)"/>
-      <param name="route_bag_path" value="$(var route_bag_path)"/>
+      <param name="bag_path" value="$(var bag_path)"/>
+      <param name="route_topic" value="$(var input/route_topic)"/>
+      <param name="odometry_topic" value="$(var input/odometry)"/>
+      <param name="trajectory_topic" value="$(var input/trajectory)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
       <remap from="~/input/lanelet2_map" to="$(var input/map_topic)"/>
       <remap from="~/input/live_trajectory" to="$(var input/live_trajectory)"/>

@@ -51,58 +51,30 @@ public:
   ~OfflineEvaluatorNode();
 
 private:
-  void play(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
-
-  void rewind(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
-
   void next_route(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
 
   void weight(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
 
   auto get_route() -> LaneletRoute::ConstSharedPtr;
 
-  auto get_route_from_bag() -> LaneletRoute::ConstSharedPtr;
-
   void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
 
   void update_replay_data(const std::shared_ptr<ReplayEvaluationData> & replay_data, const double dt) const;
 
-  void on_live_trajectory(const Trajectory::ConstSharedPtr msg);
-
-  void setup_publishers();
 
   void setup_evaluation_bag_writer();
 
-  void publish_replay_topics(const std::shared_ptr<ReplayEvaluationData> & replay_data) const;
-
   auto convert_trajectory_to_points(const Trajectory & trajectory) const -> std::shared_ptr<TrajectoryPoints>;
-
-  void analyze(const std::shared_ptr<BagData> & bag_data) const;
-
-  void visualize(const std::shared_ptr<BagEvaluator> & bag_evaluator) const;
-
-  void plot(const std::shared_ptr<BagEvaluator> & bag_evaluator) const;
 
   auto evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>;
 
   auto data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>;
 
-  std::map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
-
-  std::map<std::string, bool> publish_enabled_;
-
-  std::map<std::string, bool> publish_once_;
-
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
-
-  rclcpp::Subscription<Trajectory>::SharedPtr sub_live_trajectory_;
-
-  rclcpp::Service<Trigger>::SharedPtr srv_play_;
-
-  rclcpp::Service<Trigger>::SharedPtr srv_rewind_;
-
+  
+  
   rclcpp::Service<Trigger>::SharedPtr srv_route_;
-
+  
   rclcpp::Service<Trigger>::SharedPtr srv_weight_;
 
   std::shared_ptr<RouteHandler> route_handler_;
@@ -111,13 +83,19 @@ private:
 
   mutable std::mutex mutex_;
 
-  mutable rosbag2_cpp::Reader replay_reader_;
-
-  mutable rosbag2_cpp::Reader route_reader_;
+  mutable rosbag2_cpp::Reader bag_reader_;
 
   std::unique_ptr<rosbag2_cpp::Writer> evaluation_bag_writer_;
 
   std::shared_ptr<ReplayEvaluationData> current_replay_data_;
+
+  std::string route_topic_name_;
+  std::string odometry_topic_name_;
+  std::string trajectory_topic_name_;
+  std::string objects_topic_name_;
+  std::string tf_topic_name_;
+  std::string acceleration_topic_name_;
+  std::string steering_topic_name_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

@@ -33,7 +33,6 @@
   <depend>magic_enum</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
-  <depend>rosbag2_cpp</depend>
   <depend>std_srvs</depend>
   <depend>tf2_msgs</depend>
   <depend>tf2_ros</depend>

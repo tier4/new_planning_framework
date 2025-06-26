@@ -36,7 +36,7 @@ bool Buffer<SteeringReport>::ready() const
 
   return rclcpp::Time(msgs.back().stamp).nanoseconds() -
            rclcpp::Time(msgs.front().stamp).nanoseconds() >
-         BUFFER_TIME;
+         buffer_time_ns;
 }
 
 template <>
@@ -56,7 +56,7 @@ bool Buffer<TFMessage>::ready() const
 
   return rclcpp::Time(msgs.back().transforms.front().header.stamp).nanoseconds() -
            rclcpp::Time(msgs.front().transforms.front().header.stamp).nanoseconds() >
-         BUFFER_TIME;
+         buffer_time_ns;
 }
 
 template <>
