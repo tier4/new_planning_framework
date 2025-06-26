@@ -51,31 +51,11 @@ public:
   ~OfflineEvaluatorNode();
 
 private:
-  void next_route(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
-
-  void weight(const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res);
-
-  auto get_route() -> LaneletRoute::ConstSharedPtr;
-
-  void update(const std::shared_ptr<BagData> & bag_data, const double dt) const;
-
-  void update_replay_data(const std::shared_ptr<ReplayEvaluationData> & replay_data, const double dt) const;
-
-
   void setup_evaluation_bag_writer();
-
-  auto convert_trajectory_to_points(const Trajectory & trajectory) const -> std::shared_ptr<TrajectoryPoints>;
-
-  auto evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>;
-
-  auto data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
   
   
-  rclcpp::Service<Trigger>::SharedPtr srv_route_;
-  
-  rclcpp::Service<Trigger>::SharedPtr srv_weight_;
 
   std::shared_ptr<RouteHandler> route_handler_;
 
@@ -87,7 +67,6 @@ private:
 
   std::unique_ptr<rosbag2_cpp::Writer> evaluation_bag_writer_;
 
-  std::shared_ptr<ReplayEvaluationData> current_replay_data_;
 
   std::string route_topic_name_;
   std::string odometry_topic_name_;
