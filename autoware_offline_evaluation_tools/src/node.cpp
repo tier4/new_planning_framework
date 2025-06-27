@@ -50,8 +50,6 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
     [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
 
-  // Removed unused services
-
   // Open bag file
   const auto bag_path = get_or_declare_parameter<std::string>(*this, "bag_path");
   try {
@@ -83,16 +81,13 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   const auto mode_str = get_parameter_or_default<std::string>(*this, "evaluation.mode", "closed_loop");
   if (mode_str == "open_loop") {
     evaluation_mode_ = EvaluationMode::OPEN_LOOP;
-    RCLCPP_INFO(get_logger(), "Evaluation mode: OPEN_LOOP");
   } else if (mode_str == "closed_loop") {
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
-    RCLCPP_INFO(get_logger(), "Evaluation mode: CLOSED_LOOP");
   } else {
     RCLCPP_ERROR(get_logger(), "Invalid evaluation mode: %s. Using CLOSED_LOOP.", mode_str.c_str());
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
   }
   
-  // Automatically start evaluation
   run_evaluation();
 }
 
