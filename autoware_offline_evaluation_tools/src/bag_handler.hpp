@@ -30,6 +30,16 @@ namespace autoware::trajectory_selector::offline_evaluation_tools
 
 using autoware_planning_msgs::msg::Trajectory;
 
+struct SynchronizedData
+{
+  std::shared_ptr<Odometry> kinematic_state;
+  std::shared_ptr<Trajectory> trajectory;
+  std::shared_ptr<AccelWithCovarianceStamped> acceleration;
+  std::shared_ptr<SteeringReport> steering_status;
+  std::shared_ptr<PredictedObjects> objects;
+  rclcpp::Time timestamp;
+};
+
 struct TOPIC
 {
   static std::string TF;
@@ -98,6 +108,34 @@ struct Buffer : BufferBase
 
     return std::make_shared<T>(*itr);
   }
+
+  auto get_closest(const rcutils_time_point_value_t target_time, const double tolerance_ms = 50.0) const -> typename T::SharedPtr
+  {
+    if (msgs.empty()) {
+      return nullptr;
+    }
+
+    const double tolerance_ns = tolerance_ms * 1e6;
+    
+    // Find the message with the closest timestamp
+    auto closest_itr = msgs.begin();
+    double min_diff = std::abs(static_cast<double>(rclcpp::Time(closest_itr->header.stamp).nanoseconds() - target_time));
+    
+    for (auto itr = msgs.begin(); itr != msgs.end(); ++itr) {
+      const double diff = std::abs(static_cast<double>(rclcpp::Time(itr->header.stamp).nanoseconds() - target_time));
+      if (diff < min_diff) {
+        min_diff = diff;
+        closest_itr = itr;
+      }
+    }
+    
+    // Check if within tolerance
+    if (min_diff > tolerance_ns) {
+      return nullptr;
+    }
+    
+    return std::make_shared<T>(*closest_itr);
+  }
 };
 
 template <>
@@ -118,6 +156,12 @@ auto Buffer<SteeringReport>::get(const rcutils_time_point_value_t now) const
 
 template <>
 auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMessage::SharedPtr;
+
+template <>
+auto Buffer<SteeringReport>::get_closest(const rcutils_time_point_value_t target_time, const double tolerance_ms) const -> SteeringReport::SharedPtr;
+
+template <>
+auto Buffer<TFMessage>::get_closest(const rcutils_time_point_value_t target_time, const double tolerance_ms) const -> TFMessage::SharedPtr;
 
 struct BagData
 {
@@ -178,6 +222,70 @@ struct BagData
   {
     return std::all_of(
       buffers.begin(), buffers.end(), [](const auto & buffer) { return buffer.second->ready(); });
+  }
+
+  auto get_synchronized_data_at_time(const rcutils_time_point_value_t target_time, const double tolerance_ms = 50.0) const -> std::shared_ptr<SynchronizedData>
+  {
+    auto synchronized_data = std::make_shared<SynchronizedData>();
+    synchronized_data->timestamp = rclcpp::Time(target_time);
+
+    // Get odometry buffer
+    auto odom_buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(buffers.at(TOPIC::ODOMETRY));
+    if (!odom_buffer) return nullptr;
+    
+    synchronized_data->kinematic_state = odom_buffer->get_closest(target_time, tolerance_ms);
+    if (!synchronized_data->kinematic_state) return nullptr;
+
+    // Get trajectory
+    auto traj_buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(buffers.at(TOPIC::TRAJECTORY));
+    if (traj_buffer) {
+      synchronized_data->trajectory = traj_buffer->get_closest(target_time, tolerance_ms);
+    }
+
+    // Get acceleration
+    auto accel_buffer = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(buffers.at(TOPIC::ACCELERATION));
+    if (accel_buffer) {
+      synchronized_data->acceleration = accel_buffer->get_closest(target_time, tolerance_ms);
+    }
+
+    // Get steering status
+    auto steer_buffer = std::dynamic_pointer_cast<Buffer<SteeringReport>>(buffers.at(TOPIC::STEERING));
+    if (steer_buffer) {
+      synchronized_data->steering_status = steer_buffer->get_closest(target_time, tolerance_ms);
+    }
+
+    // Get objects
+    auto obj_buffer = std::dynamic_pointer_cast<Buffer<PredictedObjects>>(buffers.at(TOPIC::OBJECTS));
+    if (obj_buffer) {
+      synchronized_data->objects = obj_buffer->get_closest(target_time, tolerance_ms);
+    }
+
+    return synchronized_data;
+  }
+
+  auto get_kinematic_states_at_interval(const double interval_ms = 100.0) const -> std::vector<std::shared_ptr<Odometry>>
+  {
+    std::vector<std::shared_ptr<Odometry>> result;
+    
+    auto odom_buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(buffers.at(TOPIC::ODOMETRY));
+    if (!odom_buffer || odom_buffer->msgs.empty()) {
+      return result;
+    }
+
+    // Get first and last timestamp from odometry messages
+    const auto first_time = rclcpp::Time(odom_buffer->msgs.front().header.stamp).nanoseconds();
+    const auto last_time = rclcpp::Time(odom_buffer->msgs.back().header.stamp).nanoseconds();
+    const auto interval_ns = static_cast<rcutils_time_point_value_t>(interval_ms * 1e6);
+
+    // Sample at regular intervals
+    for (auto current_time = first_time; current_time <= last_time; current_time += interval_ns) {
+      auto odom = odom_buffer->get_closest(current_time, interval_ms / 2.0);
+      if (odom) {
+        result.push_back(odom);
+      }
+    }
+
+    return result;
   }
 };
 

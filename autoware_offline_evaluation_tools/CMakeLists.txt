@@ -13,6 +13,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/utils.cpp
   src/bag_handler.cpp
   src/evaluation.cpp
+  src/closed_loop_evaluator.cpp
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}

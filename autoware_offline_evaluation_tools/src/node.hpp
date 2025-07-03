@@ -63,8 +63,6 @@ private:
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
   
-  
-
   std::shared_ptr<RouteHandler> route_handler_;
 
   std::shared_ptr<VehicleInfo> vehicle_info_;
@@ -85,6 +83,9 @@ private:
   std::string steering_topic_name_;
   
   EvaluationMode evaluation_mode_;
+  std::string bag_path_;
+  
+  rclcpp::TimerBase::SharedPtr map_check_timer_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

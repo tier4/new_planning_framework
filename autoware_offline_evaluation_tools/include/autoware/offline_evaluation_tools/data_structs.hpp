@@ -23,23 +23,11 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-struct TargetStateParameters
-{
-  std::vector<double> lat_positions{};
-  std::vector<double> lat_velocities{};
-  std::vector<double> lat_accelerations{};
-  std::vector<double> lon_positions{};
-  std::vector<double> lon_velocities{};
-  std::vector<double> lon_accelerations{};
-};
-
+// DataAugmentParameters is kept for backward compatibility but only sample_num and resolution are used
 struct DataAugmentParameters
 {
   size_t sample_num{20};
-
   double resolution{0.5};
-
-  TargetStateParameters target_state{};
 };
 
 struct Result

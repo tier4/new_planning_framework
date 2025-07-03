@@ -1,17 +1,7 @@
 /**:
   ros__parameters:
-    sample_num: 20
-    resolution: 0.5
-
-    target_state:
-      lateral_positions: [-2.5, -1.0, 0.0, 1.0, 2.5]
-      # lateral_positions: [-4.5, -3.5, -2.5, -1.0, 0.0, 1.0, 2.5, 3.5, 4.0]
-      lateral_velocities: [0.0]
-      lateral_accelerations: [0.0]
-      longitudinal_positions: [0.0]
-      longitudinal_velocities: [0.0]
-      longitudinal_accelerations: [-0.2, -0.1, 0.0, 0.1, 0.2]
-      # longitudinal_accelerations: [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]
+    sample_num: 20  # Number of samples for ground truth generation
+    resolution: 0.5  # Time resolution in seconds for ground truth sampling
 
     metrics: ["autoware::trajectory_selector::trajectory_metrics::LateralAcceleration",
               "autoware::trajectory_selector::trajectory_metrics::LongitudinalJerk",
@@ -49,11 +39,17 @@
         enabled: true
 
     # Evaluation output configuration
-    evaluation_output_bag_path: "/tmp/trajectory_evaluation_results.bag"
+    evaluation_output_bag_path: "~/trajectory_evaluation_results.bag"
+    summary_output_file: "~/evaluation_summary.txt"
+    json_output_path: "~/evaluation_result.json"
 
     # Memory management configuration
     buffer_duration_sec: 20.0  # Buffer duration in seconds
     max_buffer_messages: 10000  # Maximum messages per buffer
+    
+    # Evaluation timing configuration
+    evaluation_interval_ms: 100.0  # Interval for sampling kinematic states (milliseconds)
+    sync_tolerance_ms: 50.0  # Tolerance for time synchronization (milliseconds)
 
     # Topic name configuration (optional - uses defaults if not specified)
     # route_topic: "/planning/mission_planning/route"

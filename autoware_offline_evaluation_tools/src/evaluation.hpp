@@ -148,11 +148,6 @@ private:
     rosbag2_cpp::Writer & bag_writer) const;
 
 
-  auto augment_data(
-    const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
-    const std::shared_ptr<DataAugmentParameters> & parameters) const
-    -> std::vector<std::shared_ptr<TrajectoryPoints>>;
-
   std::shared_ptr<DataAugmentParameters> parameters_;
 
   std::shared_ptr<TFMessage> tf_;

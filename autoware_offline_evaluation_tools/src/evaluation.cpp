@@ -14,7 +14,6 @@
 
 #include "evaluation.hpp"
 
-#include "autoware/offline_evaluation_tools/utils.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
 
@@ -76,13 +75,6 @@ void BagEvaluator::setup(
     add(core_data);
   }
 
-  // data augmentation
-  for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
-    const auto core_data =
-      std::make_shared<CoreData>(points, previous_points, objects_, preferred_lanes_, "candidates");
-
-    add(core_data);
-  }
 
   // Evaluator::setup(previous_points);
   
@@ -795,42 +787,6 @@ double BagEvaluator::calculate_minimum_ttc(
 
 
 
-auto BagEvaluator::augment_data(
-  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
-  const std::shared_ptr<DataAugmentParameters> & parameters) const
-  -> std::vector<std::shared_ptr<TrajectoryPoints>>
-{
-  std::vector<std::shared_ptr<TrajectoryPoints>> augment_data;
-
-  const auto odometry_ptr =
-    std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-      ->get(bag_data->timestamp);
-  if (!odometry_ptr) {
-    throw std::logic_error("data is not enough.");
-  }
-
-  const auto accel_ptr = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-                           bag_data->buffers.at(TOPIC::ACCELERATION))
-                           ->get(bag_data->timestamp);
-  if (!accel_ptr) {
-    throw std::logic_error("data is not enough.");
-  }
-
-  const auto trajectory_ptr =
-    std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
-      ->get(bag_data->timestamp);
-  if (!trajectory_ptr) {
-    throw std::logic_error("data is not enough.");
-  }
-
-  for (const auto & points : utils::augment(
-         *trajectory_ptr, odometry_ptr->pose.pose, odometry_ptr->twist.twist.linear.x,
-         accel_ptr->accel.accel.linear.x, vehicle_info, parameters)) {
-    augment_data.push_back(std::make_shared<TrajectoryPoints>(points));
-  }
-
-  return augment_data;
-}
 
 auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
   -> std::pair<double, std::shared_ptr<TrajectoryPoints>>
