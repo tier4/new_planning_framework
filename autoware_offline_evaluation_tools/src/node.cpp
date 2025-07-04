@@ -1,4 +1,4 @@
-// Copyright 2024 TIER IV, Inc.
+// Copyright 2025 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,36 +13,42 @@
 // limitations under the License.
 
 #include "node.hpp"
+
 #include "closed_loop_evaluator.hpp"
 
-#include "autoware/trajectory_selector_common/utils.hpp"
-#include "autoware_utils/ros/parameter.hpp"
-#include "autoware_utils/system/stop_watch.hpp"
-
-#include <autoware_planning_msgs/msg/lanelet_route.hpp>
-#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
-
-#include <rmw/rmw.h>
-#include <rosbag2_storage/topic_metadata.hpp>
+#include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware_utils_rclcpp/parameter.hpp>
+#include <nlohmann/json.hpp>
+#include <rclcpp/logging.hpp>
+#include <rclcpp/qos.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+#include <rosbag2_storage/topic_metadata.hpp>
 
-#include <nlohmann/json.hpp>
+#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
+#include <autoware_planning_msgs/msg/lanelet_route.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <visualization_msgs/msg/detail/marker_array__struct.hpp>
 
-#include <filesystem>
-#include <fstream>
-#include <limits>
+#include <lanelet2_core/primitives/Lanelet.h>
+#include <lanelet2_core/utility/Utilities.h>
+#include <rmw/rmw.h>
+
 #include <chrono>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-using autoware_utils::get_or_declare_parameter;
+using autoware_utils::create_marker_color;
+using autoware_utils_rclcpp::get_or_declare_parameter;
 
 // Helper function to get parameter with default value
-template<typename T>
-T get_parameter_or_default(rclcpp::Node& node, const std::string& name, const T& default_value)
+template <typename T>
+T get_parameter_or_default(rclcpp::Node & node, const std::string & name, const T & default_value)
 {
   if (node.has_parameter(name)) {
     return node.get_parameter(name).get_value<T>();
@@ -57,31 +63,39 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
 {
   setup_evaluation_bag_writer();
-   
+
   sub_map_ = create_subscription<LaneletMapBin>(
     "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
-    [this](const LaneletMapBin::ConstSharedPtr msg) { 
-      route_handler_->setMap(*msg); 
-    });
-    
+    [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
+
+  sub_map_marker_ = create_subscription<MarkerArray>(
+    "~/input/lanelet2_map_marker", rclcpp::QoS{1}.transient_local(),
+    [this](const MarkerArray::ConstSharedPtr msg) { map_marker_ = msg; });
+
   // Open bag file
   bag_path_ = get_or_declare_parameter<std::string>(*this, "bag_path");
   try {
     bag_reader_.open(bag_path_);
-  } catch (const std::exception& e) {
+  } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "Failed to open bag file: %s", e.what());
     throw;
   }
-  
+
   // Initialize topic names from parameters with defaults
-  route_topic_name_ = get_parameter_or_default<std::string>(*this, "route_topic", "/planning/mission_planning/route");
-  odometry_topic_name_ = get_parameter_or_default<std::string>(*this, "odometry_topic", "/localization/kinematic_state");
-  trajectory_topic_name_ = get_parameter_or_default<std::string>(*this, "trajectory_topic", "/planning/scenario_planning/trajectory");
-  objects_topic_name_ = get_parameter_or_default<std::string>(*this, "objects_topic", "/perception/object_recognition/objects");
+  route_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "route_topic", "/planning/mission_planning/route");
+  odometry_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "odometry_topic", "/localization/kinematic_state");
+  trajectory_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "trajectory_topic", "/planning/scenario_planning/trajectory");
+  objects_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "objects_topic", "/perception/object_recognition/objects");
   tf_topic_name_ = get_parameter_or_default<std::string>(*this, "tf_topic", "/tf");
-  acceleration_topic_name_ = get_parameter_or_default<std::string>(*this, "acceleration_topic", "/localization/acceleration");
-  steering_topic_name_ = get_parameter_or_default<std::string>(*this, "steering_topic", "/vehicle/status/steering_status");
-  
+  acceleration_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "acceleration_topic", "/localization/acceleration");
+  steering_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "steering_topic", "/vehicle/status/steering_status");
+
   // Update global TOPIC constants with configured values
   TOPIC::ROUTE = route_topic_name_;
   TOPIC::ODOMETRY = odometry_topic_name_;
@@ -90,9 +104,10 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   TOPIC::TF = tf_topic_name_;
   TOPIC::ACCELERATION = acceleration_topic_name_;
   TOPIC::STEERING = steering_topic_name_;
-  
+
   // Read evaluation mode
-  const auto mode_str = get_parameter_or_default<std::string>(*this, "evaluation.mode", "closed_loop");
+  const auto mode_str =
+    get_parameter_or_default<std::string>(*this, "evaluation.mode", "closed_loop");
   if (mode_str == "open_loop") {
     evaluation_mode_ = EvaluationMode::OPEN_LOOP;
   } else if (mode_str == "closed_loop") {
@@ -101,18 +116,16 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     RCLCPP_ERROR(get_logger(), "Invalid evaluation mode: %s. Using CLOSED_LOOP.", mode_str.c_str());
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
   }
-  
+
   // Create a timer to check map readiness without blocking
-  map_check_timer_ = create_wall_timer(
-    std::chrono::milliseconds(100),
-    [this]() {
-      if (route_handler_->isMapMsgReady()) {
-        map_check_timer_->cancel();  // Stop checking
-        run_evaluation();
-      } else {
-        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for map to be ready...");
-      }
-    });
+  map_check_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
+    if (route_handler_->isMapMsgReady()) {
+      map_check_timer_->cancel();  // Stop checking
+      run_evaluation();
+    } else {
+      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for map to be ready...");
+    }
+  });
 }
 
 OfflineEvaluatorNode::~OfflineEvaluatorNode()
@@ -121,37 +134,36 @@ OfflineEvaluatorNode::~OfflineEvaluatorNode()
     try {
       evaluation_bag_writer_->close();
       RCLCPP_INFO(get_logger(), "Evaluation bag writer closed successfully");
-    } catch (const std::exception& e) {
+    } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "Error closing evaluation bag writer: %s", e.what());
     }
   }
 }
 
-
 void OfflineEvaluatorNode::setup_evaluation_bag_writer()
 {
   try {
     evaluation_bag_writer_ = std::make_unique<rosbag2_cpp::Writer>();
-    
+
     // Get output bag path from parameters with default
     auto output_bag_path = get_parameter_or_default<std::string>(
       *this, "evaluation_output_bag_path", "~/trajectory_evaluation_results.bag");
-    
+
     // Expand home directory if needed
     if (output_bag_path[0] == '~') {
-      const char* home = std::getenv("HOME");
+      const char * home = std::getenv("HOME");
       if (home) {
         output_bag_path = std::string(home) + output_bag_path.substr(1);
       }
     }
-    
+
     // Ensure directory exists
     const auto output_dir = std::filesystem::path(output_bag_path).parent_path();
     if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
       std::filesystem::create_directories(output_dir);
       RCLCPP_INFO(get_logger(), "Created output directory: %s", output_dir.string().c_str());
     }
-    
+
     // Validate write permissions
     if (!output_dir.empty()) {
       const auto test_file = output_dir / ".write_test";
@@ -162,20 +174,15 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
       test_stream.close();
       std::filesystem::remove(test_file);
     }
-    
+
     // Setup bag writer with MCAP format
-    const rosbag2_storage::StorageOptions storage_options{
-      output_bag_path,
-      "mcap"
-    };
-    
+    const rosbag2_storage::StorageOptions storage_options{output_bag_path, "mcap"};
+
     const rosbag2_cpp::ConverterOptions converter_options{
-      rmw_get_serialization_format(),
-      rmw_get_serialization_format()
-    };
-    
+      rmw_get_serialization_format(), rmw_get_serialization_format()};
+
     evaluation_bag_writer_->open(storage_options, converter_options);
-    
+
     // Create topics for evaluation results
     const std::vector<std::pair<std::string, std::string>> topics = {
       {"/evaluation/lateral_error", "std_msgs/msg/Float64"},
@@ -185,21 +192,19 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
       {"/evaluation/yaw_rate", "std_msgs/msg/Float64"},
       {"/evaluation/map_markers", "visualization_msgs/msg/MarkerArray"},
       {"/evaluation/route_markers", "visualization_msgs/msg/MarkerArray"},
-      {"/evaluation/localization", "nav_msgs/msg/Odometry"}
-    };
-    
-    for (const auto& [topic_name, topic_type] : topics) {
-      const auto topic_info = rosbag2_storage::TopicMetadata{
-        topic_name,
-        topic_type,
-        rmw_get_serialization_format(),
-        ""
-      };
+      {"/evaluation/localization", "nav_msgs/msg/Odometry"},
+      {"/evaluation/objects", "autoware_perception_msgs/msg/PredictedObjects"},
+      {"/tf_static", "tf2_msgs/msg/TFMessage"},
+      {"/tf", "tf2_msgs/msg/TFMessage"}};
+
+    for (const auto & [topic_name, topic_type] : topics) {
+      const auto topic_info =
+        rosbag2_storage::TopicMetadata{topic_name, topic_type, rmw_get_serialization_format(), ""};
       evaluation_bag_writer_->create_topic(topic_info);
     }
-    
+
     RCLCPP_INFO(get_logger(), "Evaluation bag writer initialized: %s", output_bag_path.c_str());
-  } catch (const std::exception& e) {
+  } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "Failed to setup evaluation bag writer: %s", e.what());
     evaluation_bag_writer_ = nullptr;
   }
@@ -208,59 +213,134 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
 void OfflineEvaluatorNode::run_evaluation()
 {
   RCLCPP_INFO(get_logger(), "Starting evaluation...");
-  
-  switch (evaluation_mode_) {
-    case EvaluationMode::OPEN_LOOP:
-      run_open_loop_evaluation();
-      break;
-    case EvaluationMode::CLOSED_LOOP:
-      run_closed_loop_evaluation();
-      break;
-  }
-  
-  RCLCPP_INFO(get_logger(), "Evaluation complete");
-}
 
-void OfflineEvaluatorNode::run_open_loop_evaluation()
-{
-  RCLCPP_INFO(get_logger(), "Running open-loop evaluation for manual driving data");
-  
-  // Open-loop evaluation is for manual driving data
-  // It evaluates the actual driven trajectory without re-planning
-  RCLCPP_WARN(get_logger(), "Open-loop evaluation is not yet implemented");
-  
-  RCLCPP_INFO(get_logger(), "Open-loop evaluation complete");
-}
-
-void OfflineEvaluatorNode::run_closed_loop_evaluation()
-{
-  RCLCPP_INFO(get_logger(), "Running closed-loop evaluation for autonomous driving data");
-  
-  // Create bag data handler
-  const auto buffer_duration_sec = get_parameter_or_default<double>(*this, "buffer_duration_sec", 20.0);
-  const size_t max_buffer_messages = static_cast<size_t>(get_parameter_or_default<int64_t>(*this, "max_buffer_messages", 10000));
-  
-  auto bag_data = std::make_shared<BagData>(0, buffer_duration_sec, max_buffer_messages);
-  
-  // Read all messages from bag into buffers
-  RCLCPP_INFO(get_logger(), "Loading rosbag data into buffers...");
-  
-  // Storage for the last route and map messages
+  // Storage for the last route message and tf messages
   autoware_planning_msgs::msg::LaneletRoute::SharedPtr last_route_msg = nullptr;
-  autoware_map_msgs::msg::LaneletMapBin::SharedPtr last_map_msg = nullptr;
-  
+  tf2_msgs::msg::TFMessage tf_static_msg;
+  std::vector<std::pair<tf2_msgs::msg::TFMessage, rclcpp::Time>> tf_messages;
+
+  // Quick scan for route and tf messages
   while (bag_reader_.has_next() && rclcpp::ok()) {
     auto serialized_message = bag_reader_.read_next();
     const auto & topic_name = serialized_message->topic_name;
-    
+
+    if (topic_name == route_topic_name_ && !last_route_msg) {
+      try {
+        autoware_planning_msgs::msg::LaneletRoute msg;
+        rclcpp::Serialization<autoware_planning_msgs::msg::LaneletRoute> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        last_route_msg = std::make_shared<autoware_planning_msgs::msg::LaneletRoute>(msg);
+        RCLCPP_INFO(get_logger(), "Found route message in bag");
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize route message: %s", e.what());
+      }
+    } else if (topic_name == "/tf_static") {
+      try {
+        tf2_msgs::msg::TFMessage msg;
+        rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        // Accumulate all tf_static transforms
+        tf_static_msg.transforms.insert(
+          tf_static_msg.transforms.end(), msg.transforms.begin(), msg.transforms.end());
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize tf_static message: %s", e.what());
+      }
+    } else if (topic_name == tf_topic_name_) {
+      try {
+        tf2_msgs::msg::TFMessage msg;
+        rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        // Store tf messages with their timestamps
+        rclcpp::Time msg_time(serialized_message->time_stamp);
+        tf_messages.emplace_back(msg, msg_time);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize tf message: %s", e.what());
+      }
+    }
+  }
+
+  if (!last_route_msg) {
+    RCLCPP_ERROR(get_logger(), "No route message found in bag");
+    return;
+  }
+  route_handler_->setRoute(*last_route_msg);
+
+  // Seek back to the beginning of the bag for mode-specific evaluation
+  bag_reader_.seek(0);
+
+  // Store reference times for map/route markers
+  rclcpp::Time start_time = now();
+  rclcpp::Time end_time = now();
+
+  switch (evaluation_mode_) {
+    case EvaluationMode::OPEN_LOOP:
+      start_time = run_open_loop_evaluation();
+      end_time = start_time;  // TODO: Get actual end time
+      break;
+    case EvaluationMode::CLOSED_LOOP: {
+      auto times = run_closed_loop_evaluation();
+      start_time = times.first;
+      end_time = times.second;
+      break;
+    }
+  }
+
+  // Write tf_static at the beginning if available
+  if (!tf_static_msg.transforms.empty() && evaluation_bag_writer_) {
+    evaluation_bag_writer_->write(tf_static_msg, "/tf_static", start_time);
+    RCLCPP_INFO(
+      get_logger(), "Wrote %zu tf_static transforms to evaluation bag",
+      tf_static_msg.transforms.size());
+  }
+
+  // Write map and route markers at the beginning and end of the rosbag
+  write_map_and_route_markers_to_bag(start_time);
+
+  RCLCPP_INFO(get_logger(), "Evaluation complete");
+}
+
+rclcpp::Time OfflineEvaluatorNode::run_open_loop_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Running open-loop evaluation for manual driving data");
+
+  // Open-loop evaluation logic for trajectory analysis will be implemented here
+  RCLCPP_WARN(get_logger(), "Open-loop trajectory evaluation is not yet implemented");
+
+  RCLCPP_INFO(get_logger(), "Open-loop evaluation complete");
+  return now();
+}
+
+std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_closed_loop_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Running closed-loop evaluation for autonomous driving data");
+
+  // Create bag data handler
+  const auto buffer_duration_sec =
+    get_parameter_or_default<double>(*this, "buffer_duration_sec", 20.0);
+  const size_t max_buffer_messages =
+    static_cast<size_t>(get_parameter_or_default<int64_t>(*this, "max_buffer_messages", 10000));
+
+  auto bag_data = std::make_shared<BagData>(0, buffer_duration_sec, max_buffer_messages);
+
+  // Read all messages from bag into buffers
+  RCLCPP_INFO(get_logger(), "Loading rosbag data into buffers...");
+
+  while (bag_reader_.has_next() && rclcpp::ok()) {
+    auto serialized_message = bag_reader_.read_next();
+    const auto & topic_name = serialized_message->topic_name;
+
     try {
       if (topic_name == odometry_topic_name_) {
         Odometry msg;
         rclcpp::Serialization<Odometry> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers[TOPIC::ODOMETRY]);
+
+        auto buffer =
+          std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers[TOPIC::ODOMETRY]);
         if (buffer) {
           buffer->append(msg);
         }
@@ -269,8 +349,9 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
         rclcpp::Serialization<Trajectory> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers[TOPIC::TRAJECTORY]);
+
+        auto buffer =
+          std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers[TOPIC::TRAJECTORY]);
         if (buffer) {
           buffer->append(msg);
         }
@@ -279,8 +360,9 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
         rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(bag_data->buffers[TOPIC::ACCELERATION]);
+
+        auto buffer = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
+          bag_data->buffers[TOPIC::ACCELERATION]);
         if (buffer) {
           buffer->append(msg);
         }
@@ -289,8 +371,9 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
         rclcpp::Serialization<SteeringReport> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers[TOPIC::STEERING]);
+
+        auto buffer =
+          std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers[TOPIC::STEERING]);
         if (buffer) {
           buffer->append(msg);
         }
@@ -299,72 +382,75 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
         rclcpp::Serialization<PredictedObjects> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers[TOPIC::OBJECTS]);
+
+        auto buffer =
+          std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers[TOPIC::OBJECTS]);
         if (buffer) {
           buffer->append(msg);
+        }
+        
+        // Also write objects to evaluation bag
+        if (evaluation_bag_writer_) {
+          rclcpp::Time msg_time(serialized_message->time_stamp);
+          evaluation_bag_writer_->write(msg, "/evaluation/objects", msg_time);
         }
       } else if (topic_name == tf_topic_name_) {
         TFMessage msg;
         rclcpp::Serialization<TFMessage> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
-        
+
         auto buffer = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers[TOPIC::TF]);
         if (buffer) {
           buffer->append(msg);
         }
-      } else if (topic_name == route_topic_name_) {
-        autoware_planning_msgs::msg::LaneletRoute msg;
-        rclcpp::Serialization<autoware_planning_msgs::msg::LaneletRoute> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Store only the last route message
-        last_route_msg = std::make_shared<autoware_planning_msgs::msg::LaneletRoute>(msg);
+
+        // Also write tf messages to evaluation bag
+        if (evaluation_bag_writer_) {
+          rclcpp::Time msg_time(serialized_message->time_stamp);
+          evaluation_bag_writer_->write(msg, "/tf", msg_time);
+        }
       }
-    } catch (const std::exception& e) {
-      RCLCPP_WARN(get_logger(), "Failed to deserialize message on topic %s: %s", topic_name.c_str(), e.what());
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(
+        get_logger(), "Failed to deserialize message on topic %s: %s", topic_name.c_str(),
+        e.what());
     }
   }
-  
-  // Set map and route to route_handler
-  if (last_route_msg) {
-    route_handler_->setRoute(*last_route_msg);
-  } else {
-    RCLCPP_WARN(get_logger(), "Map or route message not found in rosbag. Position errors will use trajectory instead of preferred lane.");
-  }
-  
+
   // Get kinematic states at 100ms intervals
-  const auto evaluation_interval_ms = get_parameter_or_default<double>(*this, "evaluation_interval_ms", 100.0);
+  const auto evaluation_interval_ms =
+    get_parameter_or_default<double>(*this, "evaluation_interval_ms", 100.0);
   auto kinematic_states = bag_data->get_kinematic_states_at_interval(evaluation_interval_ms);
-  
+
   if (kinematic_states.empty()) {
     RCLCPP_ERROR(get_logger(), "No kinematic states found in the rosbag");
-    return;
+    return {now(), now()};
   }
 
   // Process each kinematic state with synchronized data
   std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
-  const double sync_tolerance_ms = get_parameter_or_default<double>(*this, "sync_tolerance_ms", 50.0);
-  
+  const double sync_tolerance_ms =
+    get_parameter_or_default<double>(*this, "sync_tolerance_ms", 50.0);
+
   for (const auto & kinematic_state : kinematic_states) {
     const auto timestamp = rclcpp::Time(kinematic_state->header.stamp).nanoseconds();
     auto sync_data = bag_data->get_synchronized_data_at_time(timestamp, sync_tolerance_ms);
-    
+
     if (sync_data && sync_data->trajectory) {
       synchronized_data_list.push_back(sync_data);
     }
   }
-  
+
   // Evaluate the synchronized data
   if (!synchronized_data_list.empty()) {
     ClosedLoopEvaluator evaluator(get_logger(), route_handler_);
     evaluator.evaluate(synchronized_data_list, evaluation_bag_writer_.get());
-    
+
     // Get and log summary
     auto summary = evaluator.get_summary();
-    RCLCPP_INFO(get_logger(), 
+    RCLCPP_INFO(
+      get_logger(),
       "Evaluation Summary:\n"
       "  Total samples: %zu\n"
       "  Mean lateral error: %.3f m\n"
@@ -376,84 +462,43 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
       "  Mean steering angular velocity: %.3f rad/s\n"
       "  Min TTC: %.3f s\n"
       "  Total time: %.3f s",
-      summary.num_samples,
-      summary.mean_lateral_error,
-      summary.max_lateral_error,
-      summary.std_lateral_error,
-      summary.mean_acceleration,
-      summary.max_acceleration,
-      summary.steering_reversals,
-      summary.mean_steering_angular_velocity,
-      summary.min_ttc,
+      summary.num_samples, summary.mean_lateral_error, summary.max_lateral_error,
+      summary.std_lateral_error, summary.mean_acceleration, summary.max_acceleration,
+      summary.steering_reversals, summary.mean_steering_angular_velocity, summary.min_ttc,
       summary.total_time);
-    
-    // Save summary to file
-    auto summary_file = get_parameter_or_default<std::string>(*this, "summary_output_file", "~/evaluation_summary.txt");
-    
-    // Expand home directory if needed
-    if (summary_file[0] == '~') {
-      const char* home = std::getenv("HOME");
-      if (home) {
-        summary_file = std::string(home) + summary_file.substr(1);
-      }
-    }
-    
-    std::ofstream ofs(summary_file);
-    if (ofs.is_open()) {
-      ofs << "Closed-Loop Evaluation Summary\n";
-      ofs << "==============================\n";
-      ofs << "Total samples: " << summary.num_samples << "\n";
-      ofs << "Mean lateral error: " << summary.mean_lateral_error << " m\n";
-      ofs << "Max lateral error: " << summary.max_lateral_error << " m\n";
-      ofs << "Std lateral error: " << summary.std_lateral_error << " m\n";
-      ofs << "Mean acceleration: " << summary.mean_acceleration << " m/s²\n";
-      ofs << "Max acceleration: " << summary.max_acceleration << " m/s²\n";
-      ofs << "Mean jerk: " << summary.mean_jerk << " m/s³\n";
-      ofs << "Max jerk: " << summary.max_jerk << " m/s³\n";
-      ofs << "\nOscillation Metrics:\n";
-      ofs << "Steering reversals: " << summary.steering_reversals << "\n";
-      ofs << "Mean steering angular velocity: " << summary.mean_steering_angular_velocity << " rad/s\n";
-      ofs << "Max steering angular velocity: " << summary.max_steering_angular_velocity << " rad/s\n";
-      ofs << "Std steering angle: " << summary.std_steering_angle << " rad\n";
-      ofs << "Mean lateral jerk: " << summary.mean_lateral_jerk << " m/s³\n";
-      ofs << "Max lateral jerk: " << summary.max_lateral_jerk << " m/s³\n";
-      ofs << "\nMin TTC: " << summary.min_ttc << " s\n";
-      ofs << "Total time: " << summary.total_time << " s\n";
-      ofs.close();
-      RCLCPP_INFO(get_logger(), "Summary saved to: %s", summary_file.c_str());
-    }
-    
+
     // Save JSON output
-    const auto json_output_path = get_parameter_or_default<std::string>(*this, "json_output_path", "~/evaluation_result.json");
+    const auto json_output_path =
+      get_parameter_or_default<std::string>(*this, "json_output_path", "~/evaluation_result.json");
     std::string expanded_path = json_output_path;
-    
+
     // Expand home directory if needed
     if (expanded_path[0] == '~') {
-      const char* home = std::getenv("HOME");
+      const char * home = std::getenv("HOME");
       if (home) {
         expanded_path = std::string(home) + expanded_path.substr(1);
       }
     }
-    
+
     // Add timestamp to filename
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     std::stringstream timestamp_ss;
     timestamp_ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-    
+
     // Create filename with timestamp
     std::filesystem::path json_path(expanded_path);
     std::string filename = json_path.stem().string() + "_" + timestamp_ss.str() + ".json";
     json_path = json_path.parent_path() / filename;
-    
+
     // Get JSON summary
     nlohmann::json json_output = evaluator.get_summary_as_json();
-    
+
     // Add evaluation info
     json_output["evaluation_info"]["timestamp"] = timestamp_ss.str();
     json_output["evaluation_info"]["bag_path"] = bag_path_;
     json_output["evaluation_info"]["evaluation_mode"] = "closed_loop";
-    
+
     // Write JSON file
     std::ofstream json_file(json_path);
     if (json_file.is_open()) {
@@ -464,8 +509,57 @@ void OfflineEvaluatorNode::run_closed_loop_evaluation()
       RCLCPP_ERROR(get_logger(), "Failed to save JSON results to: %s", json_path.c_str());
     }
   }
-  
+
   RCLCPP_INFO(get_logger(), "Closed-loop evaluation complete");
+
+  // Return the timestamps of the first and last evaluation data
+  if (!kinematic_states.empty()) {
+    return {
+      rclcpp::Time(kinematic_states.front()->header.stamp),
+      rclcpp::Time(kinematic_states.back()->header.stamp)};
+  }
+  return {now(), now()};
+}
+
+void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time)
+{
+  if (!evaluation_bag_writer_) {
+    return;
+  }
+
+  // Create and write map markers from lanelet map
+  if (map_marker_) {
+    evaluation_bag_writer_->write(*map_marker_, "/evaluation/map_markers", reference_time);
+  }
+
+  // Set route for route handler if available
+  if (route_handler_ && route_handler_->isHandlerReady()) {
+    // Create and save route markers
+    visualization_msgs::msg::MarkerArray route_markers;
+    create_route_markers(route_markers);
+    if (!route_markers.markers.empty()) {
+      evaluation_bag_writer_->write(route_markers, "/evaluation/route_markers", reference_time);
+    }
+  }
+}
+
+void OfflineEvaluatorNode::create_route_markers(
+  visualization_msgs::msg::MarkerArray & marker_array) const
+{
+  if (!route_handler_ || !route_handler_->isHandlerReady()) {
+    return;
+  }
+
+  // Get preferred lanes (which are part of the route)
+  const auto preferred_lanes = route_handler_->getPreferredLanelets();
+  if (preferred_lanes.empty()) {
+    return;
+  }
+
+  autoware_utils::append_marker_array(
+    lanelet::visualization::laneletsAsTriangleMarkerArray(
+      "preferred_lane", preferred_lanes, create_marker_color(0.16, 1.0, 0.69, 0.2)),
+    &marker_array);
 }
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
