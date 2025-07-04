@@ -21,6 +21,7 @@
   <arg name="input/live_trajectory" default="/planning/scenario_planning/live_trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
   <arg name="input/map_topic" default="/map/vector_map"/>
+  <arg name="input/map_marker_topic" default="/map/vector_map_marker"/>
   <arg name="input/route_topic" default="/planning/mission_planning/route"/>
   <arg name="output/route_topic" default="/planning/mission_planning/route"/>
 
@@ -39,6 +40,7 @@
       <param name="trajectory_topic" value="$(var input/trajectory)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
       <remap from="~/input/lanelet2_map" to="$(var input/map_topic)"/>
+      <remap from="~/input/lanelet2_map_marker" to="$(var input/map_marker_topic)"/> 
       <remap from="~/input/live_trajectory" to="$(var input/live_trajectory)"/>
       <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
       <remap from="/planning/mission_planning/route" to="$(var output/route_topic)"/>

@@ -22,6 +22,7 @@
 
 using namespace autoware::trajectory_selector::offline_evaluation_tools;
 using namespace std::chrono;
+using autoware::trajectory_selector::TrajectoryPoints;
 
 class DisplacementErrorTest : public ::testing::Test
 {
