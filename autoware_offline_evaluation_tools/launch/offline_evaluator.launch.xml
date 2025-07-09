@@ -1,11 +1,11 @@
 <launch>
-  <arg name="bag_path" description="bagfile path"/>
+  <arg name="bag_path" description="bagfile path containing route and replay data (odometry, objects, etc.)"/>
 
   <arg name="map_path" description="point cloud and lanelet2 map directory path"/>
   <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
   <arg name="pointcloud_map_file" default="pointcloud_map.pcd" description="pointcloud map file name"/>
 
-  <arg name="rviz" default="true" description="launch rviz"/>
+  <arg name="rviz" default="false" description="launch rviz"/>
   <arg name="rviz_config" default="$(find-pkg-share autoware_offline_evaluation_tools)/rviz/autoware.rviz" description="rviz config"/>
 
   <arg name="use_sim_time" default="false" description="use_sim_time"/>
@@ -18,12 +18,15 @@
   <arg name="input/odometry" default="/localization/kinematic_state"/>
   <arg name="input/acceleration" default="/localization/acceleration"/>
   <arg name="input/trajectory" default="/planning/scenario_planning/trajectory"/>
+  <arg name="input/live_trajectory" default="/planning/scenario_planning/live_trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
   <arg name="input/map_topic" default="/map/vector_map"/>
+  <arg name="input/map_marker_topic" default="/map/vector_map_marker"/>
   <arg name="input/route_topic" default="/planning/mission_planning/route"/>
+  <arg name="output/route_topic" default="/planning/mission_planning/route"/>
 
   <group scoped="false">
-    <include file="$(find-pkg-share global_parameter_loader)/launch/global_params.launch.py">
+    <include file="$(find-pkg-share autoware_global_parameter_loader)/launch/global_params.launch.py">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
       <arg name="vehicle_model" value="$(var vehicle_model)"/>
     </include>
@@ -32,12 +35,18 @@
   <node_container pkg="rclcpp_components" exec="component_container" name="offline_evaluator_container" namespace="" output="screen">
     <composable_node pkg="autoware_offline_evaluation_tools" plugin="autoware::trajectory_selector::offline_evaluation_tools::OfflineEvaluatorNode" name="offline_evaluator">
       <param name="bag_path" value="$(var bag_path)"/>
+      <param name="route_topic" value="$(var input/route_topic)"/>
+      <param name="odometry_topic" value="$(var input/odometry)"/>
+      <param name="trajectory_topic" value="$(var input/trajectory)"/>
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
-      <remap from="~/input/lanelet2_map" to="/map/vector_map"/>
+      <remap from="~/input/lanelet2_map" to="$(var input/map_topic)"/>
+      <remap from="~/input/lanelet2_map_marker" to="$(var input/map_marker_topic)"/> 
+      <remap from="~/input/live_trajectory" to="$(var input/live_trajectory)"/>
       <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
+      <remap from="/planning/mission_planning/route" to="$(var output/route_topic)"/>
     </composable_node>
 
-    <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
+    <composable_node pkg="autoware_glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
   </node_container>
 
   <group>

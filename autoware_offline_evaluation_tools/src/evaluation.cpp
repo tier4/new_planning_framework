@@ -14,7 +14,6 @@
 
 #include "evaluation.hpp"
 
-#include "autoware/offline_evaluation_tools/utils.hpp"
 #include "autoware/trajectory_selector_common/utils.hpp"
 #include "bag_handler.hpp"
 
@@ -39,7 +38,16 @@ BagEvaluator::BagEvaluator(
   const std::shared_ptr<RouteHandler> & route_handler,
   const std::shared_ptr<VehicleInfo> & vehicle_info,
   const std::shared_ptr<DataAugmentParameters> & parameters)
-: Evaluator{route_handler, vehicle_info}, parameters_{parameters}
+: Evaluator{route_handler, vehicle_info}, parameters_{parameters}, evaluation_bag_writer_{nullptr}
+{
+}
+
+BagEvaluator::BagEvaluator(
+  const std::shared_ptr<RouteHandler> & route_handler,
+  const std::shared_ptr<VehicleInfo> & vehicle_info,
+  const std::shared_ptr<DataAugmentParameters> & parameters,
+  rosbag2_cpp::Writer * bag_writer)
+: Evaluator{route_handler, vehicle_info}, parameters_{parameters}, evaluation_bag_writer_{bag_writer}
 {
 }
 
@@ -67,15 +75,19 @@ void BagEvaluator::setup(
     add(core_data);
   }
 
-  // data augmentation
-  for (const auto & points : augment_data(bag_data, vehicle_info(), parameters_)) {
-    const auto core_data =
-      std::make_shared<CoreData>(points, previous_points, objects_, preferred_lanes_, "candidates");
-
-    add(core_data);
-  }
 
   // Evaluator::setup(previous_points);
+  
+  // Perform safety evaluation if bag writer is available
+  if (evaluation_bag_writer_) {
+    const auto ground_truth_data = get("ground_truth");
+    if (ground_truth_data && ground_truth_data->points()) {
+      RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Performing safety evaluation during setup");
+      evaluate_and_save_trajectory_safety(
+        ground_truth_data->points(), objects_, preferred_lanes_, 
+        ground_truth_data->points(), *evaluation_bag_writer_);
+    }
+  }
 }
 
 auto BagEvaluator::preferred_lanes(
@@ -200,42 +212,581 @@ auto BagEvaluator::ground_truth(
   return std::make_shared<TrajectoryPoints>(points);
 }
 
-auto BagEvaluator::augment_data(
-  const std::shared_ptr<BagData> & bag_data, const std::shared_ptr<VehicleInfo> & vehicle_info,
-  const std::shared_ptr<DataAugmentParameters> & parameters) const
-  -> std::vector<std::shared_ptr<TrajectoryPoints>>
+auto BagEvaluator::ground_truth_from_live_trajectory(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const Trajectory & live_trajectory) const
+  -> std::shared_ptr<TrajectoryPoints>
 {
-  std::vector<std::shared_ptr<TrajectoryPoints>> augment_data;
+  auto ground_truth_points = std::make_shared<TrajectoryPoints>();
+  ground_truth_points->reserve(live_trajectory.points.size());
 
-  const auto odometry_ptr =
-    std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-      ->get(bag_data->timestamp);
-  if (!odometry_ptr) {
-    throw std::logic_error("data is not enough.");
+  for (const auto & traj_point : live_trajectory.points) {
+    // Calculate target timestamp: current replay time + time_from_start
+    const auto time_from_start_ns = static_cast<rcutils_time_point_value_t>(
+      traj_point.time_from_start.sec) * 1000000000LL + 
+      static_cast<rcutils_time_point_value_t>(traj_point.time_from_start.nanosec);
+    
+    const auto target_timestamp = replay_data->timestamp + time_from_start_ns;
+
+    // Get localization data at target time
+    const auto localization_msg = get_localization_at_time(replay_data, target_timestamp);
+    
+    if (localization_msg) {
+      // Convert localization to trajectory point
+      const auto ground_truth_point = convert_localization_to_trajectory_point(
+        *localization_msg, traj_point.time_from_start);
+      ground_truth_points->push_back(ground_truth_point);
+    } else {
+      RCLCPP_WARN(
+        rclcpp::get_logger("BagEvaluator"), 
+        "No localization data found for timestamp %lld", target_timestamp);
+    }
   }
 
-  const auto accel_ptr = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-                           bag_data->buffers.at(TOPIC::ACCELERATION))
-                           ->get(bag_data->timestamp);
-  if (!accel_ptr) {
-    throw std::logic_error("data is not enough.");
-  }
-
-  const auto trajectory_ptr =
-    std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
-      ->get(bag_data->timestamp);
-  if (!trajectory_ptr) {
-    throw std::logic_error("data is not enough.");
-  }
-
-  for (const auto & points : utils::augment(
-         *trajectory_ptr, odometry_ptr->pose.pose, odometry_ptr->twist.twist.linear.x,
-         accel_ptr->accel.accel.linear.x, vehicle_info, parameters)) {
-    augment_data.push_back(std::make_shared<TrajectoryPoints>(points));
-  }
-
-  return augment_data;
+  return ground_truth_points;
 }
+
+auto BagEvaluator::get_localization_at_time(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const rcutils_time_point_value_t target_timestamp) const
+  -> std::shared_ptr<Odometry>
+{
+  const auto odometry_buffer = 
+    std::dynamic_pointer_cast<Buffer<Odometry>>(replay_data->buffers.at(TOPIC::ODOMETRY));
+
+  if (!odometry_buffer || odometry_buffer->msgs.empty()) {
+    return nullptr;
+  }
+
+  // Find the closest message by timestamp
+  std::shared_ptr<Odometry> closest_before = nullptr;
+  std::shared_ptr<Odometry> closest_after = nullptr;
+  rcutils_time_point_value_t min_diff_before = std::numeric_limits<rcutils_time_point_value_t>::max();
+  rcutils_time_point_value_t min_diff_after = std::numeric_limits<rcutils_time_point_value_t>::max();
+
+  for (const auto & odom_msg : odometry_buffer->msgs) {
+    const auto msg_timestamp = rclcpp::Time(odom_msg.header.stamp).nanoseconds();
+    
+    if (msg_timestamp <= target_timestamp) {
+      const auto diff = target_timestamp - msg_timestamp;
+      if (diff < min_diff_before) {
+        min_diff_before = diff;
+        closest_before = std::make_shared<Odometry>(odom_msg);
+      }
+    } else {
+      const auto diff = msg_timestamp - target_timestamp;
+      if (diff < min_diff_after) {
+        min_diff_after = diff;
+        closest_after = std::make_shared<Odometry>(odom_msg);
+      }
+    }
+  }
+
+  // If we have both before and after, interpolate
+  if (closest_before && closest_after) {
+    const auto before_time = rclcpp::Time(closest_before->header.stamp).nanoseconds();
+    const auto after_time = rclcpp::Time(closest_after->header.stamp).nanoseconds();
+    const auto total_diff = after_time - before_time;
+    
+    if (total_diff > 0) {
+      const auto ratio = static_cast<double>(target_timestamp - before_time) / total_diff;
+      return interpolate_localization(closest_before, closest_after, ratio);
+    }
+  }
+
+  // Return the closest available message
+  if (closest_before && (!closest_after || min_diff_before <= min_diff_after)) {
+    return closest_before;
+  } else if (closest_after) {
+    return closest_after;
+  }
+
+  return nullptr;
+}
+
+auto BagEvaluator::interpolate_localization(
+  const std::shared_ptr<Odometry> & odom1,
+  const std::shared_ptr<Odometry> & odom2,
+  const double ratio) const
+  -> std::shared_ptr<Odometry>
+{
+  auto interpolated = std::make_shared<Odometry>();
+  
+  // Copy header from first message and interpolate timestamp
+  interpolated->header = odom1->header;
+  const auto time1 = rclcpp::Time(odom1->header.stamp).nanoseconds();
+  const auto time2 = rclcpp::Time(odom2->header.stamp).nanoseconds();
+  const auto interpolated_time = time1 + static_cast<rcutils_time_point_value_t>((time2 - time1) * ratio);
+  interpolated->header.stamp = rclcpp::Time(interpolated_time);
+
+  // Interpolate position
+  interpolated->pose.pose.position.x = odom1->pose.pose.position.x + 
+    (odom2->pose.pose.position.x - odom1->pose.pose.position.x) * ratio;
+  interpolated->pose.pose.position.y = odom1->pose.pose.position.y + 
+    (odom2->pose.pose.position.y - odom1->pose.pose.position.y) * ratio;
+  interpolated->pose.pose.position.z = odom1->pose.pose.position.z + 
+    (odom2->pose.pose.position.z - odom1->pose.pose.position.z) * ratio;
+
+  // For orientation, use SLERP (simplified linear interpolation for small angles)
+  interpolated->pose.pose.orientation.x = odom1->pose.pose.orientation.x + 
+    (odom2->pose.pose.orientation.x - odom1->pose.pose.orientation.x) * ratio;
+  interpolated->pose.pose.orientation.y = odom1->pose.pose.orientation.y + 
+    (odom2->pose.pose.orientation.y - odom1->pose.pose.orientation.y) * ratio;
+  interpolated->pose.pose.orientation.z = odom1->pose.pose.orientation.z + 
+    (odom2->pose.pose.orientation.z - odom1->pose.pose.orientation.z) * ratio;
+  interpolated->pose.pose.orientation.w = odom1->pose.pose.orientation.w + 
+    (odom2->pose.pose.orientation.w - odom1->pose.pose.orientation.w) * ratio;
+
+  // Interpolate velocity
+  interpolated->twist.twist.linear.x = odom1->twist.twist.linear.x + 
+    (odom2->twist.twist.linear.x - odom1->twist.twist.linear.x) * ratio;
+  interpolated->twist.twist.linear.y = odom1->twist.twist.linear.y + 
+    (odom2->twist.twist.linear.y - odom1->twist.twist.linear.y) * ratio;
+  interpolated->twist.twist.angular.z = odom1->twist.twist.angular.z + 
+    (odom2->twist.twist.angular.z - odom1->twist.twist.angular.z) * ratio;
+
+  // Copy covariance from first message
+  interpolated->pose.covariance = odom1->pose.covariance;
+  interpolated->twist.covariance = odom1->twist.covariance;
+
+  return interpolated;
+}
+
+auto BagEvaluator::convert_localization_to_trajectory_point(
+  const Odometry & localization,
+  const builtin_interfaces::msg::Duration & time_from_start) const
+  -> autoware_planning_msgs::msg::TrajectoryPoint
+{
+  autoware_planning_msgs::msg::TrajectoryPoint traj_point;
+  
+  // Set timing
+  traj_point.time_from_start = time_from_start;
+  
+  // Copy pose
+  traj_point.pose = localization.pose.pose;
+  
+  // Copy velocities
+  traj_point.longitudinal_velocity_mps = localization.twist.twist.linear.x;
+  traj_point.lateral_velocity_mps = localization.twist.twist.linear.y;
+  
+  // Set other fields to default values
+  traj_point.acceleration_mps2 = 0.0;
+  traj_point.heading_rate_rps = localization.twist.twist.angular.z;
+  traj_point.front_wheel_angle_rad = 0.0;
+  traj_point.rear_wheel_angle_rad = 0.0;
+
+  return traj_point;
+}
+
+std::pair<double, double> BagEvaluator::calculate_displacement_errors(
+  const std::shared_ptr<TrajectoryPoints> & candidate_trajectory,
+  const std::shared_ptr<TrajectoryPoints> & ground_truth_trajectory) const
+{
+  if (!candidate_trajectory || !ground_truth_trajectory || 
+      candidate_trajectory->empty() || ground_truth_trajectory->empty()) {
+    return std::make_pair(0.0, 0.0);
+  }
+  
+  // Find minimum size for comparison
+  const auto min_size = std::min(candidate_trajectory->size(), ground_truth_trajectory->size());
+  
+  double sum_errors = 0.0;
+  
+  // Calculate point-wise displacement errors
+  for (size_t i = 0; i < min_size; ++i) {
+    const auto& candidate_pose = candidate_trajectory->at(i).pose;
+    const auto& ground_truth_pose = ground_truth_trajectory->at(i).pose;
+    
+    const double displacement_error = calculate_euclidean_distance(candidate_pose, ground_truth_pose);
+    sum_errors += displacement_error;
+  }
+  
+  // Calculate ADE (Average Displacement Error)
+  const double ade = min_size > 0 ? sum_errors / static_cast<double>(min_size) : 0.0;
+  
+  // Calculate FDE (Final Displacement Error)
+  double fde = 0.0;
+  if (min_size > 0) {
+    const auto& final_candidate_pose = candidate_trajectory->at(min_size - 1).pose;
+    const auto& final_ground_truth_pose = ground_truth_trajectory->at(min_size - 1).pose;
+    fde = calculate_euclidean_distance(final_candidate_pose, final_ground_truth_pose);
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "ADE: %.3fm, FDE: %.3fm", ade, fde);
+  
+  return std::make_pair(ade, fde);
+}
+
+std::pair<bool, double> BagEvaluator::check_speed_limit_violations(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const double speed_limit_mps) const
+{
+  if (!trajectory || trajectory->empty()) {
+    return std::make_pair(false, 0.0);
+  }
+
+  bool has_violation = false;
+  double max_violation = 0.0;
+  
+  for (const auto & point : *trajectory) {
+    const double speed = std::abs(point.longitudinal_velocity_mps);
+    if (speed > speed_limit_mps) {
+      has_violation = true;
+      const double violation_amount = speed - speed_limit_mps;
+      max_violation = std::max(max_violation, violation_amount);
+    }
+  }
+  
+  if (has_violation) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("BagEvaluator"), 
+      "Speed limit violation detected: max %.2f m/s over limit (%.2f km/h over)", 
+      max_violation, max_violation * 3.6);
+  }
+  
+  return std::make_pair(has_violation, max_violation);
+}
+
+std::pair<bool, double> BagEvaluator::check_lane_keeping_violations(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const
+{
+  if (!trajectory || trajectory->empty() || !preferred_lanes || preferred_lanes->empty()) {
+    return std::make_pair(false, 0.0);
+  }
+
+  bool has_violation = false;
+  double max_deviation = 0.0;
+  
+  for (const auto & point : *trajectory) {
+    // Use existing lanelet2 utility to calculate lateral deviation
+    const auto arc_coordinates = lanelet::utils::getArcCoordinates(
+      *preferred_lanes, point.pose);
+    
+    const double lateral_deviation = std::abs(arc_coordinates.distance);
+    max_deviation = std::max(max_deviation, lateral_deviation);
+    
+    // Assume lane width of 3.5m, violation if more than 1.75m from center
+    const double lane_half_width = 1.75;
+    if (lateral_deviation > lane_half_width) {
+      has_violation = true;
+    }
+  }
+  
+  if (has_violation) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("BagEvaluator"), 
+      "Lane keeping violation detected: max %.2fm lateral deviation", 
+      max_deviation);
+  }
+  
+  return std::make_pair(has_violation, max_deviation);
+}
+
+std::tuple<double, double, double> BagEvaluator::calculate_comfort_metrics(
+  const std::shared_ptr<TrajectoryPoints> & trajectory) const
+{
+  if (!trajectory || trajectory->size() < 2) {
+    return std::make_tuple(0.0, 0.0, 0.0);
+  }
+  
+  double max_lateral_accel = 0.0;
+  double max_longitudinal_accel = 0.0;
+  double max_jerk = 0.0;
+  
+  std::vector<double> longitudinal_accels;
+  longitudinal_accels.reserve(trajectory->size());
+  
+  // Calculate maximum accelerations
+  for (const auto & point : *trajectory) {
+    // Direct acceleration from trajectory point
+    const double lon_accel = std::abs(point.acceleration_mps2);
+    max_longitudinal_accel = std::max(max_longitudinal_accel, lon_accel);
+    longitudinal_accels.push_back(point.acceleration_mps2);
+    
+    // Lateral acceleration (simplified using lateral velocity)
+    const double lat_accel = std::abs(point.lateral_velocity_mps);
+    max_lateral_accel = std::max(max_lateral_accel, lat_accel);
+  }
+  
+  // Calculate maximum jerk (rate of acceleration change)
+  constexpr double dt = 0.1; // Assume 100ms time resolution
+  for (size_t i = 1; i < longitudinal_accels.size(); ++i) {
+    const double jerk = std::abs((longitudinal_accels[i] - longitudinal_accels[i-1]) / dt);
+    max_jerk = std::max(max_jerk, jerk);
+  }
+  
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Comfort metrics - Max lateral accel: %.2f m/s², Max longitudinal accel: %.2f m/s², Max jerk: %.2f m/s³", 
+    max_lateral_accel, max_longitudinal_accel, max_jerk);
+  
+  return std::make_tuple(max_lateral_accel, max_longitudinal_accel, max_jerk);
+}
+
+void BagEvaluator::evaluate_trajectory_safety(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes) const
+{
+  if (!trajectory || trajectory->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Empty trajectory provided for safety evaluation");
+    return;
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "=== Trajectory Safety Evaluation ===");
+  
+  // Calculate all metrics
+  const double min_ttc = calculate_minimum_ttc(trajectory, objects);
+  const auto speed_check = check_speed_limit_violations(trajectory);
+  const auto lane_check = check_lane_keeping_violations(trajectory, preferred_lanes);
+  const auto comfort_metrics = calculate_comfort_metrics(trajectory);
+  
+  const auto [speed_violation, max_speed_violation] = speed_check;
+  const auto [lane_violation, max_lateral_deviation] = lane_check;
+  const auto [max_lat_accel, max_lon_accel, max_jerk] = comfort_metrics;
+  
+  // Log comprehensive summary
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Safety Summary - TTC: %.2fs, Speed violation: %s (%.2f m/s), Lane violation: %s (%.2fm)",
+    min_ttc, 
+    speed_violation ? "YES" : "NO", max_speed_violation,
+    lane_violation ? "YES" : "NO", max_lateral_deviation);
+  
+  // Evaluate against thresholds
+  bool is_safe = true;
+  if (min_ttc < 3.0) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: TTC below 3 seconds!");
+    is_safe = false;
+  }
+  if (speed_violation) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: Speed limit violation!");
+    is_safe = false;
+  }
+  if (lane_violation) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNSAFE: Lane keeping violation!");
+    is_safe = false;
+  }
+  if (max_lat_accel > 3.0 || max_lon_accel > 4.0 || max_jerk > 3.0) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "UNCOMFORTABLE: High accelerations/jerk!");
+  }
+  
+  if (is_safe) {
+    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "✓ Trajectory is SAFE");
+  } else {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "⚠ Trajectory has SAFETY ISSUES");
+  }
+}
+
+void BagEvaluator::save_evaluation_results_to_bag(
+  const double ttc, const std::pair<double, double> & displacement_errors,
+  const std::pair<bool, double> & speed_check, const std::pair<bool, double> & lane_check,
+  const std::tuple<double, double, double> & comfort_metrics,
+  rosbag2_cpp::Writer & bag_writer) const
+{
+  const auto timestamp = rclcpp::Clock().now();
+  
+  // Save TTC as Float64
+  std_msgs::msg::Float64 ttc_msg;
+  ttc_msg.data = ttc;
+  bag_writer.write(ttc_msg, "/evaluation/ttc", timestamp);
+  
+  // Save displacement errors as Point (x=ADE, y=FDE, z=unused)
+  geometry_msgs::msg::Point displacement_msg;
+  displacement_msg.x = displacement_errors.first;  // ADE
+  displacement_msg.y = displacement_errors.second; // FDE
+  displacement_msg.z = 0.0;
+  bag_writer.write(displacement_msg, "/evaluation/displacement_errors", timestamp);
+  
+  // Save speed violation info as Point (x=violation_bool, y=max_violation, z=unused)
+  geometry_msgs::msg::Point speed_msg;
+  speed_msg.x = speed_check.first ? 1.0 : 0.0;
+  speed_msg.y = speed_check.second;
+  speed_msg.z = 0.0;
+  bag_writer.write(speed_msg, "/evaluation/speed_violations", timestamp);
+  
+  // Save lane violation info as Point (x=violation_bool, y=max_deviation, z=unused)
+  geometry_msgs::msg::Point lane_msg;
+  lane_msg.x = lane_check.first ? 1.0 : 0.0;
+  lane_msg.y = lane_check.second;
+  lane_msg.z = 0.0;
+  bag_writer.write(lane_msg, "/evaluation/lane_violations", timestamp);
+  
+  // Save comfort metrics as Point (x=lat_accel, y=lon_accel, z=jerk)
+  geometry_msgs::msg::Point comfort_msg;
+  comfort_msg.x = std::get<0>(comfort_metrics); // max_lateral_accel
+  comfort_msg.y = std::get<1>(comfort_metrics); // max_longitudinal_accel
+  comfort_msg.z = std::get<2>(comfort_metrics); // max_jerk
+  bag_writer.write(comfort_msg, "/evaluation/comfort_metrics", timestamp);
+  
+  // Save comprehensive status as DiagnosticStatus
+  diagnostic_msgs::msg::DiagnosticStatus status_msg;
+  status_msg.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+  status_msg.name = "trajectory_safety_evaluation";
+  status_msg.message = "Trajectory safety metrics";
+  
+  // Add key-value pairs
+  diagnostic_msgs::msg::KeyValue kv;
+  kv.key = "ttc_seconds";
+  kv.value = std::to_string(ttc);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "ade_meters";
+  kv.value = std::to_string(displacement_errors.first);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "fde_meters";
+  kv.value = std::to_string(displacement_errors.second);
+  status_msg.values.push_back(kv);
+  
+  kv.key = "speed_violation";
+  kv.value = speed_check.first ? "true" : "false";
+  status_msg.values.push_back(kv);
+  
+  kv.key = "lane_violation";
+  kv.value = lane_check.first ? "true" : "false";
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_lateral_accel";
+  kv.value = std::to_string(std::get<0>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_longitudinal_accel";
+  kv.value = std::to_string(std::get<1>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  kv.key = "max_jerk";
+  kv.value = std::to_string(std::get<2>(comfort_metrics));
+  status_msg.values.push_back(kv);
+  
+  bag_writer.write(status_msg, "/evaluation/status", timestamp);
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Evaluation results saved to MCAP bag");
+}
+
+void BagEvaluator::evaluate_and_save_trajectory_safety(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects,
+  const std::shared_ptr<lanelet::ConstLanelets> & preferred_lanes,
+  const std::shared_ptr<TrajectoryPoints> & ground_truth,
+  rosbag2_cpp::Writer & bag_writer) const
+{
+  if (!trajectory || trajectory->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Empty trajectory provided for safety evaluation");
+    return;
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "=== Trajectory Safety Evaluation with MCAP Storage ===");
+  
+  // Calculate all metrics
+  const double min_ttc = calculate_minimum_ttc(trajectory, objects);
+  const auto displacement_errors = ground_truth ? 
+    calculate_displacement_errors(trajectory, ground_truth) : std::make_pair(0.0, 0.0);
+  const auto speed_check = check_speed_limit_violations(trajectory);
+  const auto lane_check = check_lane_keeping_violations(trajectory, preferred_lanes);
+  const auto comfort_metrics = calculate_comfort_metrics(trajectory);
+  
+  // Save results to MCAP bag
+  save_evaluation_results_to_bag(
+    min_ttc, displacement_errors, speed_check, lane_check, comfort_metrics, bag_writer);
+  
+  // Also do the regular logging evaluation
+  evaluate_trajectory_safety(trajectory, objects, preferred_lanes);
+}
+
+void BagEvaluator::setup_with_live_trajectory_evaluation(
+  const std::shared_ptr<ReplayEvaluationData> & replay_data,
+  const std::shared_ptr<TrajectoryPoints> & previous_points,
+  const Trajectory & live_trajectory)
+{
+  // First do regular setup
+  setup(replay_data, previous_points);
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Starting live trajectory evaluation");
+  
+  // Generate ground truth from live trajectory using localization
+  const auto ground_truth_traj = ground_truth_from_live_trajectory(replay_data, live_trajectory);
+  
+  if (!ground_truth_traj || ground_truth_traj->empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), "Failed to generate ground truth from live trajectory");
+    return;
+  }
+  
+  // Convert live trajectory to TrajectoryPoints for evaluation
+  auto live_traj_points = std::make_shared<TrajectoryPoints>(live_trajectory.points);
+  
+  // Calculate displacement errors between live trajectory and ground truth
+  const auto displacement_errors = calculate_displacement_errors(live_traj_points, ground_truth_traj);
+  RCLCPP_INFO(
+    rclcpp::get_logger("BagEvaluator"), 
+    "Live trajectory evaluation - ADE: %.3fm, FDE: %.3fm", 
+    displacement_errors.first, displacement_errors.second);
+  
+  // Perform comprehensive safety evaluation
+  if (evaluation_bag_writer_) {
+    RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Saving live trajectory evaluation to MCAP");
+    
+    // Calculate all safety metrics for live trajectory
+    const double min_ttc = calculate_minimum_ttc(live_traj_points, objects_);
+    const auto speed_check = check_speed_limit_violations(live_traj_points);
+    const auto lane_check = check_lane_keeping_violations(live_traj_points, preferred_lanes_);
+    const auto comfort_metrics = calculate_comfort_metrics(live_traj_points);
+    
+    // Save all results to MCAP
+    save_evaluation_results_to_bag(
+      min_ttc, displacement_errors, speed_check, lane_check, comfort_metrics, *evaluation_bag_writer_);
+  } else {
+    // Just do logging evaluation
+    evaluate_trajectory_safety(live_traj_points, objects_, preferred_lanes_);
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Live trajectory evaluation completed");
+}
+
+double BagEvaluator::calculate_euclidean_distance(
+  const geometry_msgs::msg::Pose & pose1,
+  const geometry_msgs::msg::Pose & pose2) const
+{
+  const double dx = pose1.position.x - pose2.position.x;
+  const double dy = pose1.position.y - pose2.position.y;
+  const double dz = pose1.position.z - pose2.position.z;
+  
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+double BagEvaluator::calculate_minimum_ttc(
+  const std::shared_ptr<TrajectoryPoints> & trajectory,
+  const std::shared_ptr<PredictedObjects> & objects) const
+{
+  if (!trajectory || !objects || trajectory->empty() || objects->objects.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  double min_ttc = std::numeric_limits<double>::infinity();
+  
+  // Calculate TTC for each trajectory point using existing autoware utilities
+  for (size_t i = 0; i < trajectory->size(); ++i) {
+    const auto & traj_point = trajectory->at(i);
+    
+    // Calculate TTC for all objects at this trajectory point
+    for (const auto & object : objects->objects) {
+      // Use existing autoware TTC implementation
+      const double ttc = autoware::trajectory_selector::utils::time_to_collision(
+        traj_point, traj_point.time_from_start, object);
+      
+      if (std::isfinite(ttc) && ttc > 0.0) {
+        min_ttc = std::min(min_ttc, ttc);
+      }
+    }
+  }
+  
+  RCLCPP_INFO(rclcpp::get_logger("BagEvaluator"), "Minimum TTC: %.2f seconds", min_ttc);
+  return min_ttc;
+}
+
+
+
 
 auto BagEvaluator::loss(const std::shared_ptr<EvaluatorParameters> & parameters)
   -> std::pair<double, std::shared_ptr<TrajectoryPoints>>

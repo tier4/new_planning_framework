@@ -15,27 +15,10 @@
 #ifndef AUTOWARE__OFFLINE_EVALUATION_TOOLS__UTILS_HPP_
 #define AUTOWARE__OFFLINE_EVALUATION_TOOLS__UTILS_HPP_
 
-#include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "autoware_frenet_planner/frenet_planner.hpp"
-#include "autoware_path_sampler/prepare_inputs.hpp"
-#include "autoware_path_sampler/utils/trajectory_utils.hpp"
-#include "data_structs.hpp"
-
-#include "autoware_planning_msgs/msg/trajectory.hpp"
-
-#include <memory>
-#include <vector>
-
 namespace autoware::trajectory_selector::offline_evaluation_tools::utils
 {
-
-using autoware_planning_msgs::msg::Trajectory;
-
-auto augment(
-  const Trajectory & trajectory, const Pose & p_ego, const double v_ego, const double a_ego,
-  const std::shared_ptr<VehicleInfo> & vehicle_info,
-  const std::shared_ptr<DataAugmentParameters> & parameters)
-  -> std::vector<std::vector<TrajectoryPoint>>;
+// Utility functions for offline evaluation tools
+// Currently empty as data augmentation features have been removed
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools::utils
 
 #endif  // AUTOWARE__OFFLINE_EVALUATION_TOOLS__UTILS_HPP_
