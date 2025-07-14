@@ -32,7 +32,7 @@
 
     # Evaluation configuration
     evaluation:
-      mode: "closed_loop"  # Options: "open_loop" or "closed_loop"
+      mode: "open_loop"  # Options: "open_loop" or "closed_loop"
       
       # Placeholder for metrics configuration
       metrics:

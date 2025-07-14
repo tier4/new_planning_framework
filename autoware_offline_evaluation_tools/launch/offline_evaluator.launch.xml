@@ -17,7 +17,7 @@
 
   <arg name="input/odometry" default="/localization/kinematic_state"/>
   <arg name="input/acceleration" default="/localization/acceleration"/>
-  <arg name="input/trajectory" default="/planning/scenario_planning/trajectory"/>
+  <arg name="input/trajectory" default="/planning/scenario_planning/lane_driving/trajectory"/>
   <arg name="input/live_trajectory" default="/planning/scenario_planning/live_trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
   <arg name="input/map_topic" default="/map/vector_map"/>

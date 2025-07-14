@@ -56,7 +56,7 @@ private:
 
   void setup_evaluation_bag_writer();
   void run_evaluation();
-  rclcpp::Time run_open_loop_evaluation();
+  std::pair<rclcpp::Time, rclcpp::Time> run_open_loop_evaluation();
   std::pair<rclcpp::Time, rclcpp::Time> run_closed_loop_evaluation();
   void write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time);
   void create_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
