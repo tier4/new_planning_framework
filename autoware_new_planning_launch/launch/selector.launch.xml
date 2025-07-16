@@ -3,7 +3,6 @@
   <arg name="vehicle_model" description="vehicle model name"/>
 
   <!-- param path -->
-  <arg name="dummy_trajectory_publisher_param_path" default="$(find-pkg-share autoware_dummy_trajectory_publisher)/config/dummy_trajectory_publisher.param.yaml"/>
   <arg name="evaluator_weight_param_path" default="$(find-pkg-share autoware_trajectory_ranker)/config/evaluation.param.yaml"/>
 
   <!-- topic name -->
@@ -82,25 +81,4 @@
 
     <composable_node pkg="glog_component" plugin="GlogComponent" name="glog_component" namespace=""/>
   </node_container>
-
-  <group if="$(var use_dummy_trajectory)">
-    <load_composable_node target="trajectory_selector_container">
-      <composable_node
-        pkg="autoware_dummy_trajectory_publisher"
-        plugin="autoware::trajectory_selector::dummy_trajectory_publisher::DummyTrajectoryPublisherNode"
-        name="dummy_trajectory_publisher"
-        namespace=""
-      >
-        <param from="$(var dummy_trajectory_publisher_param_path)"/>
-
-        <remap from="~/input/trajectory" to="/planning/autoware/trajectory"/>
-        <remap from="~/output/trajectories" to="/planning/candidate/trajectories"/>
-
-        <remap from="~/input/odometry" to="/localization/kinematic_state"/>
-        <remap from="~/input/acceleration" to="/localization/acceleration"/>
-        <!-- composable node config -->
-        <extra_arg name="use_intra_process_comms" value="false"/>
-      </composable_node>
-    </load_composable_node>
-  </group>
 </launch>
