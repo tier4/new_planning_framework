@@ -36,7 +36,8 @@ namespace autoware::trajectory_selector::offline_evaluation_tools
 struct OpenLoopTrajectoryMetrics
 {
   // Point-wise metrics
-  std::vector<double> lateral_deviations;      // Lateral deviation at each trajectory point
+  std::vector<double> lateral_deviations;      // Lateral deviation at each trajectory point (in vehicle frame)
+  std::vector<double> longitudinal_deviations; // Longitudinal deviation at each trajectory point (in vehicle frame)
   std::vector<double> displacement_errors;     // Euclidean distance at each trajectory point
   std::vector<bool> ground_truth_available;    // Whether ground truth was available at each point
   
@@ -49,6 +50,9 @@ struct OpenLoopTrajectoryMetrics
   double mean_lateral_deviation;      // Mean absolute lateral deviation
   double max_lateral_deviation;       // Maximum absolute lateral deviation
   double std_lateral_deviation;       // Standard deviation of lateral deviation
+  double min_ttc;                     // Minimum Time To Collision
+  double ttc_at_2s;                   // TTC at 2 seconds ahead
+  std::vector<double> ttc_values;     // TTC at each trajectory point
   
   // Trajectory info
   size_t num_points;                  // Number of trajectory points
@@ -111,12 +115,12 @@ private:
   /**
    * @brief Evaluate a single trajectory against ground truth
    * @param trajectory_data Data containing the trajectory to evaluate
-   * @param ground_truth_data List of future ground truth data points
+   * @param synchronized_data_list All synchronized data
    * @return Metrics for this trajectory
    */
   OpenLoopTrajectoryMetrics evaluate_trajectory(
     const std::shared_ptr<SynchronizedData> & trajectory_data,
-    const std::vector<std::shared_ptr<SynchronizedData>> & ground_truth_data);
+    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
 
   /**
    * @brief Calculate lateral deviation from trajectory point to ground truth segment
@@ -136,6 +140,16 @@ private:
   double calculate_distance_2d(
     const geometry_msgs::msg::Point & p1,
     const geometry_msgs::msg::Point & p2);
+
+  /**
+   * @brief Calculate errors in vehicle coordinate frame
+   * @param trajectory_pose Trajectory pose (position and orientation)
+   * @param ground_truth_pose Ground truth pose (position and orientation)
+   * @return Pair of (longitudinal_error, lateral_error) in vehicle frame
+   */
+  std::pair<double, double> calculate_errors_in_vehicle_frame(
+    const geometry_msgs::msg::Pose & trajectory_pose,
+    const geometry_msgs::msg::Pose & ground_truth_pose);
 
   /**
    * @brief Find ground truth data at a specific time using interpolation
@@ -172,6 +186,10 @@ private:
   std::shared_ptr<autoware::route_handler::RouteHandler> route_handler_;
   std::vector<OpenLoopTrajectoryMetrics> metrics_list_;
   OpenLoopEvaluationSummary summary_;
+  
+  // For normalized timestamp calculation
+  rclcpp::Time first_bag_timestamp_;
+  bool first_bag_timestamp_set_ = false;
 };
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

@@ -22,6 +22,8 @@
 #include <autoware_utils/ros/marker_helper.hpp>
 #include <magic_enum.hpp>
 
+#include <cmath>
+
 #include <lanelet2_core/geometry/LineString.h>
 
 #include <algorithm>
@@ -166,6 +168,7 @@ auto BagEvaluator::ground_truth(
   -> std::shared_ptr<TrajectoryPoints>
 {
   TrajectoryPoints points;
+  points.reserve(parameters->sample_num);  // Pre-allocate for efficiency
 
   const auto odometry_buffer_ptr =
     std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY));
@@ -177,26 +180,43 @@ auto BagEvaluator::ground_truth(
   const auto steering_buffer_ptr =
     std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING));
 
+  // Validate buffers exist
+  if (!odometry_buffer_ptr || !acceleration_buffer_ptr || !steering_buffer_ptr) {
+    RCLCPP_ERROR(rclcpp::get_logger("BagEvaluator"), 
+      "Required buffers are missing. Returning partial ground truth.");
+    return std::make_shared<TrajectoryPoints>(points);
+  }
+
   for (size_t i = 0; i < parameters->sample_num; i++) {
-    const auto odometry_ptr =
-      odometry_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
+    const auto target_timestamp = bag_data->timestamp + 
+      static_cast<rcutils_time_point_value_t>(1e9 * parameters->resolution * i);
+    
+    const auto odometry_ptr = odometry_buffer_ptr->get(target_timestamp);
     if (!odometry_ptr) {
-      throw std::logic_error("data is not enough.");
+      RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), 
+        "Odometry data missing at index %zu. Stopping ground truth generation.", i);
+      break;  // Return partial results instead of throwing
     }
 
-    const auto accel_ptr =
-      acceleration_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
+    const auto accel_ptr = acceleration_buffer_ptr->get(target_timestamp);
     if (!accel_ptr) {
-      throw std::logic_error("data is not enough.");
+      RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), 
+        "Acceleration data missing at index %zu. Stopping ground truth generation.", i);
+      break;  // Return partial results instead of throwing
     }
 
-    const auto opt_steer =
-      steering_buffer_ptr->get(bag_data->timestamp + 1e9 * parameters->resolution * i);
+    const auto opt_steer = steering_buffer_ptr->get(target_timestamp);
     if (!opt_steer) {
-      throw std::logic_error("data is not enough.");
+      RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), 
+        "Steering data missing at index %zu. Stopping ground truth generation.", i);
+      break;  // Return partial results instead of throwing
     }
 
-    const auto duration = builtin_interfaces::build<Duration>().sec(0.0).nanosec(0.0);
+    const auto duration = builtin_interfaces::build<Duration>()
+      .sec(static_cast<int32_t>(parameters->resolution * i))
+      .nanosec(static_cast<uint32_t>((parameters->resolution * i - 
+        static_cast<int32_t>(parameters->resolution * i)) * 1e9));
+    
     const auto point = autoware_planning_msgs::build<TrajectoryPoint>()
                          .time_from_start(duration)
                          .pose(odometry_ptr->pose.pose)
@@ -207,6 +227,14 @@ auto BagEvaluator::ground_truth(
                          .front_wheel_angle_rad(opt_steer->steering_tire_angle)
                          .rear_wheel_angle_rad(0.0);
     points.push_back(point);
+  }
+
+  if (points.empty()) {
+    RCLCPP_ERROR(rclcpp::get_logger("BagEvaluator"), 
+      "No ground truth points could be generated.");
+  } else if (points.size() < parameters->sample_num) {
+    RCLCPP_WARN(rclcpp::get_logger("BagEvaluator"), 
+      "Only %zu of %zu ground truth points generated.", points.size(), parameters->sample_num);
   }
 
   return std::make_shared<TrajectoryPoints>(points);
@@ -258,28 +286,34 @@ auto BagEvaluator::get_localization_at_time(
     return nullptr;
   }
 
-  // Find the closest message by timestamp
+  // Binary search for efficient timestamp lookup
+  // First, create a sorted index if not already done
+  std::vector<std::pair<rcutils_time_point_value_t, size_t>> timestamps;
+  timestamps.reserve(odometry_buffer->msgs.size());
+  for (size_t i = 0; i < odometry_buffer->msgs.size(); ++i) {
+    timestamps.emplace_back(
+      rclcpp::Time(odometry_buffer->msgs[i].header.stamp).nanoseconds(), i);
+  }
+  
+  // Find the insertion point for target_timestamp
+  auto it = std::lower_bound(
+    timestamps.begin(), timestamps.end(), target_timestamp,
+    [](const auto & pair, rcutils_time_point_value_t value) {
+      return pair.first < value;
+    });
+  
   std::shared_ptr<Odometry> closest_before = nullptr;
   std::shared_ptr<Odometry> closest_after = nullptr;
-  rcutils_time_point_value_t min_diff_before = std::numeric_limits<rcutils_time_point_value_t>::max();
-  rcutils_time_point_value_t min_diff_after = std::numeric_limits<rcutils_time_point_value_t>::max();
-
-  for (const auto & odom_msg : odometry_buffer->msgs) {
-    const auto msg_timestamp = rclcpp::Time(odom_msg.header.stamp).nanoseconds();
-    
-    if (msg_timestamp <= target_timestamp) {
-      const auto diff = target_timestamp - msg_timestamp;
-      if (diff < min_diff_before) {
-        min_diff_before = diff;
-        closest_before = std::make_shared<Odometry>(odom_msg);
-      }
-    } else {
-      const auto diff = msg_timestamp - target_timestamp;
-      if (diff < min_diff_after) {
-        min_diff_after = diff;
-        closest_after = std::make_shared<Odometry>(odom_msg);
-      }
-    }
+  
+  // Get the message after target timestamp
+  if (it != timestamps.end()) {
+    closest_after = std::make_shared<Odometry>(odometry_buffer->msgs[it->second]);
+  }
+  
+  // Get the message before target timestamp
+  if (it != timestamps.begin()) {
+    --it;
+    closest_before = std::make_shared<Odometry>(odometry_buffer->msgs[it->second]);
   }
 
   // If we have both before and after, interpolate
@@ -295,10 +329,19 @@ auto BagEvaluator::get_localization_at_time(
   }
 
   // Return the closest available message
-  if (closest_before && (!closest_after || min_diff_before <= min_diff_after)) {
+  if (closest_before && !closest_after) {
     return closest_before;
-  } else if (closest_after) {
+  }
+  if (closest_after && !closest_before) {
     return closest_after;
+  }
+  // If we have both, return the closer one
+  if (closest_before && closest_after) {
+    const auto before_time = rclcpp::Time(closest_before->header.stamp).nanoseconds();
+    const auto after_time = rclcpp::Time(closest_after->header.stamp).nanoseconds();
+    const auto diff_before = target_timestamp - before_time;
+    const auto diff_after = after_time - target_timestamp;
+    return (diff_before <= diff_after) ? closest_before : closest_after;
   }
 
   return nullptr;
@@ -327,15 +370,55 @@ auto BagEvaluator::interpolate_localization(
   interpolated->pose.pose.position.z = odom1->pose.pose.position.z + 
     (odom2->pose.pose.position.z - odom1->pose.pose.position.z) * ratio;
 
-  // For orientation, use SLERP (simplified linear interpolation for small angles)
-  interpolated->pose.pose.orientation.x = odom1->pose.pose.orientation.x + 
-    (odom2->pose.pose.orientation.x - odom1->pose.pose.orientation.x) * ratio;
-  interpolated->pose.pose.orientation.y = odom1->pose.pose.orientation.y + 
-    (odom2->pose.pose.orientation.y - odom1->pose.pose.orientation.y) * ratio;
-  interpolated->pose.pose.orientation.z = odom1->pose.pose.orientation.z + 
-    (odom2->pose.pose.orientation.z - odom1->pose.pose.orientation.z) * ratio;
-  interpolated->pose.pose.orientation.w = odom1->pose.pose.orientation.w + 
-    (odom2->pose.pose.orientation.w - odom1->pose.pose.orientation.w) * ratio;
+  // For orientation, use proper SLERP (Spherical Linear Interpolation)
+  const auto & q1 = odom1->pose.pose.orientation;
+  const auto & q2 = odom2->pose.pose.orientation;
+  
+  // Calculate dot product
+  double dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
+  
+  // If dot product is negative, negate one quaternion to take shorter path
+  double q2_sign = 1.0;
+  if (dot < 0.0) {
+    dot = -dot;
+    q2_sign = -1.0;
+  }
+  
+  // Clamp dot product to avoid numerical errors
+  dot = std::min(1.0, std::max(-1.0, dot));
+  
+  // If quaternions are very close, use linear interpolation
+  if (dot > 0.9995) {
+    interpolated->pose.pose.orientation.x = q1.x + (q2.x * q2_sign - q1.x) * ratio;
+    interpolated->pose.pose.orientation.y = q1.y + (q2.y * q2_sign - q1.y) * ratio;
+    interpolated->pose.pose.orientation.z = q1.z + (q2.z * q2_sign - q1.z) * ratio;
+    interpolated->pose.pose.orientation.w = q1.w + (q2.w * q2_sign - q1.w) * ratio;
+  } else {
+    // Use SLERP
+    const double theta = std::acos(dot);
+    const double sin_theta = std::sin(theta);
+    const double t1 = std::sin((1.0 - ratio) * theta) / sin_theta;
+    const double t2 = std::sin(ratio * theta) / sin_theta;
+    
+    interpolated->pose.pose.orientation.x = q1.x * t1 + q2.x * q2_sign * t2;
+    interpolated->pose.pose.orientation.y = q1.y * t1 + q2.y * q2_sign * t2;
+    interpolated->pose.pose.orientation.z = q1.z * t1 + q2.z * q2_sign * t2;
+    interpolated->pose.pose.orientation.w = q1.w * t1 + q2.w * q2_sign * t2;
+  }
+  
+  // Normalize the quaternion
+  const double norm = std::sqrt(
+    interpolated->pose.pose.orientation.x * interpolated->pose.pose.orientation.x +
+    interpolated->pose.pose.orientation.y * interpolated->pose.pose.orientation.y +
+    interpolated->pose.pose.orientation.z * interpolated->pose.pose.orientation.z +
+    interpolated->pose.pose.orientation.w * interpolated->pose.pose.orientation.w);
+  
+  if (norm > 0.0) {
+    interpolated->pose.pose.orientation.x /= norm;
+    interpolated->pose.pose.orientation.y /= norm;
+    interpolated->pose.pose.orientation.z /= norm;
+    interpolated->pose.pose.orientation.w /= norm;
+  }
 
   // Interpolate velocity
   interpolated->twist.twist.linear.x = odom1->twist.twist.linear.x + 

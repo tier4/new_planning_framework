@@ -29,6 +29,7 @@
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/detail/marker_array__struct.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -88,6 +89,9 @@ private:
   std::string bag_path_;
 
   rclcpp::TimerBase::SharedPtr map_check_timer_;
+  
+  // Store tf_static messages for evaluation
+  tf2_msgs::msg::TFMessage tf_static_msgs_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

@@ -16,12 +16,14 @@
 
 #include <autoware/motion_utils/trajectory/conversion.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware/trajectory_selector_common/utils.hpp>
 #include <autoware_utils/geometry/geometry.hpp>
 #include <tf2/utils.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <diagnostic_msgs/msg/diagnostic_array.hpp>
-#include <diagnostic_msgs/msg/diagnostic_status.hpp>
-#include <diagnostic_msgs/msg/key_value.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -45,8 +47,38 @@ void OpenLoopEvaluator::evaluate(
     synchronized_data_list.size());
 
   metrics_list_.clear();
+  // Reset normalized timestamp tracking for new evaluation
+  first_bag_timestamp_set_ = false;
+  
+  // Get the base timestamp for relative time calculation
+  rclcpp::Time base_timestamp;
+  rclcpp::Time bag_base_timestamp;
+  if (!synchronized_data_list.empty()) {
+    base_timestamp = synchronized_data_list.front()->timestamp;
+    bag_base_timestamp = synchronized_data_list.front()->bag_timestamp;
+    RCLCPP_INFO(logger_, "First data timestamp: %.3f, Last data timestamp: %.3f",
+      synchronized_data_list.front()->timestamp.seconds(),
+      synchronized_data_list.back()->timestamp.seconds());
+    RCLCPP_INFO(logger_, "First bag timestamp: %.3f, Last bag timestamp: %.3f",
+      synchronized_data_list.front()->bag_timestamp.seconds(),
+      synchronized_data_list.back()->bag_timestamp.seconds());
+  } else {
+    base_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
+    bag_base_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
+  }
+  
+  // Debug: Check how many data points have objects
+  size_t data_with_objects = 0;
+  for (const auto & data : synchronized_data_list) {
+    if (data->objects) {
+      data_with_objects++;
+    }
+  }
+  RCLCPP_INFO(logger_, "Found %zu data points with objects out of %zu total",
+    data_with_objects, synchronized_data_list.size());
 
   // For each trajectory in the data, evaluate against future ground truth
+  size_t trajectories_found = 0;
   for (size_t i = 0; i < synchronized_data_list.size(); ++i) {
     const auto & current_data = synchronized_data_list[i];
     
@@ -54,50 +86,30 @@ void OpenLoopEvaluator::evaluate(
     if (!current_data->trajectory) {
       continue;
     }
+    trajectories_found++;
 
-    // Collect future ground truth data for evaluation
-    std::vector<std::shared_ptr<SynchronizedData>> ground_truth_data;
-    
-    // Calculate trajectory duration
     const auto & trajectory = *(current_data->trajectory);
     if (trajectory.points.empty()) {
       continue;
     }
     
-    const auto trajectory_duration = 
-      rclcpp::Duration(trajectory.points.back().time_from_start).seconds();
-    const auto evaluation_end_time = 
-      current_data->timestamp + rclcpp::Duration::from_seconds(trajectory_duration * 1.5);
-    
-    // Collect ground truth data within evaluation window
-    for (size_t j = i; j < synchronized_data_list.size(); ++j) {
-      if (synchronized_data_list[j]->timestamp > evaluation_end_time) {
-        break;
-      }
-      if (synchronized_data_list[j]->kinematic_state) {
-        ground_truth_data.push_back(synchronized_data_list[j]);
-      }
-    }
-    
-    if (ground_truth_data.size() < 2) {
-      RCLCPP_WARN(logger_, "Insufficient ground truth data for trajectory at time %.3f",
-        current_data->timestamp.seconds());
-      continue;
-    }
-    
     // Evaluate trajectory
-    auto metrics = evaluate_trajectory(current_data, ground_truth_data);
+    auto metrics = evaluate_trajectory(current_data, synchronized_data_list);
     metrics_list_.push_back(metrics);
     
     // Save to bag if writer provided
     if (bag_writer) {
       save_metrics_to_bag(metrics, current_data, *bag_writer);
+    } else {
+      RCLCPP_WARN(logger_, "No bag writer provided, metrics not saved to bag");
     }
   }
   
   // Calculate summary statistics
   calculate_summary();
   
+  RCLCPP_INFO(logger_, "Found %zu trajectories out of %zu data points", 
+    trajectories_found, synchronized_data_list.size());
   RCLCPP_INFO(logger_, "Open-loop evaluation complete. Evaluated %zu trajectories",
     metrics_list_.size());
   RCLCPP_INFO(logger_, "Overall: Mean ADE=%.3fm (±%.3fm), Mean FDE=%.3fm (±%.3fm)",
@@ -107,7 +119,7 @@ void OpenLoopEvaluator::evaluate(
 
 OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   const std::shared_ptr<SynchronizedData> & trajectory_data,
-  const std::vector<std::shared_ptr<SynchronizedData>> & ground_truth_data)
+  const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list)
 {
   OpenLoopTrajectoryMetrics metrics;
   
@@ -121,9 +133,13 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   
   // Initialize vectors
   metrics.lateral_deviations.resize(metrics.num_points, 0.0);
+  metrics.longitudinal_deviations.resize(metrics.num_points, 0.0);
   metrics.displacement_errors.resize(metrics.num_points, 0.0);
   metrics.ground_truth_available.resize(metrics.num_points, false);
   metrics.ground_truth_poses.resize(metrics.num_points);
+  metrics.ttc_values.resize(metrics.num_points, std::numeric_limits<double>::max());
+  metrics.min_ttc = std::numeric_limits<double>::max();
+  metrics.ttc_at_2s = std::numeric_limits<double>::max();
   
   // Evaluate each trajectory point
   for (size_t i = 0; i < metrics.num_points; ++i) {
@@ -131,8 +147,9 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
     const auto point_time = trajectory_data->timestamp + 
       rclcpp::Duration(traj_point.time_from_start);
     
+    
     // Interpolate ground truth at this time
-    auto gt_pose_opt = interpolate_ground_truth(point_time, ground_truth_data);
+    auto gt_pose_opt = interpolate_ground_truth(point_time, synchronized_data_list);
     
     if (!gt_pose_opt) {
       continue;
@@ -140,44 +157,80 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
     
     const auto & gt_pose = gt_pose_opt.value();
     metrics.ground_truth_available[i] = true;
-    metrics.ground_truth_poses[i] = gt_pose;  // Store the ground truth pose
+    metrics.ground_truth_poses[i] = gt_pose;
     
-    // Calculate displacement error
+    // Calculate displacement error (still useful as overall error)
     metrics.displacement_errors[i] = calculate_distance_2d(
       traj_point.pose.position, gt_pose.position);
     
-    // Find two nearest ground truth points for lateral deviation
-    size_t nearest_idx = 0;
-    double min_time_diff = std::numeric_limits<double>::max();
+    // Calculate errors in vehicle coordinate frame
+    const auto [longitudinal_error, lateral_error] = 
+      calculate_errors_in_vehicle_frame(traj_point.pose, gt_pose);
     
-    for (size_t j = 0; j < ground_truth_data.size(); ++j) {
-      const double time_diff = 
-        std::abs((ground_truth_data[j]->timestamp - point_time).seconds());
-      if (time_diff < min_time_diff) {
-        min_time_diff = time_diff;
-        nearest_idx = j;
+    metrics.longitudinal_deviations[i] = longitudinal_error;
+    metrics.lateral_deviations[i] = lateral_error;
+    
+    // TTC calculation
+    // Find objects data at this time
+    std::shared_ptr<PredictedObjects> objects_at_time;
+    bool found_objects = false;
+    for (size_t j = 0; j < synchronized_data_list.size(); ++j) {
+      if (synchronized_data_list[j]->timestamp <= point_time && 
+          synchronized_data_list[j]->objects) {
+        // Use the most recent objects data before or at this time
+        objects_at_time = synchronized_data_list[j]->objects;
+        found_objects = true;
+      }
+      if (synchronized_data_list[j]->timestamp > point_time) {
+        break;
       }
     }
     
-    // Calculate lateral deviation using adjacent ground truth points
-    if (nearest_idx > 0 && nearest_idx < ground_truth_data.size() - 1) {
-      const auto & prev_gt = ground_truth_data[nearest_idx - 1]->kinematic_state->pose.pose;
-      const auto & next_gt = ground_truth_data[nearest_idx + 1]->kinematic_state->pose.pose;
+    // Debug: Log if we found objects
+    static bool logged_once = false;
+    if (!logged_once && i == 0) {
+      RCLCPP_INFO(logger_, "Trajectory point time: %.3f", point_time.seconds());
+      if (found_objects && objects_at_time) {
+        RCLCPP_INFO(logger_, "Found objects data with %zu objects at time %.3f", 
+          objects_at_time->objects.size(),
+          rclcpp::Time(objects_at_time->header.stamp).seconds());
+      } else {
+        RCLCPP_WARN(logger_, "No objects data found for trajectory evaluation at time %.3f", 
+          point_time.seconds());
+        // Check what times are available in the synchronized data
+        if (!synchronized_data_list.empty()) {
+          RCLCPP_INFO(logger_, "Available synchronized data times: first=%.3f, last=%.3f",
+            synchronized_data_list.front()->timestamp.seconds(),
+            synchronized_data_list.back()->timestamp.seconds());
+        }
+      }
+      logged_once = true;
+    }
+    
+    // Calculate TTC for this trajectory point
+    if (objects_at_time && !objects_at_time->objects.empty()) {
+      double ttc_at_point = std::numeric_limits<double>::max();
       
-      metrics.lateral_deviations[i] = calculate_lateral_deviation(
-        traj_point.pose.position, prev_gt, next_gt);
-    } else if (nearest_idx == 0 && ground_truth_data.size() > 1) {
-      const auto & curr_gt = ground_truth_data[0]->kinematic_state->pose.pose;
-      const auto & next_gt = ground_truth_data[1]->kinematic_state->pose.pose;
+      for (const auto & object : objects_at_time->objects) {
+        const double ttc = autoware::trajectory_selector::utils::time_to_collision(
+          traj_point, traj_point.time_from_start, object);
+        
+        if (std::isfinite(ttc) && ttc > 0.0) {
+          ttc_at_point = std::min(ttc_at_point, ttc);
+        }
+      }
       
-      metrics.lateral_deviations[i] = calculate_lateral_deviation(
-        traj_point.pose.position, curr_gt, next_gt);
-    } else if (nearest_idx == ground_truth_data.size() - 1 && ground_truth_data.size() > 1) {
-      const auto & prev_gt = ground_truth_data[nearest_idx - 1]->kinematic_state->pose.pose;
-      const auto & curr_gt = ground_truth_data[nearest_idx]->kinematic_state->pose.pose;
-      
-      metrics.lateral_deviations[i] = calculate_lateral_deviation(
-        traj_point.pose.position, prev_gt, curr_gt);
+      metrics.ttc_values[i] = ttc_at_point;
+      metrics.min_ttc = std::min(metrics.min_ttc, ttc_at_point);
+    }
+    
+    // Check if this is the 2-second point
+    const double time_from_start_seconds = rclcpp::Duration(traj_point.time_from_start).seconds();
+    if (std::abs(time_from_start_seconds - 2.0) < 0.1) {  // Within 100ms of 2 seconds
+      // Store TTC at 2s (placeholder - actual TTC calculation would be done by metrics system)
+      if (i < metrics.ttc_values.size() && metrics.ttc_values[i] < std::numeric_limits<double>::max()) {
+        metrics.ttc_at_2s = metrics.ttc_values[i];
+      }
     }
   }
   
@@ -242,8 +295,9 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   
   // Set evaluation time window
   metrics.evaluation_start_time = trajectory_data->timestamp;
-  if (!ground_truth_data.empty()) {
-    metrics.evaluation_end_time = ground_truth_data.back()->timestamp;
+  if (!trajectory.points.empty()) {
+    metrics.evaluation_end_time = trajectory_data->timestamp + 
+      rclcpp::Duration(trajectory.points.back().time_from_start);
   }
   
   return metrics;
@@ -297,6 +351,28 @@ double OpenLoopEvaluator::calculate_distance_2d(
   const double dx = p1.x - p2.x;
   const double dy = p1.y - p2.y;
   return std::sqrt(dx * dx + dy * dy);
+}
+
+std::pair<double, double> OpenLoopEvaluator::calculate_errors_in_vehicle_frame(
+  const geometry_msgs::msg::Pose & trajectory_pose,
+  const geometry_msgs::msg::Pose & ground_truth_pose)
+{
+  // Get ground truth yaw angle
+  const double gt_yaw = tf2::getYaw(ground_truth_pose.orientation);
+  
+  // Calculate position difference in global frame
+  const double dx_global = trajectory_pose.position.x - ground_truth_pose.position.x;
+  const double dy_global = trajectory_pose.position.y - ground_truth_pose.position.y;
+  
+  // Transform to vehicle coordinate frame (ground truth vehicle frame)
+  // Rotate by -gt_yaw to align with vehicle frame
+  const double cos_yaw = std::cos(-gt_yaw);
+  const double sin_yaw = std::sin(-gt_yaw);
+  
+  const double dx_vehicle = dx_global * cos_yaw - dy_global * sin_yaw;  // longitudinal
+  const double dy_vehicle = dx_global * sin_yaw + dy_global * cos_yaw;  // lateral
+  
+  return std::make_pair(dx_vehicle, dy_vehicle);
 }
 
 std::optional<geometry_msgs::msg::Pose> OpenLoopEvaluator::interpolate_ground_truth(
@@ -368,58 +444,113 @@ void OpenLoopEvaluator::save_metrics_to_bag(
   const std::shared_ptr<SynchronizedData> & trajectory_data,
   rosbag2_cpp::Writer & bag_writer)
 {
-  // Create diagnostic message with evaluation results
-  diagnostic_msgs::msg::DiagnosticArray diag_array;
-  diag_array.header.stamp = trajectory_data->timestamp;
+  // Use a normalized timestamp for bag writing to ensure proper duration
+  // Start from 0 and use relative times from the first synchronized data point
+  if (!first_bag_timestamp_set_) {
+    first_bag_timestamp_ = trajectory_data->bag_timestamp;
+    first_bag_timestamp_set_ = true;
+  }
   
-  diagnostic_msgs::msg::DiagnosticStatus status;
-  status.name = "open_loop_evaluation";
-  status.message = "Open-loop trajectory evaluation metrics";
+  // Calculate relative timestamp from the first data point
+  const auto relative_duration = trajectory_data->bag_timestamp - first_bag_timestamp_;
+  const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
+  // Log that we're saving metrics
+  RCLCPP_DEBUG(logger_, "Saving metrics to bag: ADE=%.3f, FDE=%.3f at normalized time %.3f",
+    metrics.ade, metrics.fde, normalized_timestamp.seconds());
   
-  // Add key-value pairs
-  diagnostic_msgs::msg::KeyValue kv;
+  // Write individual metrics as Float64 messages
+  std_msgs::msg::Float64 metric_msg;
   
-  kv.key = "ade";
-  kv.value = std::to_string(metrics.ade);
-  status.values.push_back(kv);
+  // ADE
+  metric_msg.data = metrics.ade;
+  bag_writer.write(metric_msg, "/evaluation/metrics/ade", normalized_timestamp);
   
-  kv.key = "fde";
-  kv.value = std::to_string(metrics.fde);
-  status.values.push_back(kv);
+  // FDE
+  metric_msg.data = metrics.fde;
+  bag_writer.write(metric_msg, "/evaluation/metrics/fde", normalized_timestamp);
   
-  kv.key = "mean_lateral_deviation";
-  kv.value = std::to_string(metrics.mean_lateral_deviation);
-  status.values.push_back(kv);
+  // Mean lateral deviation
+  metric_msg.data = metrics.mean_lateral_deviation;
+  bag_writer.write(metric_msg, "/evaluation/metrics/mean_lateral_deviation", normalized_timestamp);
   
-  kv.key = "max_lateral_deviation";
-  kv.value = std::to_string(metrics.max_lateral_deviation);
-  status.values.push_back(kv);
+  // Max lateral deviation
+  metric_msg.data = metrics.max_lateral_deviation;
+  bag_writer.write(metric_msg, "/evaluation/metrics/max_lateral_deviation", normalized_timestamp);
   
-  kv.key = "num_valid_comparisons";
-  kv.value = std::to_string(metrics.num_valid_comparisons);
-  status.values.push_back(kv);
+  // Min TTC
+  metric_msg.data = metrics.min_ttc;
+  bag_writer.write(metric_msg, "/evaluation/metrics/min_ttc", normalized_timestamp);
   
-  kv.key = "coverage_ratio";
-  kv.value = std::to_string(static_cast<double>(metrics.num_valid_comparisons) / metrics.num_points);
-  status.values.push_back(kv);
+  // TTC at 2 seconds
+  metric_msg.data = metrics.ttc_at_2s;
+  bag_writer.write(metric_msg, "/evaluation/metrics/ttc_at_2s", normalized_timestamp);
   
-  diag_array.status.push_back(status);
+  // Coverage ratio
+  metric_msg.data = static_cast<double>(metrics.num_valid_comparisons) / metrics.num_points;
+  bag_writer.write(metric_msg, "/evaluation/metrics/coverage_ratio", normalized_timestamp);
   
-  // Write to bag
-  bag_writer.write(
-    diag_array, "/evaluation/open_loop_metrics",
-    trajectory_data->timestamp);
+  // Write point-wise metrics as Float64MultiArray
+  std_msgs::msg::Float64MultiArray array_msg;
   
-  // Save the original trajectory
+  // Displacement errors array
+  array_msg.data = metrics.displacement_errors;
+  bag_writer.write(array_msg, "/evaluation/metrics/displacement_errors_array", normalized_timestamp);
+  
+  // Lateral deviations array
+  array_msg.data = metrics.lateral_deviations;
+  bag_writer.write(array_msg, "/evaluation/metrics/lateral_deviations_array", normalized_timestamp);
+  
+  // Longitudinal deviations array
+  array_msg.data = metrics.longitudinal_deviations;
+  bag_writer.write(array_msg, "/evaluation/metrics/longitudinal_deviations_array", normalized_timestamp);
+  
+  // TTC values array
+  array_msg.data = metrics.ttc_values;
+  bag_writer.write(array_msg, "/evaluation/metrics/ttc_values_array", normalized_timestamp);
+  
+  // Write minimal TF for visualization (map -> base_link)
+  if (trajectory_data->kinematic_state) {
+    tf2_msgs::msg::TFMessage tf_msg;
+    geometry_msgs::msg::TransformStamped transform;
+    
+    // Use the normalized timestamp for consistency
+    transform.header.stamp = normalized_timestamp;
+    transform.header.frame_id = "map";
+    transform.child_frame_id = "base_link";
+    
+    // Use kinematic state pose as transform
+    transform.transform.translation.x = trajectory_data->kinematic_state->pose.pose.position.x;
+    transform.transform.translation.y = trajectory_data->kinematic_state->pose.pose.position.y;
+    transform.transform.translation.z = trajectory_data->kinematic_state->pose.pose.position.z;
+    transform.transform.rotation = trajectory_data->kinematic_state->pose.pose.orientation;
+    
+    tf_msg.transforms.push_back(transform);
+    
+    // Write TF with the normalized timestamp for consistency
+    bag_writer.write(tf_msg, "/tf", normalized_timestamp);
+    
+    // Debug log
+    RCLCPP_DEBUG(logger_, "Writing TF: map->base_link at normalized time %.3f (x=%.2f, y=%.2f, z=%.2f)",
+      normalized_timestamp.seconds(),
+      transform.transform.translation.x,
+      transform.transform.translation.y,
+      transform.transform.translation.z);
+  }
+  
+  // Save the original trajectory with normalized timestamp
   if (trajectory_data->trajectory) {
+    // Create a copy with normalized timestamp
+    autoware_planning_msgs::msg::Trajectory corrected_trajectory = *(trajectory_data->trajectory);
+    corrected_trajectory.header.stamp = normalized_timestamp;
+    
     bag_writer.write(
-      *(trajectory_data->trajectory), "/evaluation/original_trajectory",
-      trajectory_data->timestamp);
+      corrected_trajectory, "/evaluation/original_trajectory",
+      normalized_timestamp);
     
     // Create and save ground truth trajectory
     autoware_planning_msgs::msg::Trajectory gt_trajectory;
-    gt_trajectory.header.stamp = trajectory_data->timestamp;
-    gt_trajectory.header.frame_id = trajectory_data->trajectory->header.frame_id;
+    gt_trajectory.header.stamp = normalized_timestamp;
+    gt_trajectory.header.frame_id = corrected_trajectory.header.frame_id;
     
     // Convert ground truth poses to trajectory points
     for (size_t i = 0; i < metrics.num_points; ++i) {
@@ -443,7 +574,7 @@ void OpenLoopEvaluator::save_metrics_to_bag(
     if (!gt_trajectory.points.empty()) {
       bag_writer.write(
         gt_trajectory, "/evaluation/ground_truth_trajectory",
-        trajectory_data->timestamp);
+        normalized_timestamp);
     }
     
   }
@@ -698,6 +829,7 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
     traj["mean_lateral_deviation"] = metrics.mean_lateral_deviation;
     traj["max_lateral_deviation"] = metrics.max_lateral_deviation;
     traj["std_lateral_deviation"] = metrics.std_lateral_deviation;
+    traj["min_ttc"] = metrics.min_ttc;
     
     // Include point-wise data if needed
     traj["lateral_deviations"] = metrics.lateral_deviations;
@@ -710,5 +842,6 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
   
   return j;
 }
+
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

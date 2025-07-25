@@ -37,7 +37,8 @@ struct SynchronizedData
   std::shared_ptr<AccelWithCovarianceStamped> acceleration;
   std::shared_ptr<SteeringReport> steering_status;
   std::shared_ptr<PredictedObjects> objects;
-  rclcpp::Time timestamp;
+  rclcpp::Time timestamp;  // Header timestamp (for data synchronization)
+  rclcpp::Time bag_timestamp;  // Bag recording timestamp (for bag writing)
 };
 
 struct TOPIC
@@ -228,6 +229,7 @@ struct BagData
   {
     auto synchronized_data = std::make_shared<SynchronizedData>();
     synchronized_data->timestamp = rclcpp::Time(target_time);
+    synchronized_data->bag_timestamp = rclcpp::Time(target_time);  // Set bag_timestamp to the requested time
 
     // Get odometry buffer
     auto odom_buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(buffers.at(TOPIC::ODOMETRY));
