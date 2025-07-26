@@ -43,9 +43,6 @@ void OpenLoopEvaluator::evaluate(
   const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
   rosbag2_cpp::Writer * bag_writer)
 {
-  RCLCPP_INFO(logger_, "Starting open-loop evaluation with %zu data points",
-    synchronized_data_list.size());
-
   metrics_list_.clear();
   // Reset normalized timestamp tracking for new evaluation
   first_bag_timestamp_set_ = false;
@@ -56,29 +53,12 @@ void OpenLoopEvaluator::evaluate(
   if (!synchronized_data_list.empty()) {
     base_timestamp = synchronized_data_list.front()->timestamp;
     bag_base_timestamp = synchronized_data_list.front()->bag_timestamp;
-    RCLCPP_INFO(logger_, "First data timestamp: %.3f, Last data timestamp: %.3f",
-      synchronized_data_list.front()->timestamp.seconds(),
-      synchronized_data_list.back()->timestamp.seconds());
-    RCLCPP_INFO(logger_, "First bag timestamp: %.3f, Last bag timestamp: %.3f",
-      synchronized_data_list.front()->bag_timestamp.seconds(),
-      synchronized_data_list.back()->bag_timestamp.seconds());
   } else {
     base_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
     bag_base_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
   }
   
-  // Debug: Check how many data points have objects
-  size_t data_with_objects = 0;
-  for (const auto & data : synchronized_data_list) {
-    if (data->objects) {
-      data_with_objects++;
-    }
-  }
-  RCLCPP_INFO(logger_, "Found %zu data points with objects out of %zu total",
-    data_with_objects, synchronized_data_list.size());
-
   // For each trajectory in the data, evaluate against future ground truth
-  size_t trajectories_found = 0;
   for (size_t i = 0; i < synchronized_data_list.size(); ++i) {
     const auto & current_data = synchronized_data_list[i];
     
@@ -86,7 +66,6 @@ void OpenLoopEvaluator::evaluate(
     if (!current_data->trajectory) {
       continue;
     }
-    trajectories_found++;
 
     const auto & trajectory = *(current_data->trajectory);
     if (trajectory.points.empty()) {
@@ -108,10 +87,6 @@ void OpenLoopEvaluator::evaluate(
   // Calculate summary statistics
   calculate_summary();
   
-  RCLCPP_INFO(logger_, "Found %zu trajectories out of %zu data points", 
-    trajectories_found, synchronized_data_list.size());
-  RCLCPP_INFO(logger_, "Open-loop evaluation complete. Evaluated %zu trajectories",
-    metrics_list_.size());
   RCLCPP_INFO(logger_, "Overall: Mean ADE=%.3fm (±%.3fm), Mean FDE=%.3fm (±%.3fm)",
     summary_.mean_ade, summary_.std_ade,
     summary_.mean_fde, summary_.std_fde);
@@ -173,39 +148,17 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
     // TTC calculation
     // Find objects data at this time
     std::shared_ptr<PredictedObjects> objects_at_time;
-    bool found_objects = false;
-    for (size_t j = 0; j < synchronized_data_list.size(); ++j) {
-      if (synchronized_data_list[j]->timestamp <= point_time && 
-          synchronized_data_list[j]->objects) {
+    for (const auto & data : synchronized_data_list) {
+      if (data->timestamp <= point_time && 
+          data->objects) {
         // Use the most recent objects data before or at this time
-        objects_at_time = synchronized_data_list[j]->objects;
-        found_objects = true;
+        objects_at_time = data->objects;
       }
-      if (synchronized_data_list[j]->timestamp > point_time) {
+      if (data->timestamp > point_time) {
         break;
       }
     }
-    
-    // Debug: Log if we found objects
-    static bool logged_once = false;
-    if (!logged_once && i == 0) {
-      RCLCPP_INFO(logger_, "Trajectory point time: %.3f", point_time.seconds());
-      if (found_objects && objects_at_time) {
-        RCLCPP_INFO(logger_, "Found objects data with %zu objects at time %.3f", 
-          objects_at_time->objects.size(),
-          rclcpp::Time(objects_at_time->header.stamp).seconds());
-      } else {
-        RCLCPP_WARN(logger_, "No objects data found for trajectory evaluation at time %.3f", 
-          point_time.seconds());
-        // Check what times are available in the synchronized data
-        if (!synchronized_data_list.empty()) {
-          RCLCPP_INFO(logger_, "Available synchronized data times: first=%.3f, last=%.3f",
-            synchronized_data_list.front()->timestamp.seconds(),
-            synchronized_data_list.back()->timestamp.seconds());
-        }
-      }
-      logged_once = true;
-    }
+
     
     // Calculate TTC for this trajectory point
     if (objects_at_time && !objects_at_time->objects.empty()) {

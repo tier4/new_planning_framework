@@ -254,7 +254,6 @@ void OfflineEvaluatorNode::run_evaluation()
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
         last_route_msg = std::make_shared<autoware_planning_msgs::msg::LaneletRoute>(msg);
-        RCLCPP_INFO(get_logger(), "Found route message in bag");
       } catch (const std::exception & e) {
         RCLCPP_WARN(get_logger(), "Failed to deserialize route message: %s", e.what());
       }
@@ -277,8 +276,7 @@ void OfflineEvaluatorNode::run_evaluation()
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
         // Store tf messages with their timestamps
-        rclcpp::Time msg_time(serialized_message->time_stamp);
-        tf_messages.emplace_back(msg, msg_time);
+        tf_messages.emplace_back(msg, rclcpp::Time(serialized_message->time_stamp));
       } catch (const std::exception & e) {
         RCLCPP_WARN(get_logger(), "Failed to deserialize tf message: %s", e.what());
       }
@@ -286,7 +284,7 @@ void OfflineEvaluatorNode::run_evaluation()
   }
 
   if (!last_route_msg) {
-    RCLCPP_ERROR(get_logger(), "No route message found in bag");
+    RCLCPP_WARN(get_logger(), "No route message found in bag");
     // return;
   }
   else {
@@ -299,9 +297,6 @@ void OfflineEvaluatorNode::run_evaluation()
   // Store reference times for map/route markers
   rclcpp::Time start_time = now();
   rclcpp::Time end_time = now();
-  
-  RCLCPP_INFO(get_logger(), "Initial times - start: %.3f, end: %.3f", 
-    start_time.seconds(), end_time.seconds());
 
   switch (evaluation_mode_) {
     case EvaluationMode::OPEN_LOOP: {
@@ -332,17 +327,6 @@ void OfflineEvaluatorNode::run_evaluation()
     }
     
     evaluation_bag_writer_->write(normalized_tf_static, "/tf_static", tf_time);
-    RCLCPP_INFO(
-      get_logger(), "Wrote %zu tf_static transforms to evaluation bag at time %.3f",
-      tf_static_msg.transforms.size(), tf_time.seconds());
-    
-    // Debug: Log some transform details
-    for (const auto& transform : normalized_tf_static.transforms) {
-      RCLCPP_DEBUG(get_logger(), "tf_static: %s -> %s at time %.3f",
-        transform.header.frame_id.c_str(),
-        transform.child_frame_id.c_str(),
-        rclcpp::Time(transform.header.stamp).seconds());
-    }
   }
 
   // Write map and route markers with normalized timestamps
@@ -363,7 +347,6 @@ void OfflineEvaluatorNode::run_evaluation()
 std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evaluation()
 {
   RCLCPP_INFO(get_logger(), "Running open-loop evaluation for trajectory analysis");
-  RCLCPP_INFO(get_logger(), "Looking for trajectories on topic: %s", trajectory_topic_name_.c_str());
   
   // Reopen the bag to read from the beginning
   bag_reader_.close();
@@ -381,13 +364,6 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
   rclcpp::Time bag_start_time = rclcpp::Time(std::numeric_limits<int64_t>::max());
   rclcpp::Time bag_end_time = rclcpp::Time(0);
   
-  // Counters for debugging
-  size_t odometry_count = 0;
-  size_t trajectory_count = 0;
-  size_t objects_count = 0;
-  size_t tf_count = 0;
-  size_t tf_static_count = 0;
-  
   // First pass: scan for time range and collect all data
   while (bag_reader_.has_next() && rclcpp::ok()) {
     auto serialized_message = bag_reader_.read_next();
@@ -398,6 +374,9 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
     
     const auto & topic_name = serialized_message->topic_name;
     
+    // Get option to use bag timestamp instead of header timestamp
+    const bool use_bag_timestamp = get_parameter_or_default<bool>(*this, "use_bag_timestamp", true);
+    
     try {
       // Process kinematic state messages
       if (topic_name == odometry_topic_name_) {
@@ -406,15 +385,16 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
         
+        // Override header timestamp with bag timestamp if option is enabled
+        if (use_bag_timestamp) {
+          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
+        }
+        
         auto buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(
           bag_data->buffers[TOPIC::ODOMETRY]);
         if (buffer) {
           buffer->append(msg);
         }
-        
-        odometry_count++;
-        
-        // Don't write raw messages to evaluation bag - only evaluation results
       }
       // Process trajectory messages
       else if (topic_name == trajectory_topic_name_) {
@@ -423,38 +403,33 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
         
+        // Override header timestamp with bag timestamp if option is enabled
+        if (use_bag_timestamp) {
+          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
+        }
+        
         auto buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(
           bag_data->buffers[TOPIC::TRAJECTORY]);
         if (buffer) {
           buffer->append(msg);
         }
-        
-        trajectory_count++;
-        
-        // Don't write raw trajectory to evaluation bag - only evaluation results
       }
-      // Process objects for visualization/analysis
       else if (topic_name == objects_topic_name_) {
         PredictedObjects msg;
         rclcpp::Serialization<PredictedObjects> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
         
+        // Override header timestamp with bag timestamp if option is enabled
+        if (use_bag_timestamp) {
+          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
+        }
+        
         auto buffer = std::dynamic_pointer_cast<Buffer<PredictedObjects>>(
           bag_data->buffers[TOPIC::OBJECTS]);
         if (buffer) {
           buffer->append(msg);
         }
-        
-        objects_count++;
-        
-        // Debug: Log objects data
-        if (objects_count <= 5) {
-          RCLCPP_INFO(this->get_logger(), "Read objects at time %.3f with %zu objects",
-            rclcpp::Time(msg.header.stamp).seconds(), msg.objects.size());
-        }
-        
-        // Don't write raw objects to evaluation bag - only evaluation results
       }
       // Process TF messages
       else if (topic_name == tf_topic_name_) {
@@ -467,39 +442,6 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
         if (buffer) {
           buffer->append(msg);
         }
-        
-        tf_count++;
-        
-        // Don't write raw TF to evaluation bag - only evaluation results
-      }
-      // Process TF static messages
-      else if (topic_name == "/tf_static") {
-        TFMessage msg;
-        rclcpp::Serialization<TFMessage> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        tf_static_count++;
-        
-        // Store tf_static messages for later use
-        if (tf_static_msgs_.transforms.empty()) {
-          tf_static_msgs_ = msg;
-        } else {
-          // Append new transforms if not already present
-          for (const auto& transform : msg.transforms) {
-            bool found = false;
-            for (const auto& existing : tf_static_msgs_.transforms) {
-              if (existing.header.frame_id == transform.header.frame_id &&
-                  existing.child_frame_id == transform.child_frame_id) {
-                found = true;
-                break;
-              }
-            }
-            if (!found) {
-              tf_static_msgs_.transforms.push_back(transform);
-            }
-          }
-        }
       }
     } catch (const std::exception & e) {
       RCLCPP_WARN(
@@ -507,10 +449,6 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
         topic_name.c_str(), e.what());
     }
   }
-  
-  // Log message counts
-  RCLCPP_INFO(get_logger(), "Message counts - Odometry: %zu, Trajectory: %zu, Objects: %zu, TF: %zu, TF_static: %zu",
-    odometry_count, trajectory_count, objects_count, tf_count, tf_static_count);
   
   // Get trajectory buffer for time offset correction
   auto traj_buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(
@@ -522,7 +460,7 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
   
   // Collect synchronized data for evaluation
   std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
-  const double sync_tolerance_ms =
+  const auto sync_tolerance_ms =
     get_parameter_or_default<double>(*this, "sync_tolerance_ms", 50.0);
   
   // Get all kinematic states at regular intervals
@@ -546,22 +484,7 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
   // Sort by timestamp
   std::sort(synchronized_data_list.begin(), synchronized_data_list.end(),
     [](const auto & a, const auto & b) { return a->timestamp < b->timestamp; });
-  
-  // Debug synchronized data
-  size_t sync_with_traj = 0;
-  for (const auto& sync_data : synchronized_data_list) {
-    if (sync_data->trajectory) {
-      sync_with_traj++;
-    }
-  }
-  RCLCPP_INFO(get_logger(), "Found %zu synchronized data points with trajectories out of %zu total",
-    sync_with_traj, synchronized_data_list.size());
-  
-  // If no trajectories were synchronized but we have both data, try time offset correction
-  if (sync_with_traj == 0 && trajectory_count > 0 && odometry_count > 0) {
-    RCLCPP_WARN(get_logger(), "No trajectories synchronized with kinematic states");
-  }
-  
+    
   // Write tf_static with normalized timestamp
   if (evaluation_bag_writer_ && !tf_static_msgs_.transforms.empty()) {
     // Write tf_static with normalized timestamp (start from 0)
@@ -574,30 +497,15 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
     }
     
     evaluation_bag_writer_->write(normalized_tf_static, "/tf_static", tf_time);
-    
-    RCLCPP_INFO(get_logger(), "Wrote %zu tf_static transforms to evaluation bag at time %.3f",
-      tf_static_msgs_.transforms.size(), tf_time.seconds());
-      
-    // Debug: Log some transform details
-    for (const auto& transform : normalized_tf_static.transforms) {
-      RCLCPP_DEBUG(get_logger(), "tf_static: %s -> %s at time %.3f",
-        transform.header.frame_id.c_str(),
-        transform.child_frame_id.c_str(),
-        rclcpp::Time(transform.header.stamp).seconds());
-    }
   }
   
   // Run open-loop evaluation
-  RCLCPP_INFO(get_logger(), "Starting evaluation with %zu synchronized data points", 
-    synchronized_data_list.size());
   if (!synchronized_data_list.empty()) {
     OpenLoopEvaluator evaluator(get_logger(), route_handler_);
     
     if (evaluation_bag_writer_) {
-      RCLCPP_INFO(get_logger(), "Evaluation bag writer is available");
       evaluator.evaluate(synchronized_data_list, evaluation_bag_writer_.get());
     } else {
-      RCLCPP_ERROR(get_logger(), "Evaluation bag writer is null!");
       evaluator.evaluate(synchronized_data_list, nullptr);
     }
     
@@ -618,10 +526,6 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
     
     // Log summary
     RCLCPP_INFO(get_logger(), "Open-loop evaluation summary:");
-    RCLCPP_INFO(get_logger(), "  Total trajectories: %d", 
-      static_cast<int>(summary_json["total_trajectories"]));
-    RCLCPP_INFO(get_logger(), "  Valid trajectories: %d", 
-      static_cast<int>(summary_json["valid_trajectories"]));
     if (summary_json.contains("ade") && summary_json["ade"].contains("mean")) {
       RCLCPP_INFO(get_logger(), "  Mean ADE: %.3f m", 
         static_cast<double>(summary_json["ade"]["mean"]));
@@ -664,6 +568,9 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_closed_loop_eval
 
   // Read all messages from bag into buffers
   RCLCPP_INFO(get_logger(), "Loading rosbag data into buffers...");
+  
+  // Get option to use bag timestamp instead of header timestamp
+  const bool use_bag_timestamp = get_parameter_or_default<bool>(*this, "use_bag_timestamp", true);
 
   while (bag_reader_.has_next() && rclcpp::ok()) {
     auto serialized_message = bag_reader_.read_next();
@@ -675,6 +582,11 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_closed_loop_eval
         rclcpp::Serialization<Odometry> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
+        
+        // Override header timestamp with bag timestamp if option is enabled
+        if (use_bag_timestamp) {
+          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
+        }
 
         auto buffer =
           std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers[TOPIC::ODOMETRY]);
@@ -686,6 +598,11 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_closed_loop_eval
         rclcpp::Serialization<Trajectory> serializer;
         rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
         serializer.deserialize_message(&serialized_msg, &msg);
+        
+        // Override header timestamp with bag timestamp if option is enabled
+        if (use_bag_timestamp) {
+          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
+        }
 
         auto buffer =
           std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers[TOPIC::TRAJECTORY]);
