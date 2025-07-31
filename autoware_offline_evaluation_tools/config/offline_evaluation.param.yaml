@@ -59,4 +59,3 @@
     # tf_topic: "/tf"
     # acceleration_topic: "/localization/acceleration"
     # steering_topic: "/vehicle/status/steering_status"
-    # live_trajectory_topic: "/planning/scenario_planning/live_trajectory"

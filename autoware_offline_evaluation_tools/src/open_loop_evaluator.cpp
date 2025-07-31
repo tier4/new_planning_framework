@@ -32,6 +32,38 @@
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 
+// Template helper for statistics calculation
+template<typename Container>
+struct Statistics {
+  double mean = 0.0;
+  double std_dev = 0.0;
+  double max_val = 0.0;
+};
+
+template<typename Container>
+Statistics<Container> calculate_statistics(const Container& values) {
+  Statistics<Container> stats;
+  
+  if (values.empty()) {
+    return stats;
+  }
+  
+  // Calculate mean
+  stats.mean = std::accumulate(values.begin(), values.end(), 0.0) / values.size();
+  
+  // Calculate max
+  stats.max_val = *std::max_element(values.begin(), values.end());
+  
+  // Calculate standard deviation
+  double variance = 0.0;
+  for (const auto& val : values) {
+    variance += (val - stats.mean) * (val - stats.mean);
+  }
+  stats.std_dev = std::sqrt(variance / values.size());
+  
+  return stats;
+}
+
 OpenLoopEvaluator::OpenLoopEvaluator(
   rclcpp::Logger logger,
   std::shared_ptr<autoware::route_handler::RouteHandler> route_handler)
@@ -533,128 +565,6 @@ void OpenLoopEvaluator::save_metrics_to_bag(
   }
 }
 
-visualization_msgs::msg::MarkerArray OpenLoopEvaluator::create_evaluation_markers(
-  const OpenLoopTrajectoryMetrics & metrics,
-  const autoware_planning_msgs::msg::Trajectory & trajectory,
-  const std::vector<geometry_msgs::msg::Pose> & ground_truth_poses)
-{
-  visualization_msgs::msg::MarkerArray marker_array;
-  
-  // Create markers for displacement errors at each point
-  for (size_t i = 0; i < metrics.num_points; ++i) {
-    if (!metrics.ground_truth_available[i]) {
-      continue;
-    }
-    
-    visualization_msgs::msg::Marker marker;
-    marker.header = trajectory.header;
-    marker.ns = "displacement_error";
-    marker.id = i;
-    marker.type = visualization_msgs::msg::Marker::SPHERE;
-    marker.action = visualization_msgs::msg::Marker::ADD;
-    
-    marker.pose = trajectory.points[i].pose;
-    
-    // Scale based on error magnitude
-    const double scale = 0.1 + 0.5 * metrics.displacement_errors[i];
-    marker.scale.x = scale;
-    marker.scale.y = scale;
-    marker.scale.z = scale;
-    
-    // Color based on error (green to red)
-    const double normalized_error = std::min(1.0, metrics.displacement_errors[i] / 5.0);
-    marker.color.r = normalized_error;
-    marker.color.g = 1.0 - normalized_error;
-    marker.color.b = 0.0;
-    marker.color.a = 0.8;
-    
-    marker.lifetime = rclcpp::Duration::from_seconds(0);
-    
-    marker_array.markers.push_back(marker);
-  }
-  
-  // Create text markers showing ADE and FDE
-  visualization_msgs::msg::Marker text_marker;
-  text_marker.header = trajectory.header;
-  text_marker.ns = "evaluation_text";
-  text_marker.id = 0;
-  text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-  text_marker.action = visualization_msgs::msg::Marker::ADD;
-  
-  if (!trajectory.points.empty()) {
-    text_marker.pose = trajectory.points.front().pose;
-    text_marker.pose.position.z += 2.0;
-  }
-  
-  text_marker.scale.z = 0.5;
-  text_marker.color.r = 1.0;
-  text_marker.color.g = 1.0;
-  text_marker.color.b = 1.0;
-  text_marker.color.a = 1.0;
-  
-  text_marker.text = "ADE: " + std::to_string(metrics.ade) + "m\n" +
-                     "FDE: " + std::to_string(metrics.fde) + "m";
-  
-  marker_array.markers.push_back(text_marker);
-  
-  // Create ground truth trajectory visualization
-  if (!ground_truth_poses.empty()) {
-    visualization_msgs::msg::Marker gt_line_marker;
-    gt_line_marker.header = trajectory.header;
-    gt_line_marker.ns = "ground_truth_trajectory";
-    gt_line_marker.id = 0;
-    gt_line_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
-    gt_line_marker.action = visualization_msgs::msg::Marker::ADD;
-    
-    // Add points from ground truth
-    for (size_t i = 0; i < metrics.num_points; ++i) {
-      if (metrics.ground_truth_available[i]) {
-        geometry_msgs::msg::Point pt;
-        pt.x = ground_truth_poses[i].position.x;
-        pt.y = ground_truth_poses[i].position.y;
-        pt.z = ground_truth_poses[i].position.z;
-        gt_line_marker.points.push_back(pt);
-      }
-    }
-    
-    gt_line_marker.scale.x = 0.2;  // Line width
-    gt_line_marker.color.r = 0.0;
-    gt_line_marker.color.g = 1.0;
-    gt_line_marker.color.b = 0.0;
-    gt_line_marker.color.a = 0.8;
-    gt_line_marker.lifetime = rclcpp::Duration::from_seconds(0);
-    
-    marker_array.markers.push_back(gt_line_marker);
-    
-    // Create original trajectory visualization
-    visualization_msgs::msg::Marker traj_line_marker;
-    traj_line_marker.header = trajectory.header;
-    traj_line_marker.ns = "original_trajectory";
-    traj_line_marker.id = 0;
-    traj_line_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
-    traj_line_marker.action = visualization_msgs::msg::Marker::ADD;
-    
-    // Add points from original trajectory
-    for (const auto & point : trajectory.points) {
-      geometry_msgs::msg::Point pt;
-      pt.x = point.pose.position.x;
-      pt.y = point.pose.position.y;
-      pt.z = point.pose.position.z;
-      traj_line_marker.points.push_back(pt);
-    }
-    
-    traj_line_marker.scale.x = 0.2;  // Line width
-    traj_line_marker.color.r = 0.0;
-    traj_line_marker.color.g = 0.0;
-    traj_line_marker.color.b = 1.0;
-    traj_line_marker.color.a = 0.8;
-    traj_line_marker.lifetime = rclcpp::Duration::from_seconds(0);
-    
-    marker_array.markers.push_back(traj_line_marker);
-  }
-  
-  return marker_array;
-}
 
 void OpenLoopEvaluator::calculate_summary()
 {
@@ -689,40 +599,22 @@ void OpenLoopEvaluator::calculate_summary()
   
   if (!ade_values.empty()) {
     // ADE statistics
-    summary_.mean_ade = std::accumulate(
-      ade_values.begin(), ade_values.end(), 0.0) / ade_values.size();
-    summary_.max_ade = *std::max_element(ade_values.begin(), ade_values.end());
-    
-    double ade_variance = 0.0;
-    for (const auto & val : ade_values) {
-      ade_variance += (val - summary_.mean_ade) * (val - summary_.mean_ade);
-    }
-    summary_.std_ade = std::sqrt(ade_variance / ade_values.size());
+    const auto ade_stats = calculate_statistics(ade_values);
+    summary_.mean_ade = ade_stats.mean;
+    summary_.std_ade = ade_stats.std_dev;
+    summary_.max_ade = ade_stats.max_val;
     
     // FDE statistics
-    summary_.mean_fde = std::accumulate(
-      fde_values.begin(), fde_values.end(), 0.0) / fde_values.size();
-    summary_.max_fde = *std::max_element(fde_values.begin(), fde_values.end());
-    
-    double fde_variance = 0.0;
-    for (const auto & val : fde_values) {
-      fde_variance += (val - summary_.mean_fde) * (val - summary_.mean_fde);
-    }
-    summary_.std_fde = std::sqrt(fde_variance / fde_values.size());
+    const auto fde_stats = calculate_statistics(fde_values);
+    summary_.mean_fde = fde_stats.mean;
+    summary_.std_fde = fde_stats.std_dev;
+    summary_.max_fde = fde_stats.max_val;
     
     // Lateral deviation statistics
-    summary_.mean_lateral_deviation = std::accumulate(
-      lateral_dev_values.begin(), lateral_dev_values.end(), 0.0) / lateral_dev_values.size();
-    
-    double lateral_variance = 0.0;
-    for (const auto & val : lateral_dev_values) {
-      lateral_variance += (val - summary_.mean_lateral_deviation) * 
-                         (val - summary_.mean_lateral_deviation);
-    }
-    summary_.std_lateral_deviation = std::sqrt(lateral_variance / lateral_dev_values.size());
-    
-    summary_.max_lateral_deviation = *std::max_element(
-      lateral_dev_values.begin(), lateral_dev_values.end());
+    const auto lateral_stats = calculate_statistics(lateral_dev_values);
+    summary_.mean_lateral_deviation = lateral_stats.mean;
+    summary_.std_lateral_deviation = lateral_stats.std_dev;
+    summary_.max_lateral_deviation = lateral_stats.max_val;
     
     // Coverage statistics
     summary_.mean_coverage_ratio = std::accumulate(

@@ -169,13 +169,6 @@ private:
     const std::shared_ptr<SynchronizedData> & trajectory_data,
     rosbag2_cpp::Writer & bag_writer);
 
-  /**
-   * @brief Create visualization markers for evaluation results
-   */
-  visualization_msgs::msg::MarkerArray create_evaluation_markers(
-    const OpenLoopTrajectoryMetrics & metrics,
-    const autoware_planning_msgs::msg::Trajectory & trajectory,
-    const std::vector<geometry_msgs::msg::Pose> & ground_truth_poses);
 
   /**
    * @brief Calculate summary statistics from all evaluations

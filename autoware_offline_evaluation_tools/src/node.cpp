@@ -330,16 +330,7 @@ void OfflineEvaluatorNode::run_evaluation()
   }
 
   // Write map and route markers with normalized timestamps
-  if (start_time.seconds() > 0 && end_time.seconds() > 0) {
-    // Write at the beginning with normalized timestamp
-    write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME));
-    
-    // Also write markers at the end time to ensure they're visible throughout the bag
-    if (end_time > start_time) {
-      const auto duration = end_time - start_time;
-      write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME) + duration);
-    }
-  }
+  write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME));
 
   RCLCPP_INFO(get_logger(), "Evaluation complete");
 }
