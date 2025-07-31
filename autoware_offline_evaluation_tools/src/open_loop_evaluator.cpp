@@ -288,46 +288,6 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   return metrics;
 }
 
-double OpenLoopEvaluator::calculate_lateral_deviation(
-  const geometry_msgs::msg::Point & trajectory_point,
-  const geometry_msgs::msg::Pose & segment_start,
-  const geometry_msgs::msg::Pose & segment_end)
-{
-  // Calculate vector from segment start to end
-  const double dx = segment_end.position.x - segment_start.position.x;
-  const double dy = segment_end.position.y - segment_start.position.y;
-  const double segment_length = std::sqrt(dx * dx + dy * dy);
-  
-  if (segment_length < 1e-6) {
-    return calculate_distance_2d(trajectory_point, segment_start.position);
-  }
-  
-  // Normalize segment vector
-  const double seg_unit_x = dx / segment_length;
-  const double seg_unit_y = dy / segment_length;
-  
-  // Vector from segment start to trajectory point
-  const double to_point_x = trajectory_point.x - segment_start.position.x;
-  const double to_point_y = trajectory_point.y - segment_start.position.y;
-  
-  // Project point onto segment
-  const double projection_length = to_point_x * seg_unit_x + to_point_y * seg_unit_y;
-  const double clamped_projection = std::max(0.0, std::min(segment_length, projection_length));
-  
-  // Calculate closest point on segment
-  const double closest_x = segment_start.position.x + clamped_projection * seg_unit_x;
-  const double closest_y = segment_start.position.y + clamped_projection * seg_unit_y;
-  
-  // Calculate lateral deviation
-  const double lateral_distance = std::sqrt(
-    (trajectory_point.x - closest_x) * (trajectory_point.x - closest_x) +
-    (trajectory_point.y - closest_y) * (trajectory_point.y - closest_y));
-  
-  // Determine sign using cross product
-  const double cross = seg_unit_x * to_point_y - seg_unit_y * to_point_x;
-  
-  return (cross >= 0) ? lateral_distance : -lateral_distance;
-}
 
 double OpenLoopEvaluator::calculate_distance_2d(
   const geometry_msgs::msg::Point & p1,

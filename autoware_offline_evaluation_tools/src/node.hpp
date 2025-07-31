@@ -17,7 +17,6 @@
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
-#include "evaluation.hpp"
 #include "rosbag2_cpp/reader.hpp"
 #include "rosbag2_cpp/writer.hpp"
 

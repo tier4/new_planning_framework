@@ -122,17 +122,6 @@ private:
     const std::shared_ptr<SynchronizedData> & trajectory_data,
     const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
 
-  /**
-   * @brief Calculate lateral deviation from trajectory point to ground truth segment
-   * @param trajectory_point Trajectory point position
-   * @param segment_start Start of ground truth segment
-   * @param segment_end End of ground truth segment
-   * @return Signed lateral deviation (positive = left, negative = right)
-   */
-  double calculate_lateral_deviation(
-    const geometry_msgs::msg::Point & trajectory_point,
-    const geometry_msgs::msg::Pose & segment_start,
-    const geometry_msgs::msg::Pose & segment_end);
 
   /**
    * @brief Calculate 2D Euclidean distance between two points

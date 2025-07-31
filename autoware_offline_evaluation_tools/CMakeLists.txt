@@ -12,7 +12,6 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/node.cpp
   src/utils.cpp
   src/bag_handler.cpp
-  src/evaluation.cpp
   src/closed_loop_evaluator.cpp
   src/open_loop_evaluator.cpp
 )
@@ -26,8 +25,6 @@ if(BUILD_TESTING)
   ament_add_ros_isolated_gmock(test_${PROJECT_NAME}
     test/test_bag_handler.cpp
     test/test_replay_evaluation.cpp
-    test/test_ground_truth_generation.cpp
-    test/test_displacement_errors.cpp
   )
   target_link_libraries(test_${PROJECT_NAME}
     ${PROJECT_NAME}
