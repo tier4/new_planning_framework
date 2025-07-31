@@ -40,12 +40,13 @@ TEST_F(BagHandlerTest, BagDataConstruction)
 
   EXPECT_EQ(bag_data->timestamp, timestamp_);
   EXPECT_EQ(bag_data->buffers.size(), 6u);
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::TF));
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::ODOMETRY));
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::ACCELERATION));
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::TRAJECTORY));
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::OBJECTS));
-  EXPECT_TRUE(bag_data->buffers.count(TOPIC::STEERING));
+  // デフォルトのトピック名をチェック
+  EXPECT_TRUE(bag_data->buffers.count("/tf"));
+  EXPECT_TRUE(bag_data->buffers.count("/localization/kinematic_state"));
+  EXPECT_TRUE(bag_data->buffers.count("/localization/acceleration"));
+  EXPECT_TRUE(bag_data->buffers.count("/planning/scenario_planning/trajectory"));
+  EXPECT_TRUE(bag_data->buffers.count("/perception/object_recognition/objects"));
+  EXPECT_TRUE(bag_data->buffers.count("/vehicle/status/steering_status"));
 }
 
 TEST_F(BagHandlerTest, ReplayEvaluationDataConstruction)

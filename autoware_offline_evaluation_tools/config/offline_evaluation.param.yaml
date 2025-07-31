@@ -32,7 +32,7 @@
 
     # Evaluation configuration
     evaluation:
-      mode: "closed_loop"  # Options: "open_loop" or "closed_loop"
+      mode: "open_loop"  # Options: "open_loop" or "closed_loop"
       
       # Placeholder for metrics configuration
       metrics:
@@ -49,14 +49,13 @@
     
     # Evaluation timing configuration
     evaluation_interval_ms: 100.0  # Interval for sampling kinematic states (milliseconds)
-    sync_tolerance_ms: 50.0  # Tolerance for time synchronization (milliseconds)
+    sync_tolerance_ms: 100.0  # Tolerance for time synchronization (milliseconds)
 
     # Topic name configuration (optional - uses defaults if not specified)
     # route_topic: "/planning/mission_planning/route"
     # odometry_topic: "/localization/kinematic_state"
-    # trajectory_topic: "/planning/scenario_planning/trajectory"
-    # objects_topic: "/perception/object_recognition/objects"
+    trajectory_topic: "/planning/diffusion_planner/trajectory"
+    objects_topic: "/perception/object_recognition/objects"
     # tf_topic: "/tf"
     # acceleration_topic: "/localization/acceleration"
     # steering_topic: "/vehicle/status/steering_status"
-    # live_trajectory_topic: "/planning/scenario_planning/live_trajectory"

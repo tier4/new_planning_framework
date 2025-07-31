@@ -17,7 +17,6 @@
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
-#include "evaluation.hpp"
 #include "rosbag2_cpp/reader.hpp"
 #include "rosbag2_cpp/writer.hpp"
 
@@ -29,6 +28,7 @@
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/detail/marker_array__struct.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -49,17 +49,14 @@ class OfflineEvaluatorNode : public rclcpp::Node
 public:
   explicit OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options);
 
-  ~OfflineEvaluatorNode();
+  ~OfflineEvaluatorNode() override;
 
 private:
   enum class EvaluationMode { OPEN_LOOP, CLOSED_LOOP };
 
   void setup_evaluation_bag_writer();
   void run_evaluation();
-  rclcpp::Time run_open_loop_evaluation();
-  std::pair<rclcpp::Time, rclcpp::Time> run_closed_loop_evaluation();
   void write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time);
-  void create_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
   void create_route_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
@@ -88,6 +85,9 @@ private:
   std::string bag_path_;
 
   rclcpp::TimerBase::SharedPtr map_check_timer_;
+  
+  // Store tf_static messages for evaluation
+  tf2_msgs::msg::TFMessage tf_static_msgs_;
 };
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

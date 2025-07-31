@@ -19,13 +19,7 @@
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 
-std::string TOPIC::TF = "/tf";                                             // NOLINT
-std::string TOPIC::ODOMETRY = "/localization/kinematic_state";             // NOLINT
-std::string TOPIC::ACCELERATION = "/localization/acceleration";            // NOLINT
-std::string TOPIC::OBJECTS = "/perception/object_recognition/objects";     // NOLINT
-std::string TOPIC::TRAJECTORY = "/planning/scenario_planning/trajectory";  // NOLINT
-std::string TOPIC::STEERING = "/vehicle/status/steering_status";           // NOLINT
-std::string TOPIC::ROUTE = "/planning/mission_planning/route";             // NOLINT
+// グローバルTOPIC定数を削除 - TopicNames構造体を使用するように変更
 
 template <>
 bool Buffer<SteeringReport>::ready() const

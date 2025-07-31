@@ -30,18 +30,6 @@ struct DataAugmentParameters
   double resolution{0.5};
 };
 
-struct Result
-{
-  Result(
-    const double w0, const double w1, const double w2, const double w3, const double w4,
-    const double w5)
-  : weight{w0, w1, w2, w3, w4, w5}
-  {
-  }
-  std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-  std::vector<double> weight;
-  double loss{0.0};
-};
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
 #endif  // AUTOWARE__OFFLINE_EVALUATION_TOOLS__DATA_STRUCTS_HPP_
