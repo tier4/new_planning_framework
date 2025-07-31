@@ -243,12 +243,11 @@ void OfflineEvaluatorNode::run_evaluation()
   }
 
   if (!last_route_msg) {
-    RCLCPP_WARN(get_logger(), "No route message found in bag");
-    // return;
+    RCLCPP_WARN(get_logger(), "No route message found in bag. Evaluation aborted.");
+    return;
   }
-  else {
-    route_handler_->setRoute(*last_route_msg);
-  }
+  route_handler_->setRoute(*last_route_msg);
+ 
 
   // Seek back to the beginning of the bag for mode-specific evaluation
   bag_reader_.seek(0);
@@ -327,7 +326,7 @@ void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time
       marker.header.stamp = reference_time;
     }
     
-    evaluation_bag_writer_->write(time_corrected_markers, "/evaluation/map_markers", reference_time);
+    evaluation_bag_writer_->write(time_corrected_markers, "/map_markers", reference_time);
   }
 
   // Set route for route handler if available
@@ -336,7 +335,7 @@ void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time
     visualization_msgs::msg::MarkerArray route_markers;
     create_route_markers(route_markers);
     if (!route_markers.markers.empty()) {
-      evaluation_bag_writer_->write(route_markers, "/evaluation/route_markers", reference_time);
+      evaluation_bag_writer_->write(route_markers, "/route_markers", reference_time);
     }
   }
 }
@@ -348,7 +347,6 @@ void OfflineEvaluatorNode::create_route_markers(
     return;
   }
 
-  // Get preferred lanes (which are part of the route)
   const auto preferred_lanes = route_handler_->getPreferredLanelets();
   if (preferred_lanes.empty()) {
     return;

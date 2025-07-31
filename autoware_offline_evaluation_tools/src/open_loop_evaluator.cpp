@@ -31,7 +31,6 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
-#include <fstream>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -75,6 +74,7 @@ void OpenLoopEvaluator::evaluate(
   rosbag2_cpp::Writer * bag_writer)
 {
   metrics_list_.clear();
+  trajectory_point_metrics_list_.clear();
   // Reset normalized timestamp tracking for new evaluation
   first_bag_timestamp_set_ = false;
   
@@ -107,9 +107,24 @@ void OpenLoopEvaluator::evaluate(
     auto metrics = evaluate_trajectory(current_data, synchronized_data_list);
     metrics_list_.push_back(metrics);
     
+    // Calculate trajectory point metrics
+    auto trajectory_metrics = calculate_trajectory_point_metrics(current_data);
+    trajectory_point_metrics_list_.push_back(trajectory_metrics);
+    
     // Save to bag if writer provided
     if (bag_writer) {
       save_metrics_to_bag(metrics, current_data, *bag_writer);
+      
+      // Calculate normalized timestamp for trajectory point metrics
+      if (!first_bag_timestamp_set_) {
+        first_bag_timestamp_ = current_data->bag_timestamp;
+        first_bag_timestamp_set_ = true;
+      }
+      const auto relative_duration = current_data->bag_timestamp - first_bag_timestamp_;
+      const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
+      
+      save_trajectory_point_metrics_to_bag(trajectory_metrics, current_data, *bag_writer, 
+                                         normalized_timestamp);
     } else {
       RCLCPP_WARN(logger_, "No bag writer provided, metrics not saved to bag");
     }
@@ -474,20 +489,14 @@ void OpenLoopEvaluator::save_metrics_to_bag(
       transform.transform.translation.z);
   }
   
-  // Save the original trajectory with normalized timestamp
+  // Save the original trajectory using base class method
+  write_trajectory_to_bag(trajectory_data, bag_writer, normalized_timestamp);
+  
+  // Create and save ground truth trajectory
   if (trajectory_data->trajectory) {
-    // Create a copy with normalized timestamp
-    autoware_planning_msgs::msg::Trajectory corrected_trajectory = *(trajectory_data->trajectory);
-    corrected_trajectory.header.stamp = normalized_timestamp;
-    
-    bag_writer.write(
-      corrected_trajectory, "/open_loop/original_trajectory",
-      normalized_timestamp);
-    
-    // Create and save ground truth trajectory
     autoware_planning_msgs::msg::Trajectory gt_trajectory;
     gt_trajectory.header.stamp = normalized_timestamp;
-    gt_trajectory.header.frame_id = corrected_trajectory.header.frame_id;
+    gt_trajectory.header.frame_id = trajectory_data->trajectory->header.frame_id;
     
     // Convert ground truth poses to trajectory points
     for (size_t i = 0; i < metrics.num_points; ++i) {
@@ -613,7 +622,8 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
   j["summary"] = get_summary_as_json();
   
   nlohmann::json trajectories = nlohmann::json::array();
-  for (const auto & metrics : metrics_list_) {
+  for (size_t i = 0; i < metrics_list_.size(); ++i) {
+    const auto & metrics = metrics_list_[i];
     nlohmann::json traj;
     
     traj["timestamp_sec"] = metrics.trajectory_timestamp.seconds();
@@ -631,6 +641,16 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
     // Include point-wise data if needed
     traj["lateral_deviations"] = metrics.lateral_deviations;
     traj["displacement_errors"] = metrics.displacement_errors;
+    
+    // Add trajectory point metrics if available
+    if (i < trajectory_point_metrics_list_.size()) {
+      const auto & point_metrics = trajectory_point_metrics_list_[i];
+      traj["trajectory_point_metrics"]["lateral_accelerations"] = point_metrics.lateral_accelerations;
+      traj["trajectory_point_metrics"]["longitudinal_jerks"] = point_metrics.longitudinal_jerks;
+      traj["trajectory_point_metrics"]["ttc_values"] = point_metrics.ttc_values;
+      traj["trajectory_point_metrics"]["lateral_deviations"] = point_metrics.lateral_deviations;
+      traj["trajectory_point_metrics"]["travel_distances"] = point_metrics.travel_distances;
+    }
     
     trajectories.push_back(traj);
   }
@@ -654,7 +674,12 @@ std::vector<std::pair<std::string, std::string>> OpenLoopEvaluator::get_result_t
     {"/open_loop/metrics/lateral_deviations_array", "std_msgs/msg/Float64MultiArray"},
     {"/open_loop/metrics/longitudinal_deviations_array", "std_msgs/msg/Float64MultiArray"},
     {"/open_loop/metrics/ttc_values_array", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/original_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/open_loop/metrics/trajectory_lateral_accelerations", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_longitudinal_jerks", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_ttc_values", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_lateral_deviations", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_travel_distances", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory", "autoware_planning_msgs/msg/Trajectory"},
     {"/open_loop/ground_truth_trajectory", "autoware_planning_msgs/msg/Trajectory"},
     {"/tf", "tf2_msgs/msg/TFMessage"},
     {"/tf_static", "tf2_msgs/msg/TFMessage"}
@@ -668,140 +693,29 @@ std::pair<rclcpp::Time, rclcpp::Time> OpenLoopEvaluator::run_evaluation_from_bag
 {
   RCLCPP_INFO(logger_, "Running open-loop evaluation for trajectory analysis");
   
-  // Open bag reader
-  rosbag2_cpp::Reader bag_reader;
-  bag_reader.open(bag_path);
-  
-  // Create bag data handler
-  const double buffer_duration_sec = 20.0;  // TODO: make configurable
-  const size_t max_buffer_messages = 10000;
-  
-  auto bag_data = std::make_shared<BagData>(0, topic_names, buffer_duration_sec, max_buffer_messages);
-  
-  // Find the time range of the bag
-  rclcpp::Time bag_start_time = rclcpp::Time(std::numeric_limits<int64_t>::max());
-  rclcpp::Time bag_end_time = rclcpp::Time(0);
-  
-  // tf_static messages
-  tf2_msgs::msg::TFMessage tf_static_msgs;
-  
-  // First pass: scan for time range and collect all data
-  while (bag_reader.has_next() && rclcpp::ok()) {
-    auto serialized_message = bag_reader.read_next();
-    rclcpp::Time msg_time(serialized_message->time_stamp);
-    
-    if (msg_time < bag_start_time) bag_start_time = msg_time;
-    if (msg_time > bag_end_time) bag_end_time = msg_time;
-    
-    const auto & topic_name = serialized_message->topic_name;
-    
-    // Get option to use bag timestamp instead of header timestamp
-    const bool use_bag_timestamp = true;  // TODO: make configurable
-    
-    // Process messages using template helper
-    if (topic_name == topic_names.odometry_topic) {
-      process_and_append_message<Odometry>(
-        serialized_message, bag_data, topic_names.odometry_topic, use_bag_timestamp, logger_);
-    }
-    else if (topic_name == topic_names.trajectory_topic) {
-      process_and_append_message<Trajectory>(
-        serialized_message, bag_data, topic_names.trajectory_topic, use_bag_timestamp, logger_);
-    }
-    else if (topic_name == topic_names.objects_topic) {
-      process_and_append_message<PredictedObjects>(
-        serialized_message, bag_data, topic_names.objects_topic, use_bag_timestamp, logger_);
-    }
-    else if (topic_name == topic_names.tf_topic) {
-      // TF messages don't have header.stamp, so we don't override timestamp
-      process_and_append_message<TFMessage>(
-        serialized_message, bag_data, topic_names.tf_topic, false, logger_);
-    }
-    else if (topic_name == "/tf_static") {
-      try {
-        tf2_msgs::msg::TFMessage msg;
-        rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        // Accumulate all tf_static transforms
-        tf_static_msgs.transforms.insert(
-          tf_static_msgs.transforms.end(), msg.transforms.begin(), msg.transforms.end());
-      } catch (const std::exception & e) {
-        RCLCPP_WARN(logger_, "Failed to deserialize tf_static message: %s", e.what());
-      }
-    }
-  }
-  
-  // Get all data points with synchronized localization and trajectory data
-  const double evaluation_interval_ms = 100.0;  // TODO: make configurable
-  
-  // Collect synchronized data for evaluation
-  std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
-  const double sync_tolerance_ms = 50.0;  // TODO: make configurable
-  
-  // Get all kinematic states at regular intervals
-  auto kinematic_states = bag_data->get_kinematic_states_at_interval(evaluation_interval_ms);
-  
-  if (kinematic_states.empty()) {
-    RCLCPP_ERROR(logger_, "No kinematic states found in the rosbag");
-    return {bag_start_time, bag_end_time};
-  }
-  
-  // For each kinematic state, try to get synchronized data
-  for (const auto & kin_state : kinematic_states) {
-    const auto timestamp = rclcpp::Time(kin_state->header.stamp).nanoseconds();
-    auto sync_data = bag_data->get_synchronized_data_at_time(timestamp, sync_tolerance_ms);
-    if (sync_data) {
-      synchronized_data_list.push_back(sync_data);
-    }
-  }
-  
-  // Sort by timestamp
-  std::sort(synchronized_data_list.begin(), synchronized_data_list.end(),
-    [](const auto & a, const auto & b) { return a->timestamp < b->timestamp; });
-    
-  // Write tf_static with normalized timestamp
-  if (evaluation_bag_writer && !tf_static_msgs.transforms.empty()) {
-    // Write tf_static with normalized timestamp (start from 0)
-    rclcpp::Time tf_time(0, 0, RCL_ROS_TIME);
-    
-    // Also normalize timestamps in the transforms
-    tf2_msgs::msg::TFMessage normalized_tf_static = tf_static_msgs;
-    for (auto& transform : normalized_tf_static.transforms) {
-      transform.header.stamp = tf_time;
-    }
-    
-    evaluation_bag_writer->write(normalized_tf_static, "/tf_static", tf_time);
-  }
+  // Use base class method to process bag and get synchronized data
+  auto bag_result = process_bag_common(bag_path, evaluation_bag_writer, topic_names);
   
   // Run open-loop evaluation
-  if (!synchronized_data_list.empty()) {
+  if (!bag_result.synchronized_data_list.empty()) {
     if (evaluation_bag_writer) {
       // Create topics for open-loop evaluation
-      const auto topics = get_result_topics();
-      for (const auto & [topic_name, topic_type] : topics) {
-        const auto topic_info = rosbag2_storage::TopicMetadata{
-          topic_name, topic_type, rmw_get_serialization_format(), ""};
-        evaluation_bag_writer->create_topic(topic_info);
-      }
-      evaluate(synchronized_data_list, evaluation_bag_writer);
+      create_topics_in_bag(*evaluation_bag_writer);
+      
+      // Write tf_static with normalized timestamp
+      write_tf_static_to_bag(evaluation_bag_writer, bag_result.tf_static_msgs);
+      
+      evaluate(bag_result.synchronized_data_list, evaluation_bag_writer);
     } else {
-      evaluate(synchronized_data_list, nullptr);
+      evaluate(bag_result.synchronized_data_list, nullptr);
     }
     
     // Get and save evaluation results
     auto summary_json = get_summary_as_json();
     auto detailed_json = get_detailed_results_as_json();
     
-    // Write results to file
-    const std::string output_dir = ".";  // TODO: make configurable
-    const auto json_path = output_dir + "/open_loop_evaluation_results.json";
-    
-    std::ofstream json_file(json_path);
-    if (json_file.is_open()) {
-      json_file << detailed_json.dump(2);
-      json_file.close();
-      RCLCPP_INFO(logger_, "Saved evaluation results to: %s", json_path.c_str());
-    }
+    // Save using base class method
+    save_json_results(detailed_json, bag_path, "open_loop", "open_loop_evaluation_results");
     
     // Log summary
     RCLCPP_INFO(logger_, "Open-loop evaluation summary:");
@@ -815,22 +729,7 @@ std::pair<rclcpp::Time, rclcpp::Time> OpenLoopEvaluator::run_evaluation_from_bag
   
   RCLCPP_INFO(logger_, "Open-loop evaluation complete");
   
-  // Return the time range of kinematic states (not the entire bag)
-  if (!kinematic_states.empty()) {
-    rclcpp::Time eval_start_time(kinematic_states.front()->header.stamp);
-    rclcpp::Time eval_end_time(kinematic_states.back()->header.stamp);
-    return {eval_start_time, eval_end_time};
-  }
-  
-  // Fallback to bag time range if no kinematic states
-  // But check if we actually found any messages
-  if (bag_start_time.nanoseconds() == std::numeric_limits<int64_t>::max() || 
-      bag_end_time.nanoseconds() == 0) {
-    // No valid messages found, use current time as fallback
-    auto current = rclcpp::Clock{RCL_ROS_TIME}.now();
-    return {current, current};
-  }
-  return {bag_start_time, bag_end_time};
+  return {bag_result.evaluation_start_time, bag_result.evaluation_end_time};
 }
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

@@ -12,6 +12,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/node.cpp
   src/utils.cpp
   src/bag_handler.cpp
+  src/base_evaluator.cpp
   src/closed_loop_evaluator.cpp
   src/open_loop_evaluator.cpp
 )

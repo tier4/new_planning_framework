@@ -185,6 +185,7 @@ private:
   void calculate_summary();
 
   std::vector<OpenLoopTrajectoryMetrics> metrics_list_;
+  std::vector<TrajectoryPointMetrics> trajectory_point_metrics_list_;
   OpenLoopEvaluationSummary summary_;
 };
 

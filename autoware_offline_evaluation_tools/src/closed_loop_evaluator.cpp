@@ -18,12 +18,17 @@
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/math/normalization.hpp>
 #include <autoware_utils/math/unit_conversion.hpp>
+#include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware/trajectory_selector_common/utils.hpp>
+#include <rclcpp/logging.hpp>
 #include <rclcpp/time.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rosbag2_cpp/reader.hpp>
 
+#include <geometry_msgs/msg/accel.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -34,15 +39,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <fstream>
-#include <chrono>
-#include <filesystem>
-#include <iomanip>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-// Constructor implementation moved to header file
-
 void ClosedLoopEvaluator::evaluate(
   const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
   rosbag2_cpp::Writer * bag_writer)
@@ -54,6 +53,11 @@ void ClosedLoopEvaluator::evaluate(
 
   metrics_list_.clear();
   metrics_list_.reserve(synchronized_data_list.size());
+  trajectory_point_metrics_list_.clear();
+  trajectory_point_metrics_list_.reserve(synchronized_data_list.size());
+  
+  // Reset normalized timestamp tracking for new evaluation
+  first_eval_timestamp_set_ = false;
 
   std::shared_ptr<SynchronizedData> previous_data = nullptr;
 
@@ -65,44 +69,51 @@ void ClosedLoopEvaluator::evaluate(
     auto metrics = calculate_metrics(sync_data, previous_data);
     metrics_list_.push_back(metrics);
 
+    // Calculate trajectory point metrics
+    auto trajectory_metrics = calculate_trajectory_point_metrics(sync_data);
+    trajectory_point_metrics_list_.push_back(trajectory_metrics);
+
     if (bag_writer) {
       save_metrics_to_bag(metrics, sync_data, *bag_writer);
+      
+      // Calculate normalized timestamp for trajectory point metrics
+      if (!first_eval_timestamp_set_) {
+        first_eval_timestamp_ = sync_data->bag_timestamp;
+        first_eval_timestamp_set_ = true;
+      }
+      const auto relative_duration = sync_data->bag_timestamp - first_eval_timestamp_;
+      const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
+      
+      save_trajectory_point_metrics_to_bag(trajectory_metrics, sync_data, *bag_writer, 
+                                         normalized_timestamp);
     }
 
     previous_data = sync_data;
   }
 
   calculate_summary();
-
-  RCLCPP_INFO(
-    logger_,
-    "Evaluation complete. Processed %zu samples. "
-    "Mean lateral error: %.3f m, Max lateral error: %.3f m, "
-    "Min TTC: %.3f s",
-    summary_.num_samples, summary_.mean_lateral_error, summary_.max_lateral_error,
-    summary_.min_ttc);
 }
 
-TrajectoryMetrics ClosedLoopEvaluator::calculate_metrics(
+ClosedLoopTrajectoryMetrics ClosedLoopEvaluator::calculate_metrics(
   const std::shared_ptr<SynchronizedData> & current_data,
   const std::shared_ptr<SynchronizedData> & previous_data)
 {
-  TrajectoryMetrics metrics;
+  ClosedLoopTrajectoryMetrics metrics;
   metrics.timestamp = current_data->timestamp;
 
   const auto & current_pose = current_data->kinematic_state->pose.pose;
   const auto & current_twist = current_data->kinematic_state->twist.twist;
-  const auto & trajectory = *current_data->trajectory;
+  //const auto & trajectory = *current_data->trajectory;
 
-  // Calculate position errors
-  if (route_handler_ && route_handler_->isHandlerReady()) {
-    // Use preferred lane centerline if available
-    metrics.lateral_error = calculate_lateral_error_from_preferred_lane(current_pose);
+  metrics.lateral_error = calculate_lateral_error_from_preferred_lane(current_pose);
+
+  if(current_data->kinematic_state) {
+    metrics.longitudinal_velocity = current_data->kinematic_state->twist.twist.linear.x;
+    metrics.yaw_rate = current_data->kinematic_state->twist.twist.angular.z;
   } else {
-    // Fallback to trajectory-based error
-    metrics.lateral_error = calculate_lateral_error(current_pose, trajectory);
+    metrics.longitudinal_velocity = 0.0;
+    metrics.yaw_rate = 0.0;
   }
-  metrics.longitudinal_error = calculate_longitudinal_error(current_pose, trajectory);
 
   // Calculate longitudinal acceleration
   if (current_data->acceleration) {
@@ -126,139 +137,27 @@ TrajectoryMetrics ClosedLoopEvaluator::calculate_metrics(
     metrics.jerk = 0.0;
   }
 
-  // Calculate curvature from steering angle
-  if (current_data->steering_status) {
-    const double wheelbase = 2.79;  // Default wheelbase, should be from vehicle_info
-    const double steering_angle = current_data->steering_status->steering_tire_angle;
-    metrics.curvature = std::tan(steering_angle) / wheelbase;
-  } else {
-    metrics.curvature = 0.0;
-  }
-
-  // Calculate lateral acceleration from velocity and curvature
-  // lateral_acceleration = v^2 * curvature = v^2 * tan(steering_angle) / wheelbase
-  const double velocity = std::hypot(current_twist.linear.x, current_twist.linear.y);
-  metrics.lateral_acceleration = velocity * velocity * std::abs(metrics.curvature);
+  // Calculate lateral acceleration from velocity and yawrate
+  metrics.lateral_acceleration = metrics.longitudinal_velocity * metrics.yaw_rate;  // Simplified for now
 
   // Calculate oscillation metrics
   calculate_oscillation_metrics(metrics, current_data, previous_data);
 
   // Calculate TTC if objects are available
   if (current_data->objects) {
-    metrics.ttc = calculate_ttc(current_pose, current_twist, *current_data->objects);
-    metrics.time_gap = metrics.ttc;  // Simplified for now
+    metrics.min_ttc = calculate_ttc(current_pose, current_twist, *current_data->objects);
   } else {
-    metrics.ttc = std::numeric_limits<double>::max();
-    metrics.time_gap = std::numeric_limits<double>::max();
+    metrics.min_ttc = std::numeric_limits<double>::max();
   }
 
   return metrics;
 }
 
-double ClosedLoopEvaluator::calculate_lateral_error(
-  const geometry_msgs::msg::Pose & current_pose,
-  const autoware_planning_msgs::msg::Trajectory & trajectory)
-{
-  if (trajectory.points.empty()) {
-    return 0.0;
-  }
-
-  double min_distance = std::numeric_limits<double>::max();
-
-  for (size_t i = 0; i < trajectory.points.size() - 1; ++i) {
-    const auto & p1 = trajectory.points[i].pose.position;
-    const auto & p2 = trajectory.points[i + 1].pose.position;
-
-    // Calculate distance from point to line segment
-    const double dx = p2.x - p1.x;
-    const double dy = p2.y - p1.y;
-    const double l2 = dx * dx + dy * dy;
-
-    if (l2 == 0.0) {
-      // p1 and p2 are the same point
-      const double dist =
-        std::hypot(current_pose.position.x - p1.x, current_pose.position.y - p1.y);
-      min_distance = std::min(min_distance, dist);
-      continue;
-    }
-
-    // Calculate projection
-    const double t = std::max(
-      0.0,
-      std::min(
-        1.0, ((current_pose.position.x - p1.x) * dx + (current_pose.position.y - p1.y) * dy) / l2));
-
-    const double proj_x = p1.x + t * dx;
-    const double proj_y = p1.y + t * dy;
-
-    const double dist =
-      std::hypot(current_pose.position.x - proj_x, current_pose.position.y - proj_y);
-
-    min_distance = std::min(min_distance, dist);
-  }
-
-  return min_distance;
-}
-
-double ClosedLoopEvaluator::calculate_longitudinal_error(
-  const geometry_msgs::msg::Pose & current_pose,
-  const autoware_planning_msgs::msg::Trajectory & trajectory)
-{
-  if (trajectory.points.empty()) {
-    return 0.0;
-  }
-
-  const size_t closest_idx = find_closest_trajectory_point(current_pose, trajectory);
-
-  // Calculate signed longitudinal distance
-  double accumulated_dist = 0.0;
-
-  // Find where the vehicle is along the trajectory
-  for (size_t i = 1; i <= closest_idx && i < trajectory.points.size(); ++i) {
-    const auto & p1 = trajectory.points[i - 1].pose.position;
-    const auto & p2 = trajectory.points[i].pose.position;
-    accumulated_dist += std::hypot(p2.x - p1.x, p2.y - p1.y);
-  }
-
-  // Add distance from closest point to actual position
-  if (closest_idx < trajectory.points.size() - 1) {
-    const auto & p1 = trajectory.points[closest_idx].pose.position;
-    const auto & p2 = trajectory.points[closest_idx + 1].pose.position;
-
-    const double dx = p2.x - p1.x;
-    const double dy = p2.y - p1.y;
-    const double l2 = dx * dx + dy * dy;
-
-    if (l2 > 0.0) {
-      const double t =
-        ((current_pose.position.x - p1.x) * dx + (current_pose.position.y - p1.y) * dy) / l2;
-
-      if (t >= 0.0 && t <= 1.0) {
-        accumulated_dist += t * std::sqrt(l2);
-      }
-    }
-  }
-
-  // Expected distance based on time
-  const double expected_dist =
-    closest_idx > 0 ? trajectory.points[closest_idx].longitudinal_velocity_mps *
-                        rclcpp::Duration(trajectory.points[closest_idx].time_from_start).seconds()
-                    : 0.0;
-
-  return accumulated_dist - expected_dist;
-}
 
 void ClosedLoopEvaluator::calculate_oscillation_metrics(
-  TrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & current_data,
+  ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & current_data,
   const std::shared_ptr<SynchronizedData> & previous_data)
 {
-  // Get current steering angle
-  if (current_data->steering_status) {
-    metrics.steering_angle = current_data->steering_status->steering_tire_angle;
-  } else {
-    metrics.steering_angle = 0.0;
-  }
-
   // Calculate steering angular velocity
   if (previous_data && previous_data->steering_status && current_data->steering_status) {
     const double dt = (current_data->timestamp - previous_data->timestamp).seconds();
@@ -272,33 +171,6 @@ void ClosedLoopEvaluator::calculate_oscillation_metrics(
   } else {
     metrics.steering_angular_velocity = 0.0;
   }
-
-  // Calculate lateral jerk (change in lateral acceleration)
-  if (previous_data) {
-    const double dt = (current_data->timestamp - previous_data->timestamp).seconds();
-    if (dt > 0.0) {
-      // Calculate previous lateral acceleration
-      const auto & prev_twist = previous_data->kinematic_state->twist.twist;
-      const double prev_velocity = std::hypot(prev_twist.linear.x, prev_twist.linear.y);
-      double prev_curvature = 0.0;
-      if (previous_data->steering_status) {
-        const double wheelbase = 2.79;
-        const double prev_steering = previous_data->steering_status->steering_tire_angle;
-        prev_curvature = std::tan(prev_steering) / wheelbase;
-      }
-      const double prev_lateral_accel = prev_velocity * prev_velocity * std::abs(prev_curvature);
-
-      metrics.lateral_jerk = (metrics.lateral_acceleration - prev_lateral_accel) / dt;
-    } else {
-      metrics.lateral_jerk = 0.0;
-    }
-  } else {
-    metrics.lateral_jerk = 0.0;
-  }
-
-  // Calculate yaw rate
-  const auto & twist = current_data->kinematic_state->twist.twist;
-  metrics.yaw_rate = twist.angular.z;
 }
 
 double ClosedLoopEvaluator::calculate_lateral_error_from_preferred_lane(
@@ -360,83 +232,99 @@ double ClosedLoopEvaluator::calculate_ttc(
   return min_ttc;
 }
 
-size_t ClosedLoopEvaluator::find_closest_trajectory_point(
-  const geometry_msgs::msg::Pose & current_pose,
-  const autoware_planning_msgs::msg::Trajectory & trajectory)
-{
-  if (trajectory.points.empty()) {
-    return 0;
-  }
-
-  size_t closest_idx = 0;
-  double min_distance = std::numeric_limits<double>::max();
-
-  for (size_t i = 0; i < trajectory.points.size(); ++i) {
-    const auto & point = trajectory.points[i].pose.position;
-    const double distance =
-      std::hypot(current_pose.position.x - point.x, current_pose.position.y - point.y);
-
-    if (distance < min_distance) {
-      min_distance = distance;
-      closest_idx = i;
-    }
-  }
-
-  return closest_idx;
-}
-
 void ClosedLoopEvaluator::save_metrics_to_bag(
-  const TrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & sync_data,
+  const ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & sync_data,
   rosbag2_cpp::Writer & bag_writer)
 {
-  const auto timestamp = metrics.timestamp;
+  // Use normalized timestamp for bag writing to ensure proper duration
+  if (!first_eval_timestamp_set_) {
+    first_eval_timestamp_ = sync_data->bag_timestamp;
+    first_eval_timestamp_set_ = true;
+  }
+  
+  // Calculate relative timestamp from the first data point
+  const auto relative_duration = sync_data->bag_timestamp - first_eval_timestamp_;
+  const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
 
   // Save lateral error
   {
     std_msgs::msg::Float64 msg;
     msg.data = metrics.lateral_error;
-    bag_writer.write(msg, "/closed_loop/metrics/lateral_error", timestamp);
+    bag_writer.write(msg, "/closed_loop/lateral_error", normalized_timestamp);
   }
 
   // Save acceleration
   {
-    geometry_msgs::msg::PointStamped msg;
-    msg.header.stamp = timestamp;
-    msg.point.x = metrics.longitudinal_acceleration;
-    msg.point.y = metrics.lateral_acceleration;
-    msg.point.z = metrics.jerk;
-    bag_writer.write(msg, "/closed_loop/metrics/acceleration", timestamp);
+    geometry_msgs::msg::Accel msg;
+    msg.linear.x = metrics.longitudinal_acceleration; 
+    msg.linear.y = metrics.lateral_acceleration;
+    msg.angular.z = 0.0;
+    bag_writer.write(msg, "/closed_loop/acceleration", normalized_timestamp);
   }
 
   // Save TTC
   {
     std_msgs::msg::Float64 msg;
-    msg.data = metrics.ttc;
-    bag_writer.write(msg, "/closed_loop/metrics/ttc", timestamp);
+    msg.data = metrics.min_ttc;
+    bag_writer.write(msg, "ttc", normalized_timestamp);
   }
 
-  // Save oscillation metrics
-  {
-    geometry_msgs::msg::PointStamped msg;
-    msg.header.stamp = timestamp;
-    msg.point.x = metrics.steering_angle;
-    msg.point.y = metrics.steering_angular_velocity;
-    msg.point.z = metrics.lateral_jerk;
-    bag_writer.write(msg, "/closed_loop/metrics/steering_velocity", timestamp);
-  }
-
-  // Save yaw rate
+  // Save jerk
   {
     std_msgs::msg::Float64 msg;
-    msg.data = metrics.yaw_rate;
-    bag_writer.write(msg, "/closed_loop/metrics/jerk", timestamp);
+    msg.data = metrics.jerk;
+    bag_writer.write(msg, "/closed_loop/jerk", normalized_timestamp);
+  }
+
+  // Save steering angle velocity
+  {
+    std_msgs::msg::Float64 msg;
+    msg.data = metrics.steering_angular_velocity;
+    bag_writer.write(msg, "/closed_loop/steering_velocity", normalized_timestamp);
   }
 
   // Save localization (Odometry)
   if (sync_data && sync_data->kinematic_state) {
-    bag_writer.write(*sync_data->kinematic_state, "/closed_loop/kinematic_state", timestamp);
+    // Create a copy with normalized timestamp
+    nav_msgs::msg::Odometry corrected_odom = *sync_data->kinematic_state;
+    corrected_odom.twist.twist.linear.y = metrics.lateral_acceleration;  // Store lateral acceleration
+    corrected_odom.header.stamp = normalized_timestamp;
+    bag_writer.write(corrected_odom, "/kinematic_state", normalized_timestamp);
+  }
+  
+  // Save objects with normalized timestamp
+  if (sync_data && sync_data->objects) {
+    PredictedObjects corrected_objects = *sync_data->objects;
+    corrected_objects.header.stamp = normalized_timestamp;
+    bag_writer.write(corrected_objects, "/closed_loop/objects", normalized_timestamp);
+  }
+  
+  // Save trajectory using base class method
+  write_trajectory_to_bag(sync_data, bag_writer, normalized_timestamp);
+  
+  // Save TF with normalized timestamp
+  tf2_msgs::msg::TFMessage tf_msg;
+  geometry_msgs::msg::TransformStamped transform;
+  
+  // Use the normalized timestamp for consistency
+  transform.header.stamp = normalized_timestamp;
+  transform.header.frame_id = "map";
+  transform.child_frame_id = "base_link";
+  
+  // Use kinematic state pose as transform
+  if (sync_data && sync_data->kinematic_state) {
+    transform.transform.translation.x = sync_data->kinematic_state->pose.pose.position.x;
+    transform.transform.translation.y = sync_data->kinematic_state->pose.pose.position.y;
+    transform.transform.translation.z = sync_data->kinematic_state->pose.pose.position.z;
+    transform.transform.rotation = sync_data->kinematic_state->pose.pose.orientation;
+    
+    tf_msg.transforms.push_back(transform);
+    bag_writer.write(tf_msg, "/tf", normalized_timestamp);
   }
 }
+
+// Implementations of calculate_trajectory_point_metrics and save_trajectory_point_metrics_to_bag 
+// have been moved to base class
 
 void ClosedLoopEvaluator::calculate_summary()
 {
@@ -475,10 +363,7 @@ void ClosedLoopEvaluator::calculate_summary()
     sum_squared_lateral_error += metrics.lateral_error * metrics.lateral_error;
     sum_acceleration += std::abs(metrics.lateral_acceleration);
     sum_jerk += std::abs(metrics.jerk);
-    sum_steering_angle += metrics.steering_angle;
-    sum_squared_steering_angle += metrics.steering_angle * metrics.steering_angle;
     sum_steering_angular_velocity += std::abs(metrics.steering_angular_velocity);
-    sum_lateral_jerk += std::abs(metrics.lateral_jerk);
 
     summary_.max_lateral_error = std::max(summary_.max_lateral_error, metrics.lateral_error);
     summary_.max_acceleration =
@@ -486,7 +371,6 @@ void ClosedLoopEvaluator::calculate_summary()
     summary_.max_jerk = std::max(summary_.max_jerk, std::abs(metrics.jerk));
     summary_.max_steering_angular_velocity =
       std::max(summary_.max_steering_angular_velocity, std::abs(metrics.steering_angular_velocity));
-    summary_.max_lateral_jerk = std::max(summary_.max_lateral_jerk, std::abs(metrics.lateral_jerk));
 
     // Count steering reversals (sign changes in steering velocity)
     if (i > 0 && std::abs(metrics.steering_angular_velocity) > 0.01) {  // Threshold to avoid noise
@@ -496,8 +380,8 @@ void ClosedLoopEvaluator::calculate_summary()
       prev_steering_velocity = metrics.steering_angular_velocity;
     }
 
-    if (metrics.ttc < std::numeric_limits<double>::max()) {
-      summary_.min_ttc = std::min(summary_.min_ttc, metrics.ttc);
+    if (metrics.min_ttc < std::numeric_limits<double>::max()) {
+      summary_.min_ttc = std::min(summary_.min_ttc, metrics.min_ttc);
     }
   }
 
@@ -577,15 +461,25 @@ nlohmann::json ClosedLoopEvaluator::get_detailed_results_as_json() const
   
   // Add detailed trajectory-by-trajectory metrics if needed
   nlohmann::json trajectories = nlohmann::json::array();
-  for (const auto & metrics : metrics_list_) {
+  for (size_t i = 0; i < metrics_list_.size(); ++i) {
+    const auto & metrics = metrics_list_[i];
     nlohmann::json traj;
     traj["lateral_error"] = metrics.lateral_error;
-    traj["longitudinal_error"] = metrics.longitudinal_error;
     traj["lateral_acceleration"] = metrics.lateral_acceleration;
-    traj["curvature"] = metrics.curvature;
     traj["acceleration"] = metrics.longitudinal_acceleration;
     traj["jerk"] = metrics.jerk;
-    traj["ttc"] = metrics.ttc;
+    traj["ttc"] = metrics.min_ttc;
+    
+    // Add trajectory point metrics if available
+    if (i < trajectory_point_metrics_list_.size()) {
+      const auto & point_metrics = trajectory_point_metrics_list_[i];
+      traj["trajectory_point_metrics"]["lateral_accelerations"] = point_metrics.lateral_accelerations;
+      traj["trajectory_point_metrics"]["longitudinal_jerks"] = point_metrics.longitudinal_jerks;
+      traj["trajectory_point_metrics"]["ttc_values"] = point_metrics.ttc_values;
+      traj["trajectory_point_metrics"]["lateral_deviations"] = point_metrics.lateral_deviations;
+      traj["trajectory_point_metrics"]["travel_distances"] = point_metrics.travel_distances;
+    }
+    
     trajectories.push_back(traj);
   }
   j["trajectories"] = trajectories;
@@ -596,15 +490,19 @@ nlohmann::json ClosedLoopEvaluator::get_detailed_results_as_json() const
 std::vector<std::pair<std::string, std::string>> ClosedLoopEvaluator::get_result_topics() const
 {
   return {
-    {"/closed_loop/metrics/lateral_error", "std_msgs/msg/Float64"},
+    {"/closed_loop/lateral_error", "std_msgs/msg/Float64"},
     {"/closed_loop/metrics/heading_error", "std_msgs/msg/Float64"},
-    {"/closed_loop/metrics/velocity_error", "std_msgs/msg/Float64"},
-    {"/closed_loop/metrics/acceleration", "std_msgs/msg/Float64"},
-    {"/closed_loop/metrics/jerk", "std_msgs/msg/Float64"},
+    {"/closed_loop/acceleration", "geometry_msgs/msg/Accel"},
+    {"ttc", "std_msgs/msg/Float64"},
+    {"/closed_loop/jerk", "std_msgs/msg/Float64"},
     {"/closed_loop/metrics/steering_velocity", "std_msgs/msg/Float64"},
-    {"/closed_loop/metrics/ttc", "std_msgs/msg/Float64"},
     {"/closed_loop/metrics/comfort_score", "std_msgs/msg/Float64"},
-    {"/closed_loop/trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/trajectory/lateral_accelerations", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory/longitudinal_jerks", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory/ttc_values", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory/lateral_deviations", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory/travel_distances", "std_msgs/msg/Float64MultiArray"},
+    {"/trajectory", "autoware_planning_msgs/msg/Trajectory"},
     {"/closed_loop/kinematic_state", "nav_msgs/msg/Odometry"},
     {"/closed_loop/objects", "autoware_perception_msgs/msg/PredictedObjects"},
     {"/tf", "tf2_msgs/msg/TFMessage"},
@@ -619,189 +517,47 @@ std::pair<rclcpp::Time, rclcpp::Time> ClosedLoopEvaluator::run_evaluation_from_b
 {
   RCLCPP_INFO(logger_, "Running closed-loop evaluation for autonomous driving data");
 
-  // Open bag reader
-  rosbag2_cpp::Reader bag_reader;
-  bag_reader.open(bag_path);
-
-  // Create bag data handler
-  const double buffer_duration_sec = 20.0;  // TODO: make configurable
-  const size_t max_buffer_messages = 10000;
-
-  auto bag_data = std::make_shared<BagData>(0, topic_names, buffer_duration_sec, max_buffer_messages);
-
-  // Read all messages from bag into buffers
-  RCLCPP_INFO(logger_, "Loading rosbag data into buffers...");
+  // Use base class method to process bag and get synchronized data
+  auto bag_result = process_bag_common(bag_path, evaluation_bag_writer, topic_names);
   
-  // Get option to use bag timestamp instead of header timestamp
-  const bool use_bag_timestamp = true;  // TODO: make configurable
-
-  while (bag_reader.has_next() && rclcpp::ok()) {
-    auto serialized_message = bag_reader.read_next();
-    const auto & topic_name = serialized_message->topic_name;
-
-    // Process messages using template helper
-    if (topic_name == topic_names.odometry_topic) {
-      process_and_append_message<Odometry>(
-        serialized_message, bag_data, topic_names.odometry_topic, use_bag_timestamp, logger_);
-    } 
-    else if (topic_name == topic_names.trajectory_topic) {
-      process_and_append_message<Trajectory>(
-        serialized_message, bag_data, topic_names.trajectory_topic, use_bag_timestamp, logger_);
-    } 
-    else if (topic_name == topic_names.acceleration_topic) {
-      process_and_append_message<AccelWithCovarianceStamped>(
-        serialized_message, bag_data, topic_names.acceleration_topic, use_bag_timestamp, logger_);
-    } 
-    else if (topic_name == topic_names.steering_topic) {
-      // SteeringReport doesn't have header, so we don't override timestamp
-      process_and_append_message<SteeringReport>(
-        serialized_message, bag_data, topic_names.steering_topic, false, logger_);
-    } 
-    else if (topic_name == topic_names.objects_topic) {
-      process_and_append_message<PredictedObjects>(
-        serialized_message, bag_data, topic_names.objects_topic, use_bag_timestamp, logger_);
-      
-      // Also write objects to evaluation bag
-      if (evaluation_bag_writer) {
-        try {
-          PredictedObjects msg;
-          rclcpp::Serialization<PredictedObjects> serializer;
-          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-          serializer.deserialize_message(&serialized_msg, &msg);
-          rclcpp::Time msg_time(serialized_message->time_stamp);
-          evaluation_bag_writer->write(msg, "/closed_loop/objects", msg_time);
-        } catch (const std::exception & e) {
-          RCLCPP_WARN(logger_, "Failed to write objects to evaluation bag: %s", e.what());
-        }
-      }
-    } 
-    else if (topic_name == topic_names.tf_topic) {
-      process_and_append_message<TFMessage>(
-        serialized_message, bag_data, topic_names.tf_topic, false, logger_);
-      
-      // Also write tf messages to evaluation bag
-      if (evaluation_bag_writer) {
-        try {
-          TFMessage msg;
-          rclcpp::Serialization<TFMessage> serializer;
-          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-          serializer.deserialize_message(&serialized_msg, &msg);
-          rclcpp::Time msg_time(serialized_message->time_stamp);
-          evaluation_bag_writer->write(msg, "/tf", msg_time);
-        } catch (const std::exception & e) {
-          RCLCPP_WARN(logger_, "Failed to write tf to evaluation bag: %s", e.what());
-        }
-      }
-    }
-  }
-
-  // Get kinematic states at 100ms intervals
-  const double evaluation_interval_ms = 100.0;  // TODO: make configurable
-  auto kinematic_states = bag_data->get_kinematic_states_at_interval(evaluation_interval_ms);
-
-  if (kinematic_states.empty()) {
-    RCLCPP_ERROR(logger_, "No kinematic states found in the rosbag");
-    return {rclcpp::Clock{RCL_ROS_TIME}.now(), rclcpp::Clock{RCL_ROS_TIME}.now()};
-  }
-
-  // Process each kinematic state with synchronized data
-  std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
-  const double sync_tolerance_ms = 50.0;  // TODO: make configurable
-
-  for (const auto & kinematic_state : kinematic_states) {
-    const auto timestamp = rclcpp::Time(kinematic_state->header.stamp).nanoseconds();
-    auto sync_data = bag_data->get_synchronized_data_at_time(timestamp, sync_tolerance_ms);
-
-    if (sync_data && sync_data->trajectory) {
-      synchronized_data_list.push_back(sync_data);
-    }
-  }
-
   // Evaluate the synchronized data
-  if (!synchronized_data_list.empty()) {
-    if (evaluation_bag_writer) {
-      // Create topics for closed-loop evaluation
-      const auto topics = get_result_topics();
-      for (const auto & [topic_name, topic_type] : topics) {
-        const auto topic_info = rosbag2_storage::TopicMetadata{
-          topic_name, topic_type, rmw_get_serialization_format(), ""};
-        evaluation_bag_writer->create_topic(topic_info);
-      }
-    }
-    
-    evaluate(synchronized_data_list, evaluation_bag_writer);
-
-    // Get and log summary
-    auto summary = get_summary();
-    RCLCPP_INFO(
-      logger_,
-      "Evaluation Summary:\n"
-      "  Total samples: %zu\n"
-      "  Mean lateral error: %.3f m\n"
-      "  Max lateral error: %.3f m\n"
-      "  Std lateral error: %.3f m\n"
-      "  Mean acceleration: %.3f m/s²\n"
-      "  Max acceleration: %.3f m/s²\n"
-      "  Steering reversals: %zu\n"
-      "  Mean steering angular velocity: %.3f rad/s\n"
-      "  Min TTC: %.3f s\n"
-      "  Total time: %.3f s",
-      summary.num_samples, summary.mean_lateral_error, summary.max_lateral_error,
-      summary.std_lateral_error, summary.mean_acceleration, summary.max_acceleration,
-      summary.steering_reversals, summary.mean_steering_angular_velocity, summary.min_ttc,
-      summary.total_time);
-
-    // Save JSON output
-    const std::string json_output_path = "~/evaluation_result.json";  // TODO: make configurable
-    std::string expanded_path = json_output_path;
-
-    // Expand home directory if needed
-    if (expanded_path[0] == '~') {
-      const char * home = std::getenv("HOME");
-      if (home) {
-        expanded_path = std::string(home) + expanded_path.substr(1);
-      }
-    }
-
-    // Add timestamp to filename
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream timestamp_ss;
-    timestamp_ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-
-    // Create filename with timestamp
-    std::filesystem::path json_path(expanded_path);
-    std::string filename = json_path.stem().string() + "_" + timestamp_ss.str() + ".json";
-    json_path = json_path.parent_path() / filename;
-
-    // Get JSON summary
-    nlohmann::json json_output = get_summary_as_json();
-
-    // Add evaluation info
-    json_output["evaluation_info"]["timestamp"] = timestamp_ss.str();
-    json_output["evaluation_info"]["bag_path"] = bag_path;
-    json_output["evaluation_info"]["evaluation_mode"] = "closed_loop";
-
-    // Write JSON file
-    std::ofstream json_file(json_path);
-    if (json_file.is_open()) {
-      json_file << json_output.dump(2);  // Pretty print with 2 spaces
-      json_file.close();
-      RCLCPP_INFO(logger_, "JSON results saved to: %s", json_path.c_str());
-    } else {
-      RCLCPP_ERROR(logger_, "Failed to save JSON results to: %s", json_path.c_str());
-    }
+  if (bag_result.synchronized_data_list.empty()) {
+    RCLCPP_ERROR(logger_, "Data synchronization failed. Aborting evaluation.");
+    return {rclcpp::Time(), rclcpp::Time()};
   }
+  if (evaluation_bag_writer) {
+    // Create topics for closed-loop evaluation
+    create_topics_in_bag(*evaluation_bag_writer);
+  }
+  
+  evaluate(bag_result.synchronized_data_list, evaluation_bag_writer);
+
+  // Get and log summary
+  auto summary = get_summary();
+  RCLCPP_INFO(
+    logger_,
+    "Evaluation Summary:\n"
+    "  Total samples: %zu\n"
+    "  Mean lateral error: %.3f m\n"
+    "  Max lateral error: %.3f m\n"
+    "  Std lateral error: %.3f m\n"
+    "  Mean acceleration: %.3f m/s²\n"
+    "  Max acceleration: %.3f m/s²\n"
+    "  Steering reversals: %zu\n"
+    "  Mean steering angular velocity: %.3f rad/s\n"
+    "  Min TTC: %.3f s\n"
+    "  Total time: %.3f s",
+    summary.num_samples, summary.mean_lateral_error, summary.max_lateral_error,
+    summary.std_lateral_error, summary.mean_acceleration, summary.max_acceleration,
+    summary.steering_reversals, summary.mean_steering_angular_velocity, summary.min_ttc,
+    summary.total_time);
+
+  // Save JSON output using base class method
+  save_json_results(get_summary_as_json(), bag_path, "closed_loop", "evaluation_result");
 
   RCLCPP_INFO(logger_, "Closed-loop evaluation complete");
-
-  // Return the timestamps of the first and last evaluation data
-  if (!kinematic_states.empty()) {
-    return {
-      rclcpp::Time(kinematic_states.front()->header.stamp),
-      rclcpp::Time(kinematic_states.back()->header.stamp)};
-  }
-  return {rclcpp::Clock{RCL_ROS_TIME}.now(), rclcpp::Clock{RCL_ROS_TIME}.now()};
+  
+  return {bag_result.evaluation_start_time, bag_result.evaluation_end_time};
 }
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

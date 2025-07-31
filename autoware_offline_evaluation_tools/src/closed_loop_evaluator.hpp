@@ -34,21 +34,15 @@
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 
-struct TrajectoryMetrics
+struct ClosedLoopTrajectoryMetrics
 {
+  double longitudinal_velocity;      // Longitudinal velocity
   double lateral_error;              // Lateral error from preferred lane centerline
-  double longitudinal_error;         // Longitudinal error from planned trajectory
   double lateral_acceleration;       // Lateral acceleration
   double longitudinal_acceleration;  // Longitudinal acceleration
-  double jerk;                       // Jerk (rate of change of acceleration)
-  double curvature;                  // Path curvature
-  double time_gap;                   // Time gap to closest obstacle
-  double ttc;                        // Time to collision
-
-  // Oscillation metrics
-  double steering_angle;             // Current steering angle
+  double jerk;                       // Longitudinal Jerk
+  double min_ttc;                    // Time to collision
   double steering_angular_velocity;  // Steering angle change rate
-  double lateral_jerk;               // Lateral acceleration change rate
   double yaw_rate;                   // Yaw angular velocity
 
   rclcpp::Time timestamp;
@@ -92,7 +86,7 @@ public:
 
   EvaluationSummary get_summary() const { return summary_; }
 
-  std::vector<TrajectoryMetrics> get_metrics() const { return metrics_list_; }
+  std::vector<ClosedLoopTrajectoryMetrics> get_metrics() const { return metrics_list_; }
 
   nlohmann::json get_summary_as_json() const override;
   
@@ -117,42 +111,35 @@ public:
     const TopicNames & topic_names) override;
 
 private:
-  TrajectoryMetrics calculate_metrics(
+  ClosedLoopTrajectoryMetrics calculate_metrics(
     const std::shared_ptr<SynchronizedData> & current_data,
     const std::shared_ptr<SynchronizedData> & previous_data = nullptr);
 
-  double calculate_lateral_error(
-    const geometry_msgs::msg::Pose & current_pose,
-    const autoware_planning_msgs::msg::Trajectory & trajectory);
-
   double calculate_lateral_error_from_preferred_lane(const geometry_msgs::msg::Pose & current_pose);
 
-  double calculate_longitudinal_error(
-    const geometry_msgs::msg::Pose & current_pose,
-    const autoware_planning_msgs::msg::Trajectory & trajectory);
-
   void calculate_oscillation_metrics(
-    TrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & current_data,
+    ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & current_data,
     const std::shared_ptr<SynchronizedData> & previous_data);
 
   double calculate_ttc(
     const geometry_msgs::msg::Pose & current_pose, const geometry_msgs::msg::Twist & current_twist,
     const autoware_perception_msgs::msg::PredictedObjects & objects);
 
-  size_t find_closest_trajectory_point(
-    const geometry_msgs::msg::Pose & current_pose,
-    const autoware_planning_msgs::msg::Trajectory & trajectory);
-
   void save_metrics_to_bag(
-    const TrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & sync_data,
+    const ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & sync_data,
     rosbag2_cpp::Writer & bag_writer);
 
   void calculate_summary();
 
   void create_lanelet_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
 
-  std::vector<TrajectoryMetrics> metrics_list_;
+  std::vector<ClosedLoopTrajectoryMetrics> metrics_list_;
+  std::vector<TrajectoryPointMetrics> trajectory_point_metrics_list_;
   EvaluationSummary summary_;
+  
+  // For normalized timestamp calculation (similar to open_loop)
+  rclcpp::Time first_eval_timestamp_;
+  bool first_eval_timestamp_set_ = false;
 };
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

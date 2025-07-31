@@ -17,7 +17,6 @@
 
 #include "autoware/trajectory_selector_common/structs.hpp"
 #include "autoware/trajectory_selector_common/type_alias.hpp"
-#include "base_evaluator.hpp"
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 
@@ -46,7 +45,16 @@ struct SynchronizedData
   rclcpp::Time bag_timestamp;  // Bag recording timestamp (for bag writing)
 };
 
-// TOPICグローバル定数を削除し、TopicNames構造体を使用するように変更
+// Topic names structure for BagData
+struct TopicNames {
+  std::string route_topic;
+  std::string odometry_topic;
+  std::string trajectory_topic;
+  std::string objects_topic;
+  std::string tf_topic;
+  std::string acceleration_topic;
+  std::string steering_topic;
+};
 
 struct BufferBase
 {
