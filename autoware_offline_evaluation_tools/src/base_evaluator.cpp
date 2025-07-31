@@ -287,11 +287,11 @@ TrajectoryPointMetrics BaseEvaluator::calculate_trajectory_point_metrics(
   // Calculate lateral deviation from preferred lane
   if (route_handler_ && route_handler_->isHandlerReady()) {
     const auto preferred_lanes = route_handler_->getPreferredLanelets();
-    if (preferred_lanes.empty()) {
+    if (!preferred_lanes.empty()) {
       for (size_t i = 0; i < num_points; ++i) {
         const auto arc_coordinates = lanelet::utils::getArcCoordinates(
           preferred_lanes, trajectory.points[i].pose);
-        metrics.lateral_deviations[i] = std::abs(arc_coordinates.distance);
+        metrics.lateral_deviations[i] = arc_coordinates.distance;
       }
     }
   }
