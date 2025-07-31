@@ -47,6 +47,8 @@
 #include <fstream>
 #include <iomanip>
 
+#include "autoware/offline_evaluation_tools/utils.hpp"
+
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 using autoware_utils::create_marker_color;
@@ -368,76 +370,23 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_open_loop_evalua
     // Get option to use bag timestamp instead of header timestamp
     const bool use_bag_timestamp = get_parameter_or_default<bool>(*this, "use_bag_timestamp", true);
     
-    try {
-      // Process kinematic state messages
-      if (topic_name == odometry_topic_name_) {
-        Odometry msg;
-        rclcpp::Serialization<Odometry> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Override header timestamp with bag timestamp if option is enabled
-        if (use_bag_timestamp) {
-          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
-        }
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<Odometry>>(
-          bag_data->buffers[TOPIC::ODOMETRY]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      }
-      // Process trajectory messages
-      else if (topic_name == trajectory_topic_name_) {
-        Trajectory msg;
-        rclcpp::Serialization<Trajectory> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Override header timestamp with bag timestamp if option is enabled
-        if (use_bag_timestamp) {
-          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
-        }
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<Trajectory>>(
-          bag_data->buffers[TOPIC::TRAJECTORY]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      }
-      else if (topic_name == objects_topic_name_) {
-        PredictedObjects msg;
-        rclcpp::Serialization<PredictedObjects> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Override header timestamp with bag timestamp if option is enabled
-        if (use_bag_timestamp) {
-          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
-        }
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<PredictedObjects>>(
-          bag_data->buffers[TOPIC::OBJECTS]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      }
-      // Process TF messages
-      else if (topic_name == tf_topic_name_) {
-        TFMessage msg;
-        rclcpp::Serialization<TFMessage> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        auto buffer = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers[TOPIC::TF]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      }
-    } catch (const std::exception & e) {
-      RCLCPP_WARN(
-        get_logger(), "Failed to deserialize message on topic %s: %s", 
-        topic_name.c_str(), e.what());
+    // Process messages using template helper
+    if (topic_name == odometry_topic_name_) {
+      process_and_append_message<Odometry>(
+        serialized_message, bag_data, TOPIC::ODOMETRY, use_bag_timestamp, get_logger());
+    }
+    else if (topic_name == trajectory_topic_name_) {
+      process_and_append_message<Trajectory>(
+        serialized_message, bag_data, TOPIC::TRAJECTORY, use_bag_timestamp, get_logger());
+    }
+    else if (topic_name == objects_topic_name_) {
+      process_and_append_message<PredictedObjects>(
+        serialized_message, bag_data, TOPIC::OBJECTS, use_bag_timestamp, get_logger());
+    }
+    else if (topic_name == tf_topic_name_) {
+      // TF messages don't have header.stamp, so we don't override timestamp
+      process_and_append_message<TFMessage>(
+        serialized_message, bag_data, TOPIC::TF, false, get_logger());
     }
   }
   
@@ -567,99 +516,59 @@ std::pair<rclcpp::Time, rclcpp::Time> OfflineEvaluatorNode::run_closed_loop_eval
     auto serialized_message = bag_reader_.read_next();
     const auto & topic_name = serialized_message->topic_name;
 
-    try {
-      if (topic_name == odometry_topic_name_) {
-        Odometry msg;
-        rclcpp::Serialization<Odometry> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Override header timestamp with bag timestamp if option is enabled
-        if (use_bag_timestamp) {
-          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
-        }
-
-        auto buffer =
-          std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers[TOPIC::ODOMETRY]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      } else if (topic_name == trajectory_topic_name_) {
-        Trajectory msg;
-        rclcpp::Serialization<Trajectory> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-        
-        // Override header timestamp with bag timestamp if option is enabled
-        if (use_bag_timestamp) {
-          msg.header.stamp = rclcpp::Time(serialized_message->time_stamp);
-        }
-
-        auto buffer =
-          std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers[TOPIC::TRAJECTORY]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      } else if (topic_name == acceleration_topic_name_) {
-        AccelWithCovarianceStamped msg;
-        rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-
-        auto buffer = std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-          bag_data->buffers[TOPIC::ACCELERATION]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      } else if (topic_name == steering_topic_name_) {
-        SteeringReport msg;
-        rclcpp::Serialization<SteeringReport> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-
-        auto buffer =
-          std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers[TOPIC::STEERING]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-      } else if (topic_name == objects_topic_name_) {
-        PredictedObjects msg;
-        rclcpp::Serialization<PredictedObjects> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-
-        auto buffer =
-          std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers[TOPIC::OBJECTS]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-        
-        // Also write objects to evaluation bag
-        if (evaluation_bag_writer_) {
+    // Process messages using template helper
+    if (topic_name == odometry_topic_name_) {
+      process_and_append_message<Odometry>(
+        serialized_message, bag_data, TOPIC::ODOMETRY, use_bag_timestamp, get_logger());
+    } 
+    else if (topic_name == trajectory_topic_name_) {
+      process_and_append_message<Trajectory>(
+        serialized_message, bag_data, TOPIC::TRAJECTORY, use_bag_timestamp, get_logger());
+    } 
+    else if (topic_name == acceleration_topic_name_) {
+      process_and_append_message<AccelWithCovarianceStamped>(
+        serialized_message, bag_data, TOPIC::ACCELERATION, use_bag_timestamp, get_logger());
+    } 
+    else if (topic_name == steering_topic_name_) {
+      // SteeringReport doesn't have header, so we don't override timestamp
+      process_and_append_message<SteeringReport>(
+        serialized_message, bag_data, TOPIC::STEERING, false, get_logger());
+    } 
+    else if (topic_name == objects_topic_name_) {
+      process_and_append_message<PredictedObjects>(
+        serialized_message, bag_data, TOPIC::OBJECTS, use_bag_timestamp, get_logger());
+      
+      // Also write objects to evaluation bag
+      if (evaluation_bag_writer_) {
+        try {
+          PredictedObjects msg;
+          rclcpp::Serialization<PredictedObjects> serializer;
+          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+          serializer.deserialize_message(&serialized_msg, &msg);
           rclcpp::Time msg_time(serialized_message->time_stamp);
           evaluation_bag_writer_->write(msg, "/evaluation/objects", msg_time);
-        }
-      } else if (topic_name == tf_topic_name_) {
-        TFMessage msg;
-        rclcpp::Serialization<TFMessage> serializer;
-        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
-        serializer.deserialize_message(&serialized_msg, &msg);
-
-        auto buffer = std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers[TOPIC::TF]);
-        if (buffer) {
-          buffer->append(msg);
-        }
-
-        // Also write tf messages to evaluation bag
-        if (evaluation_bag_writer_) {
-          rclcpp::Time msg_time(serialized_message->time_stamp);
-          evaluation_bag_writer_->write(msg, "/tf", msg_time);
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(get_logger(), "Failed to write objects to evaluation bag: %s", e.what());
         }
       }
-    } catch (const std::exception & e) {
-      RCLCPP_WARN(
-        get_logger(), "Failed to deserialize message on topic %s: %s", topic_name.c_str(),
-        e.what());
+    } 
+    else if (topic_name == tf_topic_name_) {
+      process_and_append_message<TFMessage>(
+        serialized_message, bag_data, TOPIC::TF, false, get_logger());
+      
+      // Also write tf messages to evaluation bag
+      if (evaluation_bag_writer_) {
+        try {
+          TFMessage msg;
+          rclcpp::Serialization<TFMessage> serializer;
+          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+          serializer.deserialize_message(&serialized_msg, &msg);
+          rclcpp::Time msg_time(serialized_message->time_stamp);
+          evaluation_bag_writer_->write(msg, "/tf", msg_time);
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(get_logger(), "Failed to write tf to evaluation bag: %s", e.what());
+        }
+      }
     }
   }
 
