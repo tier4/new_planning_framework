@@ -24,10 +24,14 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
+#include <autoware_utils_geometry/geometry.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rosbag2_cpp/reader.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <fstream>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -64,12 +68,7 @@ Statistics<Container> calculate_statistics(const Container& values) {
   return stats;
 }
 
-OpenLoopEvaluator::OpenLoopEvaluator(
-  rclcpp::Logger logger,
-  std::shared_ptr<autoware::route_handler::RouteHandler> route_handler)
-: logger_(logger), route_handler_(route_handler)
-{
-}
+// Constructor implementation moved to header file
 
 void OpenLoopEvaluator::evaluate(
   const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
@@ -167,7 +166,7 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
     metrics.ground_truth_poses[i] = gt_pose;
     
     // Calculate displacement error (still useful as overall error)
-    metrics.displacement_errors[i] = calculate_distance_2d(
+    metrics.displacement_errors[i] = autoware_utils_geometry::calc_distance2d(
       traj_point.pose.position, gt_pose.position);
     
     // Calculate errors in vehicle coordinate frame
@@ -289,14 +288,7 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
 }
 
 
-double OpenLoopEvaluator::calculate_distance_2d(
-  const geometry_msgs::msg::Point & p1,
-  const geometry_msgs::msg::Point & p2)
-{
-  const double dx = p1.x - p2.x;
-  const double dy = p1.y - p2.y;
-  return std::sqrt(dx * dx + dy * dy);
-}
+// calculate_distance_2d moved to base class
 
 std::pair<double, double> OpenLoopEvaluator::calculate_errors_in_vehicle_frame(
   const geometry_msgs::msg::Pose & trajectory_pose,
@@ -408,50 +400,50 @@ void OpenLoopEvaluator::save_metrics_to_bag(
   
   // ADE
   metric_msg.data = metrics.ade;
-  bag_writer.write(metric_msg, "/evaluation/metrics/ade", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/ade", normalized_timestamp);
   
   // FDE
   metric_msg.data = metrics.fde;
-  bag_writer.write(metric_msg, "/evaluation/metrics/fde", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/fde", normalized_timestamp);
   
   // Mean lateral deviation
   metric_msg.data = metrics.mean_lateral_deviation;
-  bag_writer.write(metric_msg, "/evaluation/metrics/mean_lateral_deviation", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/mean_lateral_deviation", normalized_timestamp);
   
   // Max lateral deviation
   metric_msg.data = metrics.max_lateral_deviation;
-  bag_writer.write(metric_msg, "/evaluation/metrics/max_lateral_deviation", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/max_lateral_deviation", normalized_timestamp);
   
   // Min TTC
   metric_msg.data = metrics.min_ttc;
-  bag_writer.write(metric_msg, "/evaluation/metrics/min_ttc", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/min_ttc", normalized_timestamp);
   
   // TTC at 2 seconds
   metric_msg.data = metrics.ttc_at_2s;
-  bag_writer.write(metric_msg, "/evaluation/metrics/ttc_at_2s", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/ttc_at_2s", normalized_timestamp);
   
   // Coverage ratio
   metric_msg.data = static_cast<double>(metrics.num_valid_comparisons) / metrics.num_points;
-  bag_writer.write(metric_msg, "/evaluation/metrics/coverage_ratio", normalized_timestamp);
+  bag_writer.write(metric_msg, "/open_loop/metrics/coverage_ratio", normalized_timestamp);
   
   // Write point-wise metrics as Float64MultiArray
   std_msgs::msg::Float64MultiArray array_msg;
   
   // Displacement errors array
   array_msg.data = metrics.displacement_errors;
-  bag_writer.write(array_msg, "/evaluation/metrics/displacement_errors_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/displacement_errors_array", normalized_timestamp);
   
   // Lateral deviations array
   array_msg.data = metrics.lateral_deviations;
-  bag_writer.write(array_msg, "/evaluation/metrics/lateral_deviations_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/lateral_deviations_array", normalized_timestamp);
   
   // Longitudinal deviations array
   array_msg.data = metrics.longitudinal_deviations;
-  bag_writer.write(array_msg, "/evaluation/metrics/longitudinal_deviations_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/longitudinal_deviations_array", normalized_timestamp);
   
   // TTC values array
   array_msg.data = metrics.ttc_values;
-  bag_writer.write(array_msg, "/evaluation/metrics/ttc_values_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/ttc_values_array", normalized_timestamp);
   
   // Write minimal TF for visualization (map -> base_link)
   if (trajectory_data->kinematic_state) {
@@ -489,7 +481,7 @@ void OpenLoopEvaluator::save_metrics_to_bag(
     corrected_trajectory.header.stamp = normalized_timestamp;
     
     bag_writer.write(
-      corrected_trajectory, "/evaluation/original_trajectory",
+      corrected_trajectory, "/open_loop/original_trajectory",
       normalized_timestamp);
     
     // Create and save ground truth trajectory
@@ -518,7 +510,7 @@ void OpenLoopEvaluator::save_metrics_to_bag(
     // Save ground truth trajectory
     if (!gt_trajectory.points.empty()) {
       bag_writer.write(
-        gt_trajectory, "/evaluation/ground_truth_trajectory",
+        gt_trajectory, "/open_loop/ground_truth_trajectory",
         normalized_timestamp);
     }
     
@@ -648,5 +640,197 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
   return j;
 }
 
+std::vector<std::pair<std::string, std::string>> OpenLoopEvaluator::get_result_topics() const
+{
+  return {
+    {"/open_loop/metrics/ade", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/fde", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/mean_lateral_deviation", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/max_lateral_deviation", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/min_ttc", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/ttc_at_2s", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/coverage_ratio", "std_msgs/msg/Float64"},
+    {"/open_loop/metrics/displacement_errors_array", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/lateral_deviations_array", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/longitudinal_deviations_array", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/ttc_values_array", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/original_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/open_loop/ground_truth_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/tf", "tf2_msgs/msg/TFMessage"},
+    {"/tf_static", "tf2_msgs/msg/TFMessage"}
+  };
+}
+
+std::pair<rclcpp::Time, rclcpp::Time> OpenLoopEvaluator::run_evaluation_from_bag(
+  const std::string & bag_path,
+  rosbag2_cpp::Writer * evaluation_bag_writer,
+  const TopicNames & topic_names)
+{
+  RCLCPP_INFO(logger_, "Running open-loop evaluation for trajectory analysis");
+  
+  // Open bag reader
+  rosbag2_cpp::Reader bag_reader;
+  bag_reader.open(bag_path);
+  
+  // Create bag data handler
+  const double buffer_duration_sec = 20.0;  // TODO: make configurable
+  const size_t max_buffer_messages = 10000;
+  
+  auto bag_data = std::make_shared<BagData>(0, topic_names, buffer_duration_sec, max_buffer_messages);
+  
+  // Find the time range of the bag
+  rclcpp::Time bag_start_time = rclcpp::Time(std::numeric_limits<int64_t>::max());
+  rclcpp::Time bag_end_time = rclcpp::Time(0);
+  
+  // tf_static messages
+  tf2_msgs::msg::TFMessage tf_static_msgs;
+  
+  // First pass: scan for time range and collect all data
+  while (bag_reader.has_next() && rclcpp::ok()) {
+    auto serialized_message = bag_reader.read_next();
+    rclcpp::Time msg_time(serialized_message->time_stamp);
+    
+    if (msg_time < bag_start_time) bag_start_time = msg_time;
+    if (msg_time > bag_end_time) bag_end_time = msg_time;
+    
+    const auto & topic_name = serialized_message->topic_name;
+    
+    // Get option to use bag timestamp instead of header timestamp
+    const bool use_bag_timestamp = true;  // TODO: make configurable
+    
+    // Process messages using template helper
+    if (topic_name == topic_names.odometry_topic) {
+      process_and_append_message<Odometry>(
+        serialized_message, bag_data, topic_names.odometry_topic, use_bag_timestamp, logger_);
+    }
+    else if (topic_name == topic_names.trajectory_topic) {
+      process_and_append_message<Trajectory>(
+        serialized_message, bag_data, topic_names.trajectory_topic, use_bag_timestamp, logger_);
+    }
+    else if (topic_name == topic_names.objects_topic) {
+      process_and_append_message<PredictedObjects>(
+        serialized_message, bag_data, topic_names.objects_topic, use_bag_timestamp, logger_);
+    }
+    else if (topic_name == topic_names.tf_topic) {
+      // TF messages don't have header.stamp, so we don't override timestamp
+      process_and_append_message<TFMessage>(
+        serialized_message, bag_data, topic_names.tf_topic, false, logger_);
+    }
+    else if (topic_name == "/tf_static") {
+      try {
+        tf2_msgs::msg::TFMessage msg;
+        rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        // Accumulate all tf_static transforms
+        tf_static_msgs.transforms.insert(
+          tf_static_msgs.transforms.end(), msg.transforms.begin(), msg.transforms.end());
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(logger_, "Failed to deserialize tf_static message: %s", e.what());
+      }
+    }
+  }
+  
+  // Get all data points with synchronized localization and trajectory data
+  const double evaluation_interval_ms = 100.0;  // TODO: make configurable
+  
+  // Collect synchronized data for evaluation
+  std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
+  const double sync_tolerance_ms = 50.0;  // TODO: make configurable
+  
+  // Get all kinematic states at regular intervals
+  auto kinematic_states = bag_data->get_kinematic_states_at_interval(evaluation_interval_ms);
+  
+  if (kinematic_states.empty()) {
+    RCLCPP_ERROR(logger_, "No kinematic states found in the rosbag");
+    return {bag_start_time, bag_end_time};
+  }
+  
+  // For each kinematic state, try to get synchronized data
+  for (const auto & kin_state : kinematic_states) {
+    const auto timestamp = rclcpp::Time(kin_state->header.stamp).nanoseconds();
+    auto sync_data = bag_data->get_synchronized_data_at_time(timestamp, sync_tolerance_ms);
+    if (sync_data) {
+      synchronized_data_list.push_back(sync_data);
+    }
+  }
+  
+  // Sort by timestamp
+  std::sort(synchronized_data_list.begin(), synchronized_data_list.end(),
+    [](const auto & a, const auto & b) { return a->timestamp < b->timestamp; });
+    
+  // Write tf_static with normalized timestamp
+  if (evaluation_bag_writer && !tf_static_msgs.transforms.empty()) {
+    // Write tf_static with normalized timestamp (start from 0)
+    rclcpp::Time tf_time(0, 0, RCL_ROS_TIME);
+    
+    // Also normalize timestamps in the transforms
+    tf2_msgs::msg::TFMessage normalized_tf_static = tf_static_msgs;
+    for (auto& transform : normalized_tf_static.transforms) {
+      transform.header.stamp = tf_time;
+    }
+    
+    evaluation_bag_writer->write(normalized_tf_static, "/tf_static", tf_time);
+  }
+  
+  // Run open-loop evaluation
+  if (!synchronized_data_list.empty()) {
+    if (evaluation_bag_writer) {
+      // Create topics for open-loop evaluation
+      const auto topics = get_result_topics();
+      for (const auto & [topic_name, topic_type] : topics) {
+        const auto topic_info = rosbag2_storage::TopicMetadata{
+          topic_name, topic_type, rmw_get_serialization_format(), ""};
+        evaluation_bag_writer->create_topic(topic_info);
+      }
+      evaluate(synchronized_data_list, evaluation_bag_writer);
+    } else {
+      evaluate(synchronized_data_list, nullptr);
+    }
+    
+    // Get and save evaluation results
+    auto summary_json = get_summary_as_json();
+    auto detailed_json = get_detailed_results_as_json();
+    
+    // Write results to file
+    const std::string output_dir = ".";  // TODO: make configurable
+    const auto json_path = output_dir + "/open_loop_evaluation_results.json";
+    
+    std::ofstream json_file(json_path);
+    if (json_file.is_open()) {
+      json_file << detailed_json.dump(2);
+      json_file.close();
+      RCLCPP_INFO(logger_, "Saved evaluation results to: %s", json_path.c_str());
+    }
+    
+    // Log summary
+    RCLCPP_INFO(logger_, "Open-loop evaluation summary:");
+    if (summary_json.contains("ade") && summary_json["ade"].contains("mean")) {
+      RCLCPP_INFO(logger_, "  Mean ADE: %.3f m", 
+        static_cast<double>(summary_json["ade"]["mean"]));
+      RCLCPP_INFO(logger_, "  Mean FDE: %.3f m", 
+        static_cast<double>(summary_json["fde"]["mean"]));
+    }
+  }
+  
+  RCLCPP_INFO(logger_, "Open-loop evaluation complete");
+  
+  // Return the time range of kinematic states (not the entire bag)
+  if (!kinematic_states.empty()) {
+    rclcpp::Time eval_start_time(kinematic_states.front()->header.stamp);
+    rclcpp::Time eval_end_time(kinematic_states.back()->header.stamp);
+    return {eval_start_time, eval_end_time};
+  }
+  
+  // Fallback to bag time range if no kinematic states
+  // But check if we actually found any messages
+  if (bag_start_time.nanoseconds() == std::numeric_limits<int64_t>::max() || 
+      bag_end_time.nanoseconds() == 0) {
+    // No valid messages found, use current time as fallback
+    auto current = rclcpp::Clock{RCL_ROS_TIME}.now();
+    return {current, current};
+  }
+  return {bag_start_time, bag_end_time};
+}
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

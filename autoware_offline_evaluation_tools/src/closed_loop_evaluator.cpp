@@ -19,6 +19,8 @@
 #include <autoware_utils/math/normalization.hpp>
 #include <autoware_utils/math/unit_conversion.hpp>
 #include <rclcpp/time.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rosbag2_cpp/reader.hpp>
 
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <std_msgs/msg/float64.hpp>
@@ -32,15 +34,14 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <fstream>
+#include <chrono>
+#include <filesystem>
+#include <iomanip>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-ClosedLoopEvaluator::ClosedLoopEvaluator(
-  rclcpp::Logger logger, std::shared_ptr<autoware::route_handler::RouteHandler> route_handler)
-: logger_(logger), route_handler_(route_handler)
-{
-  summary_ = EvaluationSummary{};
-}
+// Constructor implementation moved to header file
 
 void ClosedLoopEvaluator::evaluate(
   const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
@@ -394,7 +395,7 @@ void ClosedLoopEvaluator::save_metrics_to_bag(
   {
     std_msgs::msg::Float64 msg;
     msg.data = metrics.lateral_error;
-    bag_writer.write(msg, "/evaluation/lateral_error", timestamp);
+    bag_writer.write(msg, "/closed_loop/metrics/lateral_error", timestamp);
   }
 
   // Save acceleration
@@ -404,14 +405,14 @@ void ClosedLoopEvaluator::save_metrics_to_bag(
     msg.point.x = metrics.longitudinal_acceleration;
     msg.point.y = metrics.lateral_acceleration;
     msg.point.z = metrics.jerk;
-    bag_writer.write(msg, "/evaluation/acceleration_metrics", timestamp);
+    bag_writer.write(msg, "/closed_loop/metrics/acceleration", timestamp);
   }
 
   // Save TTC
   {
     std_msgs::msg::Float64 msg;
     msg.data = metrics.ttc;
-    bag_writer.write(msg, "/evaluation/ttc", timestamp);
+    bag_writer.write(msg, "/closed_loop/metrics/ttc", timestamp);
   }
 
   // Save oscillation metrics
@@ -421,19 +422,19 @@ void ClosedLoopEvaluator::save_metrics_to_bag(
     msg.point.x = metrics.steering_angle;
     msg.point.y = metrics.steering_angular_velocity;
     msg.point.z = metrics.lateral_jerk;
-    bag_writer.write(msg, "/evaluation/oscillation_metrics", timestamp);
+    bag_writer.write(msg, "/closed_loop/metrics/steering_velocity", timestamp);
   }
 
   // Save yaw rate
   {
     std_msgs::msg::Float64 msg;
     msg.data = metrics.yaw_rate;
-    bag_writer.write(msg, "/evaluation/yaw_rate", timestamp);
+    bag_writer.write(msg, "/closed_loop/metrics/jerk", timestamp);
   }
 
   // Save localization (Odometry)
   if (sync_data && sync_data->kinematic_state) {
-    bag_writer.write(*sync_data->kinematic_state, "/evaluation/localization", timestamp);
+    bag_writer.write(*sync_data->kinematic_state, "/closed_loop/kinematic_state", timestamp);
   }
 }
 
@@ -567,6 +568,240 @@ nlohmann::json ClosedLoopEvaluator::get_summary_as_json() const
   j["evaluation_info"]["total_distance_meters"] = summary_.total_distance;
 
   return j;
+}
+
+nlohmann::json ClosedLoopEvaluator::get_detailed_results_as_json() const
+{
+  nlohmann::json j;
+  j["summary"] = get_summary_as_json();
+  
+  // Add detailed trajectory-by-trajectory metrics if needed
+  nlohmann::json trajectories = nlohmann::json::array();
+  for (const auto & metrics : metrics_list_) {
+    nlohmann::json traj;
+    traj["lateral_error"] = metrics.lateral_error;
+    traj["longitudinal_error"] = metrics.longitudinal_error;
+    traj["lateral_acceleration"] = metrics.lateral_acceleration;
+    traj["curvature"] = metrics.curvature;
+    traj["acceleration"] = metrics.longitudinal_acceleration;
+    traj["jerk"] = metrics.jerk;
+    traj["ttc"] = metrics.ttc;
+    trajectories.push_back(traj);
+  }
+  j["trajectories"] = trajectories;
+  
+  return j;
+}
+
+std::vector<std::pair<std::string, std::string>> ClosedLoopEvaluator::get_result_topics() const
+{
+  return {
+    {"/closed_loop/metrics/lateral_error", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/heading_error", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/velocity_error", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/acceleration", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/jerk", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/steering_velocity", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/ttc", "std_msgs/msg/Float64"},
+    {"/closed_loop/metrics/comfort_score", "std_msgs/msg/Float64"},
+    {"/closed_loop/trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/closed_loop/kinematic_state", "nav_msgs/msg/Odometry"},
+    {"/closed_loop/objects", "autoware_perception_msgs/msg/PredictedObjects"},
+    {"/tf", "tf2_msgs/msg/TFMessage"},
+    {"/tf_static", "tf2_msgs/msg/TFMessage"}
+  };
+}
+
+std::pair<rclcpp::Time, rclcpp::Time> ClosedLoopEvaluator::run_evaluation_from_bag(
+  const std::string & bag_path,
+  rosbag2_cpp::Writer * evaluation_bag_writer,
+  const TopicNames & topic_names)
+{
+  RCLCPP_INFO(logger_, "Running closed-loop evaluation for autonomous driving data");
+
+  // Open bag reader
+  rosbag2_cpp::Reader bag_reader;
+  bag_reader.open(bag_path);
+
+  // Create bag data handler
+  const double buffer_duration_sec = 20.0;  // TODO: make configurable
+  const size_t max_buffer_messages = 10000;
+
+  auto bag_data = std::make_shared<BagData>(0, topic_names, buffer_duration_sec, max_buffer_messages);
+
+  // Read all messages from bag into buffers
+  RCLCPP_INFO(logger_, "Loading rosbag data into buffers...");
+  
+  // Get option to use bag timestamp instead of header timestamp
+  const bool use_bag_timestamp = true;  // TODO: make configurable
+
+  while (bag_reader.has_next() && rclcpp::ok()) {
+    auto serialized_message = bag_reader.read_next();
+    const auto & topic_name = serialized_message->topic_name;
+
+    // Process messages using template helper
+    if (topic_name == topic_names.odometry_topic) {
+      process_and_append_message<Odometry>(
+        serialized_message, bag_data, topic_names.odometry_topic, use_bag_timestamp, logger_);
+    } 
+    else if (topic_name == topic_names.trajectory_topic) {
+      process_and_append_message<Trajectory>(
+        serialized_message, bag_data, topic_names.trajectory_topic, use_bag_timestamp, logger_);
+    } 
+    else if (topic_name == topic_names.acceleration_topic) {
+      process_and_append_message<AccelWithCovarianceStamped>(
+        serialized_message, bag_data, topic_names.acceleration_topic, use_bag_timestamp, logger_);
+    } 
+    else if (topic_name == topic_names.steering_topic) {
+      // SteeringReport doesn't have header, so we don't override timestamp
+      process_and_append_message<SteeringReport>(
+        serialized_message, bag_data, topic_names.steering_topic, false, logger_);
+    } 
+    else if (topic_name == topic_names.objects_topic) {
+      process_and_append_message<PredictedObjects>(
+        serialized_message, bag_data, topic_names.objects_topic, use_bag_timestamp, logger_);
+      
+      // Also write objects to evaluation bag
+      if (evaluation_bag_writer) {
+        try {
+          PredictedObjects msg;
+          rclcpp::Serialization<PredictedObjects> serializer;
+          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+          serializer.deserialize_message(&serialized_msg, &msg);
+          rclcpp::Time msg_time(serialized_message->time_stamp);
+          evaluation_bag_writer->write(msg, "/closed_loop/objects", msg_time);
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(logger_, "Failed to write objects to evaluation bag: %s", e.what());
+        }
+      }
+    } 
+    else if (topic_name == topic_names.tf_topic) {
+      process_and_append_message<TFMessage>(
+        serialized_message, bag_data, topic_names.tf_topic, false, logger_);
+      
+      // Also write tf messages to evaluation bag
+      if (evaluation_bag_writer) {
+        try {
+          TFMessage msg;
+          rclcpp::Serialization<TFMessage> serializer;
+          rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+          serializer.deserialize_message(&serialized_msg, &msg);
+          rclcpp::Time msg_time(serialized_message->time_stamp);
+          evaluation_bag_writer->write(msg, "/tf", msg_time);
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(logger_, "Failed to write tf to evaluation bag: %s", e.what());
+        }
+      }
+    }
+  }
+
+  // Get kinematic states at 100ms intervals
+  const double evaluation_interval_ms = 100.0;  // TODO: make configurable
+  auto kinematic_states = bag_data->get_kinematic_states_at_interval(evaluation_interval_ms);
+
+  if (kinematic_states.empty()) {
+    RCLCPP_ERROR(logger_, "No kinematic states found in the rosbag");
+    return {rclcpp::Clock{RCL_ROS_TIME}.now(), rclcpp::Clock{RCL_ROS_TIME}.now()};
+  }
+
+  // Process each kinematic state with synchronized data
+  std::vector<std::shared_ptr<SynchronizedData>> synchronized_data_list;
+  const double sync_tolerance_ms = 50.0;  // TODO: make configurable
+
+  for (const auto & kinematic_state : kinematic_states) {
+    const auto timestamp = rclcpp::Time(kinematic_state->header.stamp).nanoseconds();
+    auto sync_data = bag_data->get_synchronized_data_at_time(timestamp, sync_tolerance_ms);
+
+    if (sync_data && sync_data->trajectory) {
+      synchronized_data_list.push_back(sync_data);
+    }
+  }
+
+  // Evaluate the synchronized data
+  if (!synchronized_data_list.empty()) {
+    if (evaluation_bag_writer) {
+      // Create topics for closed-loop evaluation
+      const auto topics = get_result_topics();
+      for (const auto & [topic_name, topic_type] : topics) {
+        const auto topic_info = rosbag2_storage::TopicMetadata{
+          topic_name, topic_type, rmw_get_serialization_format(), ""};
+        evaluation_bag_writer->create_topic(topic_info);
+      }
+    }
+    
+    evaluate(synchronized_data_list, evaluation_bag_writer);
+
+    // Get and log summary
+    auto summary = get_summary();
+    RCLCPP_INFO(
+      logger_,
+      "Evaluation Summary:\n"
+      "  Total samples: %zu\n"
+      "  Mean lateral error: %.3f m\n"
+      "  Max lateral error: %.3f m\n"
+      "  Std lateral error: %.3f m\n"
+      "  Mean acceleration: %.3f m/s²\n"
+      "  Max acceleration: %.3f m/s²\n"
+      "  Steering reversals: %zu\n"
+      "  Mean steering angular velocity: %.3f rad/s\n"
+      "  Min TTC: %.3f s\n"
+      "  Total time: %.3f s",
+      summary.num_samples, summary.mean_lateral_error, summary.max_lateral_error,
+      summary.std_lateral_error, summary.mean_acceleration, summary.max_acceleration,
+      summary.steering_reversals, summary.mean_steering_angular_velocity, summary.min_ttc,
+      summary.total_time);
+
+    // Save JSON output
+    const std::string json_output_path = "~/evaluation_result.json";  // TODO: make configurable
+    std::string expanded_path = json_output_path;
+
+    // Expand home directory if needed
+    if (expanded_path[0] == '~') {
+      const char * home = std::getenv("HOME");
+      if (home) {
+        expanded_path = std::string(home) + expanded_path.substr(1);
+      }
+    }
+
+    // Add timestamp to filename
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream timestamp_ss;
+    timestamp_ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+
+    // Create filename with timestamp
+    std::filesystem::path json_path(expanded_path);
+    std::string filename = json_path.stem().string() + "_" + timestamp_ss.str() + ".json";
+    json_path = json_path.parent_path() / filename;
+
+    // Get JSON summary
+    nlohmann::json json_output = get_summary_as_json();
+
+    // Add evaluation info
+    json_output["evaluation_info"]["timestamp"] = timestamp_ss.str();
+    json_output["evaluation_info"]["bag_path"] = bag_path;
+    json_output["evaluation_info"]["evaluation_mode"] = "closed_loop";
+
+    // Write JSON file
+    std::ofstream json_file(json_path);
+    if (json_file.is_open()) {
+      json_file << json_output.dump(2);  // Pretty print with 2 spaces
+      json_file.close();
+      RCLCPP_INFO(logger_, "JSON results saved to: %s", json_path.c_str());
+    } else {
+      RCLCPP_ERROR(logger_, "Failed to save JSON results to: %s", json_path.c_str());
+    }
+  }
+
+  RCLCPP_INFO(logger_, "Closed-loop evaluation complete");
+
+  // Return the timestamps of the first and last evaluation data
+  if (!kinematic_states.empty()) {
+    return {
+      rclcpp::Time(kinematic_states.front()->header.stamp),
+      rclcpp::Time(kinematic_states.back()->header.stamp)};
+  }
+  return {rclcpp::Clock{RCL_ROS_TIME}.now(), rclcpp::Clock{RCL_ROS_TIME}.now()};
 }
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

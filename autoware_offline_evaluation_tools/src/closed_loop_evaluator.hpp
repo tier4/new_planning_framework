@@ -17,6 +17,7 @@
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
+#include "base_evaluator.hpp"
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <nlohmann/json.hpp>
@@ -77,22 +78,43 @@ struct EvaluationSummary
   size_t num_samples;
 };
 
-class ClosedLoopEvaluator
+class ClosedLoopEvaluator : public BaseEvaluator
 {
 public:
   explicit ClosedLoopEvaluator(
     rclcpp::Logger logger,
-    std::shared_ptr<autoware::route_handler::RouteHandler> route_handler = nullptr);
+    std::shared_ptr<autoware::route_handler::RouteHandler> route_handler = nullptr)
+  : BaseEvaluator(logger, route_handler) {}
 
   void evaluate(
     const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
-    rosbag2_cpp::Writer * bag_writer = nullptr);
+    rosbag2_cpp::Writer * bag_writer = nullptr) override;
 
   EvaluationSummary get_summary() const { return summary_; }
 
   std::vector<TrajectoryMetrics> get_metrics() const { return metrics_list_; }
 
-  nlohmann::json get_summary_as_json() const;
+  nlohmann::json get_summary_as_json() const override;
+  
+  nlohmann::json get_detailed_results_as_json() const override;
+  
+  /**
+   * @brief Get topic definitions for closed-loop evaluation results
+   * @return Vector of topic name and type pairs
+   */
+  std::vector<std::pair<std::string, std::string>> get_result_topics() const override;
+  
+  /**
+   * @brief Run evaluation from a bag file
+   * @param bag_path Path to the bag file
+   * @param evaluation_bag_writer Optional bag writer for saving results
+   * @param topic_names Topic names configuration
+   * @return Pair of start and end times from the evaluation
+   */
+  std::pair<rclcpp::Time, rclcpp::Time> run_evaluation_from_bag(
+    const std::string & bag_path,
+    rosbag2_cpp::Writer * evaluation_bag_writer,
+    const TopicNames & topic_names) override;
 
 private:
   TrajectoryMetrics calculate_metrics(
@@ -129,8 +151,6 @@ private:
 
   void create_lanelet_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
 
-  rclcpp::Logger logger_;
-  std::shared_ptr<autoware::route_handler::RouteHandler> route_handler_;
   std::vector<TrajectoryMetrics> metrics_list_;
   EvaluationSummary summary_;
 };

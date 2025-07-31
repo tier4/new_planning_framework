@@ -17,6 +17,7 @@
 
 #include "autoware/trajectory_selector_common/type_alias.hpp"
 #include "bag_handler.hpp"
+#include "base_evaluator.hpp"
 
 #include <autoware/route_handler/route_handler.hpp>
 #include <nlohmann/json.hpp>
@@ -87,12 +88,13 @@ struct OpenLoopEvaluationSummary
   double total_evaluation_duration;
 };
 
-class OpenLoopEvaluator
+class OpenLoopEvaluator : public BaseEvaluator
 {
 public:
   explicit OpenLoopEvaluator(
     rclcpp::Logger logger,
-    std::shared_ptr<autoware::route_handler::RouteHandler> route_handler = nullptr);
+    std::shared_ptr<autoware::route_handler::RouteHandler> route_handler = nullptr)
+  : BaseEvaluator(logger, route_handler) {}
 
   /**
    * @brief Evaluate trajectories against ground truth localization data
@@ -101,15 +103,33 @@ public:
    */
   void evaluate(
     const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
-    rosbag2_cpp::Writer * bag_writer = nullptr);
+    rosbag2_cpp::Writer * bag_writer = nullptr) override;
 
   OpenLoopEvaluationSummary get_summary() const { return summary_; }
 
   std::vector<OpenLoopTrajectoryMetrics> get_metrics() const { return metrics_list_; }
 
-  nlohmann::json get_summary_as_json() const;
+  nlohmann::json get_summary_as_json() const override;
   
-  nlohmann::json get_detailed_results_as_json() const;
+  nlohmann::json get_detailed_results_as_json() const override;
+  
+  /**
+   * @brief Get topic definitions for open-loop evaluation results
+   * @return Vector of topic name and type pairs
+   */
+  std::vector<std::pair<std::string, std::string>> get_result_topics() const override;
+  
+  /**
+   * @brief Run open-loop evaluation from bag file
+   * @param bag_path Path to the bag file
+   * @param evaluation_bag_writer Optional bag writer for results
+   * @param topic_names Topic names configuration
+   * @return Pair of start and end times
+   */
+  std::pair<rclcpp::Time, rclcpp::Time> run_evaluation_from_bag(
+    const std::string & bag_path,
+    rosbag2_cpp::Writer * evaluation_bag_writer,
+    const TopicNames & topic_names) override;
 
 private:
   /**
@@ -164,14 +184,8 @@ private:
    */
   void calculate_summary();
 
-  rclcpp::Logger logger_;
-  std::shared_ptr<autoware::route_handler::RouteHandler> route_handler_;
   std::vector<OpenLoopTrajectoryMetrics> metrics_list_;
   OpenLoopEvaluationSummary summary_;
-  
-  // For normalized timestamp calculation
-  rclcpp::Time first_bag_timestamp_;
-  bool first_bag_timestamp_set_ = false;
 };
 
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

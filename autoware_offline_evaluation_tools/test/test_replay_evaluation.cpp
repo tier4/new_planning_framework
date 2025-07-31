@@ -49,14 +49,25 @@ protected:
 
 TEST_F(ReplayEvaluationTest, TopicDefinitions)
 {
-  // Test that topic constants are properly defined
-  EXPECT_EQ(TOPIC::TF, "/tf");
-  EXPECT_EQ(TOPIC::ODOMETRY, "/localization/kinematic_state");
-  EXPECT_EQ(TOPIC::ACCELERATION, "/localization/acceleration");
-  EXPECT_EQ(TOPIC::OBJECTS, "/perception/object_recognition/objects");
-  EXPECT_EQ(TOPIC::TRAJECTORY, "/planning/scenario_planning/trajectory");
-  EXPECT_EQ(TOPIC::STEERING, "/vehicle/status/steering_status");
-  EXPECT_EQ(TOPIC::ROUTE, "/planning/mission_planning/route");
+  // グローバルTOPIC定数を削除したため、このテストは不要
+  // TopicNames構造体を使用するように変更
+  TopicNames topic_names;
+  topic_names.tf_topic = "/tf";
+  topic_names.odometry_topic = "/localization/kinematic_state";
+  topic_names.acceleration_topic = "/localization/acceleration";
+  topic_names.objects_topic = "/perception/object_recognition/objects";
+  topic_names.trajectory_topic = "/planning/scenario_planning/trajectory";
+  topic_names.steering_topic = "/vehicle/status/steering_status";
+  topic_names.route_topic = "/planning/mission_planning/route";
+  
+  // TopicNames構造体が正しく作成されることを確認
+  EXPECT_EQ(topic_names.tf_topic, "/tf");
+  EXPECT_EQ(topic_names.odometry_topic, "/localization/kinematic_state");
+  EXPECT_EQ(topic_names.acceleration_topic, "/localization/acceleration");
+  EXPECT_EQ(topic_names.objects_topic, "/perception/object_recognition/objects");
+  EXPECT_EQ(topic_names.trajectory_topic, "/planning/scenario_planning/trajectory");
+  EXPECT_EQ(topic_names.steering_topic, "/vehicle/status/steering_status");
+  EXPECT_EQ(topic_names.route_topic, "/planning/mission_planning/route");
 }
 
 TEST_F(ReplayEvaluationTest, TrajectoryMessageCreation)

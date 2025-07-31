@@ -49,17 +49,14 @@ class OfflineEvaluatorNode : public rclcpp::Node
 public:
   explicit OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options);
 
-  ~OfflineEvaluatorNode();
+  ~OfflineEvaluatorNode() override;
 
 private:
   enum class EvaluationMode { OPEN_LOOP, CLOSED_LOOP };
 
   void setup_evaluation_bag_writer();
   void run_evaluation();
-  std::pair<rclcpp::Time, rclcpp::Time> run_open_loop_evaluation();
-  std::pair<rclcpp::Time, rclcpp::Time> run_closed_loop_evaluation();
   void write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time);
-  void create_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
   void create_route_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
 
   rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
