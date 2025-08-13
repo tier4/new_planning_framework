@@ -128,30 +128,11 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
 
     // Get output bag path from parameters with default
     auto output_bag_path = get_parameter_or_default<std::string>(
-      *this, "evaluation_output_bag_path", "~/trajectory_evaluation_results.bag");
-
-    // Expand home directory if needed
-    if (output_bag_path[0] == '~') {
-      const char * home = std::getenv("HOME");
-      if (home) {
-        output_bag_path = std::string(home) + output_bag_path.substr(1);
-      }
-    }
-
-    // Create timestamp-based directory name
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-
-    // Replace the filename with timestamp_trajectory_evaluation
-    auto output_path = std::filesystem::path(output_bag_path);
-    auto parent_dir = output_path.parent_path();
-    auto new_filename = ss.str() + "_trajectory_evaluation";
-    output_bag_path = (parent_dir / new_filename).string();
+      *this, "evaluation_output_bag_path", "./");
 
     // Ensure directory exists
     const auto output_dir = std::filesystem::path(output_bag_path).parent_path();
+    RCLCPP_INFO(get_logger(), "Output directory: %s", output_dir.string().c_str());
     if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
       std::filesystem::create_directories(output_dir);
       RCLCPP_INFO(get_logger(), "Created output directory: %s", output_dir.string().c_str());
@@ -175,10 +156,6 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
       rmw_get_serialization_format(), rmw_get_serialization_format()};
 
     evaluation_bag_writer_->open(storage_options, converter_options);
-
-    // Topics will be created based on evaluation mode in run_evaluation()
-
-    RCLCPP_INFO(get_logger(), "Evaluation bag writer initialized: %s", output_bag_path.c_str());
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "Failed to setup evaluation bag writer: %s", e.what());
     evaluation_bag_writer_ = nullptr;
