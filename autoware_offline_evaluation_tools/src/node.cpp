@@ -14,6 +14,7 @@
 
 #include "node.hpp"
 
+#include "autoware/offline_evaluation_tools/utils.hpp"
 #include "closed_loop_evaluator.hpp"
 #include "open_loop_evaluator.hpp"
 
@@ -22,16 +23,12 @@
 #include <autoware_utils_rclcpp/parameter.hpp>
 #include <nlohmann/json.hpp>
 #include <rclcpp/logging.hpp>
-#include <fstream>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rosbag2_storage/topic_metadata.hpp>
 
-#include <chrono>
-#include <iomanip>
-#include <sstream>
-
+#include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
@@ -43,11 +40,12 @@
 
 #include <chrono>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-
-#include "autoware/offline_evaluation_tools/utils.hpp"
+#include <sstream>
+#include <string>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
@@ -65,20 +63,9 @@ T get_parameter_or_default(rclcpp::Node & node, const std::string & name, const 
 }
 
 OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options)
-: Node("offline_evaluator_node", node_options),
-  route_handler_{std::make_shared<RouteHandler>()},
-  vehicle_info_{std::make_shared<VehicleInfo>(
-    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
+: Node("offline_evaluator_node", node_options), route_handler_{std::make_shared<RouteHandler>()}
 {
   setup_evaluation_bag_writer();
-
-  sub_map_ = create_subscription<LaneletMapBin>(
-    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
-    [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
-
-  sub_map_marker_ = create_subscription<MarkerArray>(
-    "~/input/lanelet2_map_marker", rclcpp::QoS{1}.transient_local(),
-    [this](const MarkerArray::ConstSharedPtr msg) { map_marker_ = msg; });
 
   // Open bag file
   bag_path_ = get_or_declare_parameter<std::string>(*this, "bag_path");
@@ -90,6 +77,9 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
   }
 
   // Initialize topic names from parameters with defaults
+  map_topic_name_ = get_parameter_or_default<std::string>(*this, "map_topic", "/map/vector_map");
+  map_marker_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "map_marker_array", "/map/vector_map_marker");
   route_topic_name_ =
     get_parameter_or_default<std::string>(*this, "route_topic", "/planning/mission_planning/route");
   odometry_topic_name_ =
@@ -116,15 +106,7 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
   }
 
-  // Create a timer to check map readiness without blocking
-  map_check_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
-    if (route_handler_->isMapMsgReady() && map_marker_) {
-      map_check_timer_->cancel();  // Stop checking
-      run_evaluation();
-    } else {
-      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for map to be ready...");
-    }
-  });
+  run_evaluation();
 }
 
 OfflineEvaluatorNode::~OfflineEvaluatorNode()
@@ -155,13 +137,13 @@ void OfflineEvaluatorNode::setup_evaluation_bag_writer()
         output_bag_path = std::string(home) + output_bag_path.substr(1);
       }
     }
-    
+
     // Create timestamp-based directory name
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-    
+
     // Replace the filename with timestamp_trajectory_evaluation
     auto output_path = std::filesystem::path(output_bag_path);
     auto parent_dir = output_path.parent_path();
@@ -217,7 +199,27 @@ void OfflineEvaluatorNode::run_evaluation()
     auto serialized_message = bag_reader_.read_next();
     const auto & topic_name = serialized_message->topic_name;
 
-    if (topic_name == route_topic_name_ && !last_route_msg) {
+    if (topic_name == map_topic_name_) {
+      try {
+        autoware_map_msgs::msg::LaneletMapBin msg;
+        rclcpp::Serialization<autoware_map_msgs::msg::LaneletMapBin> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        route_handler_->setMap(msg);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize map message: %s", e.what());
+      }
+    } else if (topic_name == map_marker_topic_name_) {
+      try {
+        visualization_msgs::msg::MarkerArray msg;
+        rclcpp::Serialization<visualization_msgs::msg::MarkerArray> serializer;
+        rclcpp::SerializedMessage serialize_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialize_msg, &msg);
+        map_marker_ = std::make_shared<visualization_msgs::msg::MarkerArray>(msg);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize route message: %s", e.what());
+      }
+    } else if (topic_name == route_topic_name_) {
       try {
         autoware_planning_msgs::msg::LaneletRoute msg;
         rclcpp::Serialization<autoware_planning_msgs::msg::LaneletRoute> serializer;
@@ -247,7 +249,6 @@ void OfflineEvaluatorNode::run_evaluation()
     return;
   }
   route_handler_->setRoute(*last_route_msg);
- 
 
   // Seek back to the beginning of the bag for mode-specific evaluation
   bag_reader_.seek(0);
@@ -265,39 +266,39 @@ void OfflineEvaluatorNode::run_evaluation()
   topic_names.tf_topic = tf_topic_name_;
   topic_names.acceleration_topic = acceleration_topic_name_;
   topic_names.steering_topic = steering_topic_name_;
-  
+
   switch (evaluation_mode_) {
     case EvaluationMode::OPEN_LOOP: {
       OpenLoopEvaluator evaluator(get_logger(), route_handler_);
-      auto times = evaluator.run_evaluation_from_bag(
-        bag_path_, evaluation_bag_writer_.get(), topic_names);
+      auto times =
+        evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
       start_time = times.first;
       end_time = times.second;
       break;
     }
     case EvaluationMode::CLOSED_LOOP: {
       ClosedLoopEvaluator evaluator(get_logger(), route_handler_);
-      auto times = evaluator.run_evaluation_from_bag(
-        bag_path_, evaluation_bag_writer_.get(), topic_names);
+      auto times =
+        evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
       start_time = times.first;
       end_time = times.second;
       break;
     }
   }
 
-
-  // Write tf_static at the beginning if available  
-  if (!tf_static_msg.transforms.empty() && evaluation_bag_writer_ && 
-      start_time.seconds() > 0 && end_time.seconds() > 0) {
+  // Write tf_static at the beginning if available
+  if (
+    !tf_static_msg.transforms.empty() && evaluation_bag_writer_ && start_time.seconds() > 0 &&
+    end_time.seconds() > 0) {
     // Use normalized timestamp (start from 0) for consistent bag duration
     rclcpp::Time tf_time(0, 0, RCL_ROS_TIME);
-    
+
     // Also normalize timestamps in the transforms
     tf2_msgs::msg::TFMessage normalized_tf_static = tf_static_msg;
-    for (auto& transform : normalized_tf_static.transforms) {
+    for (auto & transform : normalized_tf_static.transforms) {
       transform.header.stamp = tf_time;
     }
-    
+
     evaluation_bag_writer_->write(normalized_tf_static, "/tf_static", tf_time);
   }
 
@@ -305,9 +306,8 @@ void OfflineEvaluatorNode::run_evaluation()
   write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME));
 
   RCLCPP_INFO(get_logger(), "Evaluation complete");
+  rclcpp::shutdown();
 }
-
-
 
 void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time)
 {
@@ -319,13 +319,13 @@ void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time
   if (map_marker_) {
     // Create a copy and update timestamps to match the evaluation bag timeline
     visualization_msgs::msg::MarkerArray time_corrected_markers = *map_marker_;
-    
+
     // Update all marker timestamps to the reference time
     // This ensures markers are synchronized with the TF data in the evaluation bag
     for (auto & marker : time_corrected_markers.markers) {
       marker.header.stamp = reference_time;
     }
-    
+
     evaluation_bag_writer_->write(time_corrected_markers, "/map_markers", reference_time);
   }
 

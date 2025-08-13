@@ -27,8 +27,8 @@
 
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include <std_srvs/srv/trigger.hpp>
-#include <visualization_msgs/msg/detail/marker_array__struct.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
+#include <visualization_msgs/msg/detail/marker_array__struct.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -59,13 +59,8 @@ private:
   void write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time);
   void create_route_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
 
-  rclcpp::Subscription<LaneletMapBin>::SharedPtr sub_map_;
-  rclcpp::Subscription<MarkerArray>::SharedPtr sub_map_marker_;
-
   std::shared_ptr<RouteHandler> route_handler_;
   MarkerArray::ConstSharedPtr map_marker_;
-
-  std::shared_ptr<VehicleInfo> vehicle_info_;
 
   mutable std::mutex mutex_;
 
@@ -73,6 +68,8 @@ private:
 
   std::unique_ptr<rosbag2_cpp::Writer> evaluation_bag_writer_;
 
+  std::string map_topic_name_;
+  std::string map_marker_topic_name_;
   std::string route_topic_name_;
   std::string odometry_topic_name_;
   std::string trajectory_topic_name_;
@@ -85,7 +82,7 @@ private:
   std::string bag_path_;
 
   rclcpp::TimerBase::SharedPtr map_check_timer_;
-  
+
   // Store tf_static messages for evaluation
   tf2_msgs::msg::TFMessage tf_static_msgs_;
 };
