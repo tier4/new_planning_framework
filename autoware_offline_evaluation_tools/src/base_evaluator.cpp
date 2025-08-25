@@ -37,7 +37,7 @@ BaseEvaluator::BagProcessingResult BaseEvaluator::process_bag_common(
 
   // Create bag data handler with common parameters
   const double buffer_duration_sec = 20.0;  // TODO: make configurable
-  const size_t max_buffer_messages = 10000;
+  const size_t max_buffer_messages = 100000; // TODO: make configurable
   auto bag_data = std::make_shared<BagData>(0, topic_names, buffer_duration_sec, max_buffer_messages);
 
   // Result to return
