@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "base_evaluator.hpp"
-#include "autoware/offline_evaluation_tools/utils.hpp"
 
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>

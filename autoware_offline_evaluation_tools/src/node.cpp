@@ -14,7 +14,6 @@
 
 #include "node.hpp"
 
-#include "autoware/offline_evaluation_tools/utils.hpp"
 #include "closed_loop_evaluator.hpp"
 #include "open_loop_evaluator.hpp"
 
