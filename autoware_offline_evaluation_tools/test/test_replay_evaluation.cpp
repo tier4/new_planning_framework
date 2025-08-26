@@ -99,39 +99,6 @@ TEST_F(ReplayEvaluationTest, TrajectoryMessageCreation)
   EXPECT_DOUBLE_EQ(last_point.pose.position.x, 18.0);
 }
 
-TEST_F(ReplayEvaluationTest, ReplayEvaluationDataIntegration)
-{
-  // Test integration between ReplayEvaluationData and live trajectory buffering
-  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
-    std::chrono::system_clock::now().time_since_epoch()).count();
-  
-  auto replay_data = std::make_shared<ReplayEvaluationData>(timestamp);
-
-  // Create multiple trajectory messages to simulate live data
-  for (size_t msg_idx = 0; msg_idx < 3; msg_idx++) {
-    autoware_planning_msgs::msg::Trajectory trajectory;
-    trajectory.header.stamp.sec = 1;
-    trajectory.header.stamp.nanosec = msg_idx * 100000000; // 0.1s intervals
-    trajectory.header.frame_id = "map";
-
-    // Add points for each trajectory
-    for (size_t i = 0; i < 5; i++) {
-      autoware_planning_msgs::msg::TrajectoryPoint point;
-      point.pose = autoware::test_utils::createPose(
-        i * 1.0 + msg_idx * 0.1, msg_idx * 0.1, 0.0, 0.0, 0.0, 0.0);
-      point.longitudinal_velocity_mps = 12.0;
-      trajectory.points.push_back(point);
-    }
-
-    replay_data->append_live_trajectory(trajectory);
-  }
-
-  // Verify multiple trajectories were buffered
-  // Note: This is a unit test - actual timing behavior would be tested in integration tests
-  EXPECT_TRUE(replay_data->live_trajectory_buffer != nullptr);
-  EXPECT_EQ(replay_data->live_trajectory_buffer->msgs.size(), 3u);
-}
-
 // Mock test for node parameter validation
 TEST_F(ReplayEvaluationTest, ParameterValidation)
 {

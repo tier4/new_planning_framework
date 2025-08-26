@@ -215,25 +215,6 @@ struct BagData
 
   std::map<std::string, std::shared_ptr<BufferBase>> buffers{};
 
-  void update(const rcutils_time_point_value_t dt)
-  {
-    timestamp += dt;
-    remove_old_data();
-  }
-
-  void remove_old_data()
-  {
-    std::for_each(buffers.begin(), buffers.end(), [this](const auto & buffer) {
-      buffer.second->remove_old_data(timestamp);
-    });
-  }
-
-  bool ready() const
-  {
-    return std::all_of(
-      buffers.begin(), buffers.end(), [](const auto & buffer) { return buffer.second->ready(); });
-  }
-
   auto get_synchronized_data_at_time(const rcutils_time_point_value_t target_time, const double tolerance_ms = 50.0) const -> std::shared_ptr<SynchronizedData>
   {
     auto synchronized_data = std::make_shared<SynchronizedData>();
@@ -358,36 +339,6 @@ struct BagData
     }
 
     return result;
-  }
-};
-
-struct ReplayEvaluationData : public BagData
-{
-  explicit ReplayEvaluationData(const rcutils_time_point_value_t timestamp,
-                               const double buffer_duration_sec = 20.0,
-                               const size_t max_buffer_msgs = 10000) 
-    : BagData(timestamp, buffer_duration_sec, max_buffer_msgs)
-  {
-    live_trajectory_buffer = std::make_shared<Buffer<Trajectory>>();
-    live_trajectory_buffer->buffer_time_ns = buffer_duration_sec * 1e9;
-    live_trajectory_buffer->max_buffer_size = max_buffer_msgs;
-  }
-
-  std::shared_ptr<Buffer<Trajectory>> live_trajectory_buffer;
-
-  void append_live_trajectory(const Trajectory & trajectory)
-  {
-    live_trajectory_buffer->append(trajectory);
-  }
-
-  auto get_live_trajectory(const rcutils_time_point_value_t now) const -> Trajectory::SharedPtr
-  {
-    return live_trajectory_buffer->get(now);
-  }
-
-  bool live_trajectory_ready() const
-  {
-    return live_trajectory_buffer->ready();
   }
 };
 
