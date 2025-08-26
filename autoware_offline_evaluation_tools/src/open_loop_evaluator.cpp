@@ -89,41 +89,37 @@ void OpenLoopEvaluator::evaluate(
     bag_base_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
   }
   
-  // For each trajectory in the data, evaluate against future ground truth
-  for (size_t i = 0; i < synchronized_data_list.size(); ++i) {
-    const auto & current_data = synchronized_data_list[i];
+  // Prepare evaluation data with ground truth trajectories
+  auto evaluation_data_list = prepare_evaluation_data(synchronized_data_list);
+  
+  if (evaluation_data_list.empty()) {
+    RCLCPP_WARN(logger_, "No valid trajectories with ground truth found for evaluation");
+    return;
+  }
     
-    // Skip if no trajectory available
-    if (!current_data->trajectory) {
-      continue;
-    }
-
-    const auto & trajectory = *(current_data->trajectory);
-    if (trajectory.points.empty()) {
-      continue;
-    }
-    
+  // Evaluate each trajectory with its ground truth
+  for (const auto & eval_data : evaluation_data_list) {
     // Evaluate trajectory
-    auto metrics = evaluate_trajectory(current_data, synchronized_data_list);
+    auto metrics = evaluate_trajectory(eval_data);
     metrics_list_.push_back(metrics);
     
     // Calculate trajectory point metrics
-    auto trajectory_metrics = calculate_trajectory_point_metrics(current_data);
+    auto trajectory_metrics = calculate_trajectory_point_metrics(eval_data.synchronized_data);
     trajectory_point_metrics_list_.push_back(trajectory_metrics);
     
     // Save to bag if writer provided
     if (bag_writer) {
-      save_metrics_to_bag(metrics, current_data, *bag_writer);
+      save_metrics_to_bag(metrics, eval_data, *bag_writer);
       
       // Calculate normalized timestamp for trajectory point metrics
       if (!first_bag_timestamp_set_) {
-        first_bag_timestamp_ = current_data->bag_timestamp;
+        first_bag_timestamp_ = eval_data.synchronized_data->bag_timestamp;
         first_bag_timestamp_set_ = true;
       }
-      const auto relative_duration = current_data->bag_timestamp - first_bag_timestamp_;
+      const auto relative_duration = eval_data.synchronized_data->bag_timestamp - first_bag_timestamp_;
       const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
       
-      save_trajectory_point_metrics_to_bag(trajectory_metrics, current_data, *bag_writer, 
+      save_trajectory_point_metrics_to_bag(trajectory_metrics, eval_data.synchronized_data, *bag_writer, 
                                          normalized_timestamp);
     } else {
       RCLCPP_WARN(logger_, "No bag writer provided, metrics not saved to bag");
@@ -138,15 +134,85 @@ void OpenLoopEvaluator::evaluate(
     summary_.mean_fde, summary_.std_fde);
 }
 
-OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
-  const std::shared_ptr<SynchronizedData> & trajectory_data,
+std::vector<OpenLoopEvaluator::EvaluationData> OpenLoopEvaluator::prepare_evaluation_data(
   const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list)
+{
+  std::vector<EvaluationData> result;
+  
+  for (const auto & data : synchronized_data_list) {
+    // Skip if no trajectory available
+    if (!data->trajectory || data->trajectory->points.empty()) {
+      continue;
+    }
+    
+    // Generate ground truth trajectory
+    auto ground_truth_opt = generate_ground_truth_trajectory(data, synchronized_data_list);
+    
+    if (!ground_truth_opt.has_value()) {
+      RCLCPP_WARN(logger_, "Skipping trajectory at time %f - ground truth generation failed",
+        data->timestamp.seconds());
+      continue;
+    }
+    
+    // Add valid evaluation data
+    result.push_back({data, ground_truth_opt.value()});
+  }
+  
+  return result;
+}
+
+std::optional<autoware_planning_msgs::msg::Trajectory> 
+OpenLoopEvaluator::generate_ground_truth_trajectory(
+  const std::shared_ptr<SynchronizedData> & trajectory_data,
+  const std::vector<std::shared_ptr<SynchronizedData>> & all_data)
+{
+  const auto & trajectory = *(trajectory_data->trajectory);
+  
+  autoware_planning_msgs::msg::Trajectory ground_truth_trajectory;
+  ground_truth_trajectory.header = trajectory.header;
+  ground_truth_trajectory.points.reserve(trajectory.points.size());
+  
+  // Generate ground truth for each trajectory point
+  for (const auto & traj_point : trajectory.points) {
+    const auto point_time = trajectory_data->timestamp + 
+      rclcpp::Duration(traj_point.time_from_start);
+    
+    // Interpolate ground truth pose at this time
+    auto gt_pose_opt = interpolate_ground_truth(point_time, all_data);
+    
+    if (!gt_pose_opt.has_value()) {
+      // Ground truth not available for this time point - fail entire trajectory
+      RCLCPP_DEBUG(logger_, "Ground truth interpolation failed at time %f",
+        point_time.seconds());
+      return std::nullopt;
+    }
+    
+    // Create ground truth trajectory point
+    autoware_planning_msgs::msg::TrajectoryPoint gt_point;
+    gt_point.pose = gt_pose_opt.value();
+    gt_point.time_from_start = traj_point.time_from_start;
+    
+    // Copy velocity if available from original trajectory  
+    gt_point.longitudinal_velocity_mps = traj_point.longitudinal_velocity_mps;
+    gt_point.lateral_velocity_mps = traj_point.lateral_velocity_mps;
+    gt_point.heading_rate_rps = traj_point.heading_rate_rps;
+    
+    ground_truth_trajectory.points.push_back(gt_point);
+  }
+  
+  return ground_truth_trajectory;
+}
+
+OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
+  const EvaluationData & eval_data)
 {
   OpenLoopTrajectoryMetrics metrics;
   
-  const auto & trajectory = *(trajectory_data->trajectory);
+  const auto & trajectory = *(eval_data.synchronized_data->trajectory);
+  const auto & ground_truth_trajectory = eval_data.ground_truth_trajectory;
+  
   metrics.num_points = trajectory.points.size();
-  metrics.trajectory_timestamp = trajectory_data->timestamp;
+  metrics.trajectory_timestamp = eval_data.synchronized_data->timestamp;
   
   if (metrics.num_points == 0) {
     return metrics;
@@ -156,33 +222,23 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   metrics.lateral_deviations.resize(metrics.num_points, 0.0);
   metrics.longitudinal_deviations.resize(metrics.num_points, 0.0);
   metrics.displacement_errors.resize(metrics.num_points, 0.0);
-  metrics.ground_truth_available.resize(metrics.num_points, false);
   metrics.ground_truth_poses.resize(metrics.num_points);
-  metrics.ttc_values.resize(metrics.num_points, std::numeric_limits<double>::max());
-  metrics.min_ttc = std::numeric_limits<double>::max();
-  metrics.ttc_at_2s = std::numeric_limits<double>::max();
+  metrics.ttc.resize(metrics.num_points, std::numeric_limits<double>::max());
+  metrics.ade.resize(metrics.num_points, 0.0);
   
-  // Evaluate each trajectory point
+  // Evaluate each trajectory point against precomputed ground truth
   for (size_t i = 0; i < metrics.num_points; ++i) {
     const auto & traj_point = trajectory.points[i];
-    const auto point_time = trajectory_data->timestamp + 
-      rclcpp::Duration(traj_point.time_from_start);
+    const auto & gt_pose = ground_truth_trajectory.points[i].pose;
     
-    
-    // Interpolate ground truth at this time
-    auto gt_pose_opt = interpolate_ground_truth(point_time, synchronized_data_list);
-    
-    if (!gt_pose_opt) {
-      continue;
-    }
-    
-    const auto & gt_pose = gt_pose_opt.value();
-    metrics.ground_truth_available[i] = true;
+    // Store ground truth pose
     metrics.ground_truth_poses[i] = gt_pose;
     
-    // Calculate displacement error (still useful as overall error)
+    // Calculate displacement error
     metrics.displacement_errors[i] = autoware_utils_geometry::calc_distance2d(
       traj_point.pose.position, gt_pose.position);
+    metrics.ade[i] = std::accumulate(
+      metrics.displacement_errors.begin(), metrics.displacement_errors.begin() + i + 1, 0.0) / (i + 1);
     
     // Calculate errors in vehicle coordinate frame
     const auto [longitudinal_error, lateral_error] = 
@@ -191,19 +247,10 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
     metrics.longitudinal_deviations[i] = longitudinal_error;
     metrics.lateral_deviations[i] = lateral_error;
     
-    // TTC calculation
-    // Find objects data at this time
-    std::shared_ptr<PredictedObjects> objects_at_time;
-    for (const auto & data : synchronized_data_list) {
-      if (data->timestamp <= point_time && 
-          data->objects) {
-        // Use the most recent objects data before or at this time
-        objects_at_time = data->objects;
-      }
-      if (data->timestamp > point_time) {
-        break;
-      }
-    }
+    // TTC calculation - using current objects from synchronized data
+    // Note: This is a simplified approach using the objects from the current frame
+    // In the future, we might want to interpolate objects as well
+    const auto & objects_at_time = eval_data.synchronized_data->objects;
 
     
     // Calculate TTC for this trajectory point
@@ -219,73 +266,10 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
         }
       }
       
-      metrics.ttc_values[i] = ttc_at_point;
-      metrics.min_ttc = std::min(metrics.min_ttc, ttc_at_point);
-    }
-    
-    // Check if this is the 2-second point
-    const double time_from_start_seconds = rclcpp::Duration(traj_point.time_from_start).seconds();
-    if (std::abs(time_from_start_seconds - 2.0) < 0.1) {  // Within 100ms of 2 seconds
-      // Store TTC at 2s (placeholder - actual TTC calculation would be done by metrics system)
-      if (i < metrics.ttc_values.size() && metrics.ttc_values[i] < std::numeric_limits<double>::max()) {
-        metrics.ttc_at_2s = metrics.ttc_values[i];
-      }
+      metrics.ttc[i] = ttc_at_point;
     }
   }
-  
-  // Calculate aggregate metrics
-  metrics.num_valid_comparisons = std::count(
-    metrics.ground_truth_available.begin(),
-    metrics.ground_truth_available.end(), true);
-  
-  if (metrics.num_valid_comparisons > 0) {
-    // ADE (Average Displacement Error)
-    double sum_displacement = 0.0;
-    size_t count = 0;
-    for (size_t i = 0; i < metrics.num_points; ++i) {
-      if (metrics.ground_truth_available[i]) {
-        sum_displacement += metrics.displacement_errors[i];
-        count++;
-      }
-    }
-    metrics.ade = sum_displacement / count;
     
-    // FDE (Final Displacement Error) - last valid comparison
-    for (int i = metrics.num_points - 1; i >= 0; --i) {
-      if (metrics.ground_truth_available[i]) {
-        metrics.fde = metrics.displacement_errors[i];
-        break;
-      }
-    }
-    
-    // Lateral deviation statistics
-    double sum_lateral = 0.0;
-    double sum_lateral_sq = 0.0;
-    double max_lateral = 0.0;
-    count = 0;
-    
-    for (size_t i = 0; i < metrics.num_points; ++i) {
-      if (metrics.ground_truth_available[i]) {
-        const double abs_lateral = std::abs(metrics.lateral_deviations[i]);
-        sum_lateral += abs_lateral;
-        sum_lateral_sq += abs_lateral * abs_lateral;
-        max_lateral = std::max(max_lateral, abs_lateral);
-        count++;
-      }
-    }
-    
-    if (count > 0) {
-      metrics.mean_lateral_deviation = sum_lateral / count;
-      metrics.max_lateral_deviation = max_lateral;
-      
-      if (count > 1) {
-        const double variance = 
-          (sum_lateral_sq - sum_lateral * sum_lateral / count) / (count - 1);
-        metrics.std_lateral_deviation = std::sqrt(variance);
-      }
-    }
-  }
-  
   // Calculate trajectory duration
   if (!trajectory.points.empty()) {
     metrics.trajectory_duration = 
@@ -293,9 +277,9 @@ OpenLoopTrajectoryMetrics OpenLoopEvaluator::evaluate_trajectory(
   }
   
   // Set evaluation time window
-  metrics.evaluation_start_time = trajectory_data->timestamp;
+  metrics.evaluation_start_time = eval_data.synchronized_data->timestamp;
   if (!trajectory.points.empty()) {
-    metrics.evaluation_end_time = trajectory_data->timestamp + 
+    metrics.evaluation_end_time = eval_data.synchronized_data->timestamp + 
       rclcpp::Duration(trajectory.points.back().time_from_start);
   }
   
@@ -393,9 +377,12 @@ std::optional<geometry_msgs::msg::Pose> OpenLoopEvaluator::interpolate_ground_tr
 
 void OpenLoopEvaluator::save_metrics_to_bag(
   const OpenLoopTrajectoryMetrics & metrics,
-  const std::shared_ptr<SynchronizedData> & trajectory_data,
+  const EvaluationData & eval_data,
   rosbag2_cpp::Writer & bag_writer)
 {
+  const auto & trajectory_data = eval_data.synchronized_data;
+  const auto & ground_truth_trajectory = eval_data.ground_truth_trajectory;
+  
   // Use a normalized timestamp for bag writing to ensure proper duration
   // Start from 0 and use relative times from the first synchronized data point
   if (!first_bag_timestamp_set_) {
@@ -406,59 +393,29 @@ void OpenLoopEvaluator::save_metrics_to_bag(
   // Calculate relative timestamp from the first data point
   const auto relative_duration = trajectory_data->bag_timestamp - first_bag_timestamp_;
   const rclcpp::Time normalized_timestamp = rclcpp::Time(0, 0, RCL_ROS_TIME) + relative_duration;
-  // Log that we're saving metrics
-  RCLCPP_DEBUG(logger_, "Saving metrics to bag: ADE=%.3f, FDE=%.3f at normalized time %.3f",
-    metrics.ade, metrics.fde, normalized_timestamp.seconds());
-  
-  // Write individual metrics as Float64 messages
-  std_msgs::msg::Float64 metric_msg;
-  
-  // ADE
-  metric_msg.data = metrics.ade;
-  bag_writer.write(metric_msg, "/open_loop/metrics/ade", normalized_timestamp);
-  
-  // FDE
-  metric_msg.data = metrics.fde;
-  bag_writer.write(metric_msg, "/open_loop/metrics/fde", normalized_timestamp);
-  
-  // Mean lateral deviation
-  metric_msg.data = metrics.mean_lateral_deviation;
-  bag_writer.write(metric_msg, "/open_loop/metrics/mean_lateral_deviation", normalized_timestamp);
-  
-  // Max lateral deviation
-  metric_msg.data = metrics.max_lateral_deviation;
-  bag_writer.write(metric_msg, "/open_loop/metrics/max_lateral_deviation", normalized_timestamp);
-  
-  // Min TTC
-  metric_msg.data = metrics.min_ttc;
-  bag_writer.write(metric_msg, "/open_loop/metrics/min_ttc", normalized_timestamp);
-  
-  // TTC at 2 seconds
-  metric_msg.data = metrics.ttc_at_2s;
-  bag_writer.write(metric_msg, "/open_loop/metrics/ttc_at_2s", normalized_timestamp);
-  
-  // Coverage ratio
-  metric_msg.data = static_cast<double>(metrics.num_valid_comparisons) / metrics.num_points;
-  bag_writer.write(metric_msg, "/open_loop/metrics/coverage_ratio", normalized_timestamp);
   
   // Write point-wise metrics as Float64MultiArray
   std_msgs::msg::Float64MultiArray array_msg;
   
-  // Displacement errors array
-  array_msg.data = metrics.displacement_errors;
-  bag_writer.write(array_msg, "/open_loop/metrics/displacement_errors_array", normalized_timestamp);
+  // ADE
+  array_msg.data = metrics.ade;
+  bag_writer.write(array_msg, "/open_loop/metrics/ade", normalized_timestamp);
   
+  // FDE
+  array_msg.data = metrics.displacement_errors;
+  bag_writer.write(array_msg, "/open_loop/metrics/fde", normalized_timestamp);
+   
   // Lateral deviations array
   array_msg.data = metrics.lateral_deviations;
-  bag_writer.write(array_msg, "/open_loop/metrics/lateral_deviations_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/lateral_deviation", normalized_timestamp);
   
   // Longitudinal deviations array
   array_msg.data = metrics.longitudinal_deviations;
-  bag_writer.write(array_msg, "/open_loop/metrics/longitudinal_deviations_array", normalized_timestamp);
+  bag_writer.write(array_msg, "/open_loop/metrics/longitudinal_deviation", normalized_timestamp);
   
   // TTC values array
-  array_msg.data = metrics.ttc_values;
-  bag_writer.write(array_msg, "/open_loop/metrics/ttc_values_array", normalized_timestamp);
+  array_msg.data = metrics.ttc;
+  bag_writer.write(array_msg, "/open_loop/metrics/ttc", normalized_timestamp);
   
   // Write minimal TF for visualization (map -> base_link)
   if (trajectory_data->kinematic_state) {
@@ -481,48 +438,19 @@ void OpenLoopEvaluator::save_metrics_to_bag(
     // Write TF with the normalized timestamp for consistency
     bag_writer.write(tf_msg, "/tf", normalized_timestamp);
     
-    // Debug log
-    RCLCPP_DEBUG(logger_, "Writing TF: map->base_link at normalized time %.3f (x=%.2f, y=%.2f, z=%.2f)",
-      normalized_timestamp.seconds(),
-      transform.transform.translation.x,
-      transform.transform.translation.y,
-      transform.transform.translation.z);
   }
   
   // Save the original trajectory using base class method
   write_trajectory_to_bag(trajectory_data, bag_writer, normalized_timestamp);
   
-  // Create and save ground truth trajectory
-  if (trajectory_data->trajectory) {
-    autoware_planning_msgs::msg::Trajectory gt_trajectory;
-    gt_trajectory.header.stamp = normalized_timestamp;
-    gt_trajectory.header.frame_id = trajectory_data->trajectory->header.frame_id;
-    
-    // Convert ground truth poses to trajectory points
-    for (size_t i = 0; i < metrics.num_points; ++i) {
-      if (metrics.ground_truth_available[i]) {
-        autoware_planning_msgs::msg::TrajectoryPoint point;
-        point.pose = metrics.ground_truth_poses[i];
-        point.time_from_start = trajectory_data->trajectory->points[i].time_from_start;
-        
-        // Copy velocity if available from original trajectory
-        if (i < trajectory_data->trajectory->points.size()) {
-          point.longitudinal_velocity_mps = trajectory_data->trajectory->points[i].longitudinal_velocity_mps;
-          point.lateral_velocity_mps = trajectory_data->trajectory->points[i].lateral_velocity_mps;
-          point.heading_rate_rps = trajectory_data->trajectory->points[i].heading_rate_rps;
-        }
-        
-        gt_trajectory.points.push_back(point);
-      }
-    }
-    
-    // Save ground truth trajectory
-    if (!gt_trajectory.points.empty()) {
-      bag_writer.write(
-        gt_trajectory, "/open_loop/ground_truth_trajectory",
-        normalized_timestamp);
-    }
-    
+  // Save the precomputed ground truth trajectory directly
+  autoware_planning_msgs::msg::Trajectory gt_traj_msg = ground_truth_trajectory;
+  gt_traj_msg.header.stamp = normalized_timestamp;
+  
+  if (!gt_traj_msg.points.empty()) {
+    bag_writer.write(
+      gt_traj_msg, "/open_loop/ground_truth_trajectory",
+      normalized_timestamp);
   }
 }
 
@@ -539,20 +467,24 @@ void OpenLoopEvaluator::calculate_summary()
   std::vector<double> ade_values;
   std::vector<double> fde_values;
   std::vector<double> lateral_dev_values;
-  std::vector<double> coverage_ratios;
   
   for (const auto & metrics : metrics_list_) {
-    if (metrics.num_valid_comparisons > 0) {
-      ade_values.push_back(metrics.ade);
-      fde_values.push_back(metrics.fde);
-      lateral_dev_values.push_back(metrics.mean_lateral_deviation);
-      coverage_ratios.push_back(
-        static_cast<double>(metrics.num_valid_comparisons) / metrics.num_points);
-      
-      if (metrics.num_valid_comparisons == metrics.num_points) {
-        summary_.fully_valid_trajectories++;
-      }
-    }
+    // All trajectories in metrics_list_ have valid ground truth (guaranteed by prepare_evaluation_data)
+    // Calculate ADE (average displacement error) from point-wise errors
+    const double ade = metrics.ade.empty() ? 0.0 : metrics.ade.back();
+    ade_values.push_back(ade);
+    
+    // FDE is the last displacement error
+    const double fde = metrics.displacement_errors.empty() ? 0.0 : metrics.displacement_errors.back();
+    fde_values.push_back(fde);
+    
+    // Calculate mean lateral deviation
+    const double mean_lateral_dev = std::accumulate(
+      metrics.lateral_deviations.begin(), metrics.lateral_deviations.end(), 0.0) / 
+      (metrics.lateral_deviations.empty() ? 1.0 : metrics.lateral_deviations.size());
+    lateral_dev_values.push_back(std::abs(mean_lateral_dev));
+    
+    summary_.fully_valid_trajectories++;
   }
   
   summary_.total_trajectories = metrics_list_.size();
@@ -577,9 +509,8 @@ void OpenLoopEvaluator::calculate_summary()
     summary_.std_lateral_deviation = lateral_stats.std_dev;
     summary_.max_lateral_deviation = lateral_stats.max_val;
     
-    // Coverage statistics
-    summary_.mean_coverage_ratio = std::accumulate(
-      coverage_ratios.begin(), coverage_ratios.end(), 0.0) / coverage_ratios.size();
+    // Coverage statistics - always 1.0 since all trajectories have complete ground truth
+    summary_.mean_coverage_ratio = 1.0;
   }
   
   // Calculate total evaluation duration
@@ -628,15 +559,31 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
     
     traj["timestamp_sec"] = metrics.trajectory_timestamp.seconds();
     traj["num_points"] = metrics.num_points;
-    traj["num_valid_comparisons"] = metrics.num_valid_comparisons;
     traj["trajectory_duration_sec"] = metrics.trajectory_duration;
     
-    traj["ade"] = metrics.ade;
-    traj["fde"] = metrics.fde;
-    traj["mean_lateral_deviation"] = metrics.mean_lateral_deviation;
-    traj["max_lateral_deviation"] = metrics.max_lateral_deviation;
-    traj["std_lateral_deviation"] = metrics.std_lateral_deviation;
-    traj["min_ttc"] = metrics.min_ttc;
+    // Calculate aggregate metrics from point-wise data
+    const double ade = metrics.ade.empty() ? 0.0 : metrics.ade.back();
+    const double fde = metrics.displacement_errors.empty() ? 0.0 : metrics.displacement_errors.back();
+    
+    traj["ade"] = ade;
+    traj["fde"] = fde;
+    
+    // Calculate lateral deviation statistics
+    if (!metrics.lateral_deviations.empty()) {
+      const double mean_lateral = std::accumulate(
+        metrics.lateral_deviations.begin(), metrics.lateral_deviations.end(), 0.0) / 
+        metrics.lateral_deviations.size();
+      const double max_lateral = *std::max_element(
+        metrics.lateral_deviations.begin(), metrics.lateral_deviations.end());
+      
+      traj["mean_lateral_deviation"] = std::abs(mean_lateral);
+      traj["max_lateral_deviation"] = std::abs(max_lateral);
+    }
+    
+    // Calculate min TTC
+    const auto min_ttc_it = std::min_element(metrics.ttc.begin(), metrics.ttc.end());
+    const double min_ttc = (min_ttc_it != metrics.ttc.end()) ? *min_ttc_it : std::numeric_limits<double>::max();
+    traj["min_ttc"] = min_ttc;
     
     // Include point-wise data if needed
     traj["lateral_deviations"] = metrics.lateral_deviations;
@@ -663,19 +610,13 @@ nlohmann::json OpenLoopEvaluator::get_detailed_results_as_json() const
 std::vector<std::pair<std::string, std::string>> OpenLoopEvaluator::get_result_topics() const
 {
   return {
-    {"/open_loop/metrics/ade", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/fde", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/mean_lateral_deviation", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/max_lateral_deviation", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/min_ttc", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/ttc_at_2s", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/coverage_ratio", "std_msgs/msg/Float64"},
-    {"/open_loop/metrics/displacement_errors_array", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/metrics/lateral_deviations_array", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/metrics/longitudinal_deviations_array", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/metrics/ttc_values_array", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/metrics/trajectory_lateral_accelerations", "std_msgs/msg/Float64MultiArray"},
-    {"/open_loop/metrics/trajectory_longitudinal_jerks", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/ade", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/fde", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/ttc", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/lateral_deviation", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/longitudinal_deviation", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_lateral_acceleration", "std_msgs/msg/Float64MultiArray"},
+    {"/open_loop/metrics/trajectory_longitudinal_jerk", "std_msgs/msg/Float64MultiArray"},
     {"/open_loop/metrics/trajectory_ttc_values", "std_msgs/msg/Float64MultiArray"},
     {"/open_loop/metrics/trajectory_lateral_deviations", "std_msgs/msg/Float64MultiArray"},
     {"/open_loop/metrics/trajectory_travel_distances", "std_msgs/msg/Float64MultiArray"},

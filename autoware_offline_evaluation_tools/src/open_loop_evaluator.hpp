@@ -40,24 +40,14 @@ struct OpenLoopTrajectoryMetrics
   std::vector<double> lateral_deviations;      // Lateral deviation at each trajectory point (in vehicle frame)
   std::vector<double> longitudinal_deviations; // Longitudinal deviation at each trajectory point (in vehicle frame)
   std::vector<double> displacement_errors;     // Euclidean distance at each trajectory point
-  std::vector<bool> ground_truth_available;    // Whether ground truth was available at each point
+  std::vector<double> ade;                    // Average Displacement Error at each trajectory point
+  std::vector<double> ttc;                    // Time To Collision at each trajectory point
   
   // Ground truth trajectory for this evaluation
   std::vector<geometry_msgs::msg::Pose> ground_truth_poses;  // Interpolated ground truth poses
   
-  // Aggregate metrics
-  double ade;                         // Average Displacement Error
-  double fde;                         // Final Displacement Error
-  double mean_lateral_deviation;      // Mean absolute lateral deviation
-  double max_lateral_deviation;       // Maximum absolute lateral deviation
-  double std_lateral_deviation;       // Standard deviation of lateral deviation
-  double min_ttc;                     // Minimum Time To Collision
-  double ttc_at_2s;                   // TTC at 2 seconds ahead
-  std::vector<double> ttc_values;     // TTC at each trajectory point
-  
   // Trajectory info
   size_t num_points;                  // Number of trajectory points
-  size_t num_valid_comparisons;       // Number of points with valid ground truth
   double trajectory_duration;         // Total trajectory duration in seconds
   
   rclcpp::Time trajectory_timestamp;  // When the trajectory was published
@@ -133,14 +123,39 @@ public:
 
 private:
   /**
+   * @brief Structure to hold synchronized data with its precomputed ground truth trajectory
+   */
+  struct EvaluationData
+  {
+    std::shared_ptr<SynchronizedData> synchronized_data;
+    autoware_planning_msgs::msg::Trajectory ground_truth_trajectory;
+  };
+
+  /**
+   * @brief Prepare evaluation data with ground truth trajectories
+   * @param synchronized_data_list List of synchronized data
+   * @return Vector of evaluation data with ground truth (invalid data excluded)
+   */
+  std::vector<EvaluationData> prepare_evaluation_data(
+    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
+
+  /**
+   * @brief Generate ground truth trajectory for a single synchronized data point
+   * @param trajectory_data Data containing the trajectory
+   * @param all_data All synchronized data for interpolation
+   * @return Ground truth trajectory or nullopt if generation failed
+   */
+  std::optional<autoware_planning_msgs::msg::Trajectory> generate_ground_truth_trajectory(
+    const std::shared_ptr<SynchronizedData> & trajectory_data,
+    const std::vector<std::shared_ptr<SynchronizedData>> & all_data);
+
+  /**
    * @brief Evaluate a single trajectory against ground truth
-   * @param trajectory_data Data containing the trajectory to evaluate
-   * @param synchronized_data_list All synchronized data
+   * @param eval_data Evaluation data containing trajectory and ground truth
    * @return Metrics for this trajectory
    */
   OpenLoopTrajectoryMetrics evaluate_trajectory(
-    const std::shared_ptr<SynchronizedData> & trajectory_data,
-    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
+    const EvaluationData & eval_data);
 
 
   /**
@@ -175,7 +190,7 @@ private:
    */
   void save_metrics_to_bag(
     const OpenLoopTrajectoryMetrics & metrics,
-    const std::shared_ptr<SynchronizedData> & trajectory_data,
+    const EvaluationData & eval_data,
     rosbag2_cpp::Writer & bag_writer);
 
 

@@ -193,7 +193,7 @@ void OfflineEvaluatorNode::run_evaluation()
         serializer.deserialize_message(&serialize_msg, &msg);
         map_marker_ = std::make_shared<visualization_msgs::msg::MarkerArray>(msg);
       } catch (const std::exception & e) {
-        RCLCPP_WARN(get_logger(), "Failed to deserialize route message: %s", e.what());
+        RCLCPP_WARN(get_logger(), "Failed to deserialize map marker message: %s", e.what());
       }
     } else if (topic_name == route_topic_name_) {
       try {
