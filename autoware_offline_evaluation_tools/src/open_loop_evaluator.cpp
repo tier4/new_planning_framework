@@ -452,6 +452,15 @@ void OpenLoopEvaluator::save_metrics_to_bag(
       gt_traj_msg, "/open_loop/ground_truth_trajectory",
       normalized_timestamp);
   }
+  
+  // Save perception objects if available
+  if (trajectory_data->objects) {
+    autoware_perception_msgs::msg::PredictedObjects objects_msg = *(trajectory_data->objects);
+    objects_msg.header.stamp = normalized_timestamp;
+    bag_writer.write(
+      objects_msg, "/perception/object_recognition/objects",
+      normalized_timestamp);
+  }
 }
 
 
@@ -622,6 +631,7 @@ std::vector<std::pair<std::string, std::string>> OpenLoopEvaluator::get_result_t
     {"/open_loop/metrics/trajectory_travel_distances", "std_msgs/msg/Float64MultiArray"},
     {"/trajectory", "autoware_planning_msgs/msg/Trajectory"},
     {"/open_loop/ground_truth_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {"/perception/object_recognition/objects", "autoware_perception_msgs/msg/PredictedObjects"},
     {"/tf", "tf2_msgs/msg/TFMessage"},
     {"/tf_static", "tf2_msgs/msg/TFMessage"}
   };

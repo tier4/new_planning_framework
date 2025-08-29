@@ -18,7 +18,6 @@
   <arg name="input/odometry" default="/localization/kinematic_state"/>
   <arg name="input/acceleration" default="/localization/acceleration"/>
   <arg name="input/trajectory" default="/planning/scenario_planning/lane_driving/trajectory"/>
-  <arg name="input/live_trajectory" default="/planning/scenario_planning/live_trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
   <arg name="input/map_topic" default="/map/vector_map"/>
   <arg name="input/map_marker_topic" default="/map/vector_map_marker"/>
@@ -38,7 +37,6 @@
       <param from="$(find-pkg-share autoware_offline_evaluation_tools)/config/offline_evaluation.param.yaml"/>
       <remap from="~/input/lanelet2_map" to="$(var input/map_topic)"/>
       <remap from="~/input/lanelet2_map_marker" to="$(var input/map_marker_topic)"/> 
-      <remap from="~/input/live_trajectory" to="$(var input/live_trajectory)"/>
       <remap from="~/output/markers" to="/planning/trajectory_selector/ranker/markers"/>
       <remap from="/planning/mission_planning/route" to="$(var output/route_topic)"/>
     </composable_node>
