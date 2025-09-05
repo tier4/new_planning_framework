@@ -1,0 +1,147 @@
+// Copyright 2025 TIER IV, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef CLOSED_LOOP_EVALUATOR_HPP_
+#define CLOSED_LOOP_EVALUATOR_HPP_
+
+#include "autoware/trajectory_selector_common/type_alias.hpp"
+#include "bag_handler.hpp"
+#include "base_evaluator.hpp"
+
+#include <autoware/route_handler/route_handler.hpp>
+#include <nlohmann/json.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <rosbag2_cpp/writer.hpp>
+
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace autoware::trajectory_selector::offline_evaluation_tools
+{
+
+struct ClosedLoopTrajectoryMetrics
+{
+  double longitudinal_velocity;      // Longitudinal velocity
+  double lateral_error;              // Lateral error from preferred lane centerline
+  double lateral_acceleration;       // Lateral acceleration
+  double longitudinal_acceleration;  // Longitudinal acceleration
+  double jerk;                       // Longitudinal Jerk
+  double min_ttc;                    // Time to collision
+  double steering_angular_velocity;  // Steering angle change rate
+  double yaw_rate;                   // Yaw angular velocity
+
+  rclcpp::Time timestamp;
+};
+
+struct EvaluationSummary
+{
+  double mean_lateral_error;
+  double max_lateral_error;
+  double std_lateral_error;  // Standard deviation of lateral error
+  double mean_acceleration;
+  double max_acceleration;
+  double mean_jerk;
+  double max_jerk;
+  double min_ttc;
+
+  // Oscillation statistics
+  double mean_steering_angular_velocity;
+  double max_steering_angular_velocity;
+  double std_steering_angle;  // Standard deviation of steering angle
+  size_t steering_reversals;  // Number of steering direction changes
+  double mean_lateral_jerk;
+  double max_lateral_jerk;
+
+  double total_distance;
+  double total_time;
+  size_t num_samples;
+};
+
+class ClosedLoopEvaluator : public BaseEvaluator
+{
+public:
+  explicit ClosedLoopEvaluator(
+    rclcpp::Logger logger,
+    std::shared_ptr<autoware::route_handler::RouteHandler> route_handler = nullptr)
+  : BaseEvaluator(logger, route_handler) {}
+
+  void evaluate(
+    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list,
+    rosbag2_cpp::Writer * bag_writer = nullptr) override;
+
+  EvaluationSummary get_summary() const { return summary_; }
+
+  std::vector<ClosedLoopTrajectoryMetrics> get_metrics() const { return metrics_list_; }
+
+  nlohmann::json get_summary_as_json() const override;
+  
+  nlohmann::json get_detailed_results_as_json() const override;
+  
+  /**
+   * @brief Get topic definitions for closed-loop evaluation results
+   * @return Vector of topic name and type pairs
+   */
+  std::vector<std::pair<std::string, std::string>> get_result_topics() const override;
+  
+  /**
+   * @brief Run evaluation from a bag file
+   * @param bag_path Path to the bag file
+   * @param evaluation_bag_writer Optional bag writer for saving results
+   * @param topic_names Topic names configuration
+   * @return Pair of start and end times from the evaluation
+   */
+  std::pair<rclcpp::Time, rclcpp::Time> run_evaluation_from_bag(
+    const std::string & bag_path,
+    rosbag2_cpp::Writer * evaluation_bag_writer,
+    const TopicNames & topic_names) override;
+
+private:
+  ClosedLoopTrajectoryMetrics calculate_metrics(
+    const std::shared_ptr<SynchronizedData> & current_data,
+    const std::shared_ptr<SynchronizedData> & previous_data = nullptr);
+
+  double calculate_lateral_error_from_preferred_lane(const geometry_msgs::msg::Pose & current_pose);
+
+  void calculate_oscillation_metrics(
+    ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & current_data,
+    const std::shared_ptr<SynchronizedData> & previous_data);
+
+  double calculate_ttc(
+    const geometry_msgs::msg::Pose & current_pose, const geometry_msgs::msg::Twist & current_twist,
+    const autoware_perception_msgs::msg::PredictedObjects & objects);
+
+  void save_metrics_to_bag(
+    const ClosedLoopTrajectoryMetrics & metrics, const std::shared_ptr<SynchronizedData> & sync_data,
+    rosbag2_cpp::Writer & bag_writer);
+
+  void calculate_summary();
+
+  void create_lanelet_map_markers(visualization_msgs::msg::MarkerArray & marker_array) const;
+
+  std::vector<ClosedLoopTrajectoryMetrics> metrics_list_;
+  std::vector<TrajectoryPointMetrics> trajectory_point_metrics_list_;
+  EvaluationSummary summary_;
+  
+  // For normalized timestamp calculation (similar to open_loop)
+  rclcpp::Time first_eval_timestamp_;
+  bool first_eval_timestamp_set_ = false;
+};
+
+}  // namespace autoware::trajectory_selector::offline_evaluation_tools
+
+#endif  // CLOSED_LOOP_EVALUATOR_HPP_

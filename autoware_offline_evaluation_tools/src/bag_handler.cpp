@@ -19,13 +19,7 @@
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 
-std::string TOPIC::TF = "/tf";                                             // NOLINT
-std::string TOPIC::ODOMETRY = "/localization/kinematic_state";             // NOLINT
-std::string TOPIC::ACCELERATION = "/localization/acceleration";            // NOLINT
-std::string TOPIC::OBJECTS = "/perception/object_recognition/objects";     // NOLINT
-std::string TOPIC::TRAJECTORY = "/planning/scenario_planning/trajectory";  // NOLINT
-std::string TOPIC::STEERING = "/vehicle/status/steering_status";           // NOLINT
-std::string TOPIC::ROUTE = "/planning/mission_planning/route";             // NOLINT
+// グローバルTOPIC定数を削除 - TopicNames構造体を使用するように変更
 
 template <>
 bool Buffer<SteeringReport>::ready() const
@@ -36,7 +30,7 @@ bool Buffer<SteeringReport>::ready() const
 
   return rclcpp::Time(msgs.back().stamp).nanoseconds() -
            rclcpp::Time(msgs.front().stamp).nanoseconds() >
-         BUFFER_TIME;
+         buffer_time_ns;
 }
 
 template <>
@@ -56,7 +50,7 @@ bool Buffer<TFMessage>::ready() const
 
   return rclcpp::Time(msgs.back().transforms.front().header.stamp).nanoseconds() -
            rclcpp::Time(msgs.front().transforms.front().header.stamp).nanoseconds() >
-         BUFFER_TIME;
+         buffer_time_ns;
 }
 
 template <>
@@ -112,5 +106,65 @@ auto Buffer<TFMessage>::get(const rcutils_time_point_value_t now) const -> TFMes
   }
 
   return std::make_shared<TFMessage>(*itr);
+}
+
+template <>
+auto Buffer<SteeringReport>::get_closest(const rcutils_time_point_value_t target_time, const double tolerance_ms) const -> SteeringReport::SharedPtr
+{
+  if (msgs.empty()) {
+    return nullptr;
+  }
+
+  const double tolerance_ns = tolerance_ms * 1e6;
+  
+  // Find the message with the closest timestamp
+  auto closest_itr = msgs.begin();
+  double min_diff = std::abs(static_cast<double>(rclcpp::Time(closest_itr->stamp).nanoseconds() - target_time));
+  
+  for (auto itr = msgs.begin(); itr != msgs.end(); ++itr) {
+    const double diff = std::abs(static_cast<double>(rclcpp::Time(itr->stamp).nanoseconds() - target_time));
+    if (diff < min_diff) {
+      min_diff = diff;
+      closest_itr = itr;
+    }
+  }
+  
+  // Check if within tolerance
+  if (min_diff > tolerance_ns) {
+    return nullptr;
+  }
+  
+  return std::make_shared<SteeringReport>(*closest_itr);
+}
+
+template <>
+auto Buffer<TFMessage>::get_closest(const rcutils_time_point_value_t target_time, const double tolerance_ms) const -> TFMessage::SharedPtr
+{
+  if (msgs.empty()) {
+    return nullptr;
+  }
+
+  const double tolerance_ns = tolerance_ms * 1e6;
+  
+  // Find the message with the closest timestamp
+  auto closest_itr = msgs.begin();
+  double min_diff = std::numeric_limits<double>::max();
+  
+  for (auto itr = msgs.begin(); itr != msgs.end(); ++itr) {
+    if (!itr->transforms.empty()) {
+      const double diff = std::abs(static_cast<double>(rclcpp::Time(itr->transforms.front().header.stamp).nanoseconds() - target_time));
+      if (diff < min_diff) {
+        min_diff = diff;
+        closest_itr = itr;
+      }
+    }
+  }
+  
+  // Check if within tolerance
+  if (min_diff > tolerance_ns) {
+    return nullptr;
+  }
+  
+  return std::make_shared<TFMessage>(*closest_itr);
 }
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools

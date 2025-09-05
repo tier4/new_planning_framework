@@ -1,4 +1,4 @@
-// Copyright 2024 TIER IV, Inc.
+// Copyright 2025 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,417 +14,324 @@
 
 #include "node.hpp"
 
-#include "autoware/trajectory_selector_common/utils.hpp"
-#include "autoware_utils/ros/parameter.hpp"
-#include "autoware_utils/system/stop_watch.hpp"
+#include "closed_loop_evaluator.hpp"
+#include "open_loop_evaluator.hpp"
 
-#include <autoware_utils/ros/marker_helper.hpp>
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
+#include <autoware_utils/ros/marker_helper.hpp>
+#include <autoware_utils_rclcpp/parameter.hpp>
+#include <nlohmann/json.hpp>
+#include <rclcpp/logging.hpp>
+#include <rclcpp/qos.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rclcpp/serialized_message.hpp>
+#include <rosbag2_storage/topic_metadata.hpp>
+
+#include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
+#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
+#include <autoware_planning_msgs/msg/lanelet_route.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <visualization_msgs/msg/detail/marker_array__struct.hpp>
+
+#include <lanelet2_core/primitives/Lanelet.h>
+#include <lanelet2_core/utility/Utilities.h>
+#include <rmw/rmw.h>
+
+#include <chrono>
+#include <ctime>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
 using autoware_utils::create_marker_color;
-using autoware_utils::get_or_declare_parameter;
-using autoware_utils::Polygon2d;
+using autoware_utils_rclcpp::get_or_declare_parameter;
+
+// Helper function to get parameter with default value
+template <typename T>
+T get_parameter_or_default(rclcpp::Node & node, const std::string & name, const T & default_value)
+{
+  if (node.has_parameter(name)) {
+    return node.get_parameter(name).get_value<T>();
+  }
+  return node.declare_parameter<T>(name, default_value);
+}
 
 OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_options)
-: Node("offline_evaluator_node", node_options),
-  route_handler_{std::make_shared<RouteHandler>()},
-  vehicle_info_{std::make_shared<VehicleInfo>(
-    autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo())}
+: Node("offline_evaluator_node", node_options), route_handler_{std::make_shared<RouteHandler>()}
 {
-  pub_marker_ = create_publisher<MarkerArray>("~/output/markers", 1);
+  setup_evaluation_bag_writer();
 
-  pub_objects_ = create_publisher<PredictedObjects>(TOPIC::OBJECTS, rclcpp::QoS(1));
-
-  pub_tf_ = create_publisher<TFMessage>(TOPIC::TF, rclcpp::QoS(1));
-
-  sub_map_ = create_subscription<LaneletMapBin>(
-    "~/input/lanelet2_map", rclcpp::QoS{1}.transient_local(),
-    [this](const LaneletMapBin::ConstSharedPtr msg) { route_handler_->setMap(*msg); });
-
-  srv_play_ = this->create_service<Trigger>(
-    "play",
-    std::bind(&OfflineEvaluatorNode::play, this, std::placeholders::_1, std::placeholders::_2),
-    rclcpp::ServicesQoS().get_rmw_qos_profile());
-
-  srv_rewind_ = this->create_service<Trigger>(
-    "rewind",
-    std::bind(&OfflineEvaluatorNode::rewind, this, std::placeholders::_1, std::placeholders::_2),
-    rclcpp::ServicesQoS().get_rmw_qos_profile());
-
-  srv_route_ = this->create_service<Trigger>(
-    "next_route",
-    std::bind(
-      &OfflineEvaluatorNode::next_route, this, std::placeholders::_1, std::placeholders::_2),
-    rclcpp::ServicesQoS().get_rmw_qos_profile());
-
-  srv_weight_ = this->create_service<Trigger>(
-    "weight_grid_search",
-    std::bind(&OfflineEvaluatorNode::weight, this, std::placeholders::_1, std::placeholders::_2),
-    rclcpp::ServicesQoS().get_rmw_qos_profile());
-
-  reader_.open(get_or_declare_parameter<std::string>(*this, "bag_path"));
-}
-
-auto OfflineEvaluatorNode::evaluator_parameters() -> std::shared_ptr<EvaluatorParameters>
-{
-  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
-  const auto sample_num = get_or_declare_parameter<int>(*this, "sample_num");
-  const auto parameters = std::make_shared<EvaluatorParameters>(metrics.size(), sample_num);
-  parameters->score_weight = get_or_declare_parameter<std::vector<double>>(*this, "score_weight");
-  parameters->time_decay_weight.at(0) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s0");
-  parameters->time_decay_weight.at(1) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s1");
-  parameters->time_decay_weight.at(2) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s2");
-  parameters->time_decay_weight.at(3) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s3");
-  parameters->time_decay_weight.at(4) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s4");
-  parameters->time_decay_weight.at(5) =
-    get_or_declare_parameter<std::vector<double>>(*this, "time_decay_weight.s5");
-
-  return parameters;
-}
-
-auto OfflineEvaluatorNode::data_augument_parameters() -> std::shared_ptr<DataAugmentParameters>
-{
-  const auto parameters = std::make_shared<DataAugmentParameters>();
-
-  parameters->sample_num = get_or_declare_parameter<int>(*this, "sample_num");
-  parameters->resolution = get_or_declare_parameter<double>(*this, "resolution");
-  parameters->target_state.lat_positions =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_positions");
-  parameters->target_state.lat_velocities =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_velocities");
-  parameters->target_state.lat_accelerations =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.lateral_accelerations");
-  parameters->target_state.lon_positions =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_positions");
-  parameters->target_state.lon_velocities =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_velocities");
-  parameters->target_state.lon_accelerations =
-    get_or_declare_parameter<std::vector<double>>(*this, "target_state.longitudinal_accelerations");
-
-  return parameters;
-}
-
-auto OfflineEvaluatorNode::get_route() -> LaneletRoute::ConstSharedPtr
-{
-  rosbag2_storage::StorageFilter filter;
-  filter.topics.emplace_back("/planning/mission_planning/route");
-  reader_.set_filter(filter);
-
-  if (!reader_.has_next()) {
-    throw std::domain_error("not found route msg.");
+  // Open bag file
+  bag_path_ = get_or_declare_parameter<std::string>(*this, "bag_path");
+  try {
+    bag_reader_.open(bag_path_);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to open bag file: %s", e.what());
+    throw;
   }
 
-  rclcpp::Serialization<LaneletRoute> serializer;
+  // Initialize topic names from parameters with defaults
+  map_topic_name_ = get_parameter_or_default<std::string>(*this, "map_topic", "/map/vector_map");
+  map_marker_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "map_marker_array", "/map/vector_map_marker");
+  route_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "route_topic", "/planning/mission_planning/route");
+  odometry_topic_name_ =
+    get_parameter_or_default<std::string>(*this, "odometry_topic", "/localization/kinematic_state");
+  trajectory_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "trajectory_topic", "/planning/scenario_planning/lane_driving/trajectory");
+  objects_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "objects_topic", "/perception/object_recognition/objects");
+  tf_topic_name_ = get_parameter_or_default<std::string>(*this, "tf_topic", "/tf");
+  acceleration_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "acceleration_topic", "/localization/acceleration");
+  steering_topic_name_ = get_parameter_or_default<std::string>(
+    *this, "steering_topic", "/vehicle/status/steering_status");
 
-  const auto deserialized_message = std::make_shared<LaneletRoute>();
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
-    if (next_data->topic_name == TOPIC::ROUTE) {
-      rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
+  // Read evaluation mode
+  const auto mode_str =
+    get_parameter_or_default<std::string>(*this, "evaluation.mode", "closed_loop");
+  if (mode_str == "open_loop") {
+    evaluation_mode_ = EvaluationMode::OPEN_LOOP;
+  } else if (mode_str == "closed_loop") {
+    evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
+  } else {
+    RCLCPP_ERROR(get_logger(), "Invalid evaluation mode: %s. Using CLOSED_LOOP.", mode_str.c_str());
+    evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
+  }
+
+  run_evaluation();
+}
+
+OfflineEvaluatorNode::~OfflineEvaluatorNode()
+{
+  if (evaluation_bag_writer_) {
+    try {
+      evaluation_bag_writer_->close();
+      RCLCPP_INFO(get_logger(), "Evaluation bag writer closed successfully");
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "Error closing evaluation bag writer: %s", e.what());
+    }
+  }
+}
+
+void OfflineEvaluatorNode::setup_evaluation_bag_writer()
+{
+  try {
+    evaluation_bag_writer_ = std::make_unique<rosbag2_cpp::Writer>();
+
+    // Get output bag path from parameters with default
+    auto output_bag_path = get_parameter_or_default<std::string>(
+      *this, "evaluation_output_bag_path", "./");
+
+    // Ensure directory exists
+    const auto output_dir = std::filesystem::path(output_bag_path).parent_path();
+    RCLCPP_INFO(get_logger(), "Output directory: %s", output_dir.string().c_str());
+    if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
+      std::filesystem::create_directories(output_dir);
+      RCLCPP_INFO(get_logger(), "Created output directory: %s", output_dir.string().c_str());
+    }
+
+    // Validate write permissions
+    if (!output_dir.empty()) {
+      const auto test_file = output_dir / ".write_test";
+      std::ofstream test_stream(test_file);
+      if (!test_stream.is_open()) {
+        throw std::runtime_error("No write permission to output directory: " + output_dir.string());
+      }
+      test_stream.close();
+      std::filesystem::remove(test_file);
+    }
+
+    // Setup bag writer with MCAP format
+    const rosbag2_storage::StorageOptions storage_options{output_bag_path, "mcap"};
+
+    const rosbag2_cpp::ConverterOptions converter_options{
+      rmw_get_serialization_format(), rmw_get_serialization_format()};
+
+    evaluation_bag_writer_->open(storage_options, converter_options);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to setup evaluation bag writer: %s", e.what());
+    evaluation_bag_writer_ = nullptr;
+  }
+}
+
+void OfflineEvaluatorNode::run_evaluation()
+{
+  RCLCPP_INFO(get_logger(), "Starting evaluation...");
+
+  // Storage for the last route message and tf messages
+  autoware_planning_msgs::msg::LaneletRoute::SharedPtr last_route_msg = nullptr;
+  tf2_msgs::msg::TFMessage tf_static_msg;
+  std::vector<std::pair<tf2_msgs::msg::TFMessage, rclcpp::Time>> tf_messages;
+
+  // Quick scan for route and tf messages
+  while (bag_reader_.has_next() && rclcpp::ok()) {
+    auto serialized_message = bag_reader_.read_next();
+    const auto & topic_name = serialized_message->topic_name;
+
+    if (topic_name == map_topic_name_) {
+      try {
+        autoware_map_msgs::msg::LaneletMapBin msg;
+        rclcpp::Serialization<autoware_map_msgs::msg::LaneletMapBin> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        route_handler_->setMap(msg);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize map message: %s", e.what());
+      }
+    } else if (topic_name == map_marker_topic_name_) {
+      try {
+        visualization_msgs::msg::MarkerArray msg;
+        rclcpp::Serialization<visualization_msgs::msg::MarkerArray> serializer;
+        rclcpp::SerializedMessage serialize_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialize_msg, &msg);
+        map_marker_ = std::make_shared<visualization_msgs::msg::MarkerArray>(msg);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize map marker message: %s", e.what());
+      }
+    } else if (topic_name == route_topic_name_) {
+      try {
+        autoware_planning_msgs::msg::LaneletRoute msg;
+        rclcpp::Serialization<autoware_planning_msgs::msg::LaneletRoute> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        last_route_msg = std::make_shared<autoware_planning_msgs::msg::LaneletRoute>(msg);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize route message: %s", e.what());
+      }
+    } else if (topic_name == "/tf_static") {
+      try {
+        tf2_msgs::msg::TFMessage msg;
+        rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
+        rclcpp::SerializedMessage serialized_msg(*serialized_message->serialized_data);
+        serializer.deserialize_message(&serialized_msg, &msg);
+        // Accumulate all tf_static transforms
+        tf_static_msg.transforms.insert(
+          tf_static_msg.transforms.end(), msg.transforms.begin(), msg.transforms.end());
+      } catch (const std::exception & e) {
+        RCLCPP_WARN(get_logger(), "Failed to deserialize tf_static message: %s", e.what());
+      }
+    }
+  }
+
+  if (!last_route_msg) {
+    RCLCPP_WARN(get_logger(), "No route message found in bag. Evaluation aborted.");
+    return;
+  }
+  route_handler_->setRoute(*last_route_msg);
+
+  // Seek back to the beginning of the bag for mode-specific evaluation
+  bag_reader_.seek(0);
+
+  // Store reference times for map/route markers
+  rclcpp::Time start_time = now();
+  rclcpp::Time end_time = now();
+
+  // Create topic names structure
+  TopicNames topic_names;
+  topic_names.route_topic = route_topic_name_;
+  topic_names.odometry_topic = odometry_topic_name_;
+  topic_names.trajectory_topic = trajectory_topic_name_;
+  topic_names.objects_topic = objects_topic_name_;
+  topic_names.tf_topic = tf_topic_name_;
+  topic_names.acceleration_topic = acceleration_topic_name_;
+  topic_names.steering_topic = steering_topic_name_;
+
+  switch (evaluation_mode_) {
+    case EvaluationMode::OPEN_LOOP: {
+      OpenLoopEvaluator evaluator(get_logger(), route_handler_);
+      auto times =
+        evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
+      start_time = times.first;
+      end_time = times.second;
+      break;
+    }
+    case EvaluationMode::CLOSED_LOOP: {
+      ClosedLoopEvaluator evaluator(get_logger(), route_handler_);
+      auto times =
+        evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
+      start_time = times.first;
+      end_time = times.second;
       break;
     }
   }
 
-  return deserialized_message;
+  // Write tf_static at the beginning if available
+  if (
+    !tf_static_msg.transforms.empty() && evaluation_bag_writer_ && start_time.seconds() > 0 &&
+    end_time.seconds() > 0) {
+    // Use normalized timestamp (start from 0) for consistent bag duration
+    rclcpp::Time tf_time(0, 0, RCL_ROS_TIME);
+
+    // Also normalize timestamps in the transforms
+    tf2_msgs::msg::TFMessage normalized_tf_static = tf_static_msg;
+    for (auto & transform : normalized_tf_static.transforms) {
+      transform.header.stamp = tf_time;
+    }
+
+    evaluation_bag_writer_->write(normalized_tf_static, "/tf_static", tf_time);
+  }
+
+  // Write map and route markers with normalized timestamps
+  write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME));
+
+  RCLCPP_INFO(get_logger(), "Evaluation complete");
+  rclcpp::shutdown();
 }
 
-void OfflineEvaluatorNode::update(const std::shared_ptr<BagData> & bag_data, const double dt) const
+void OfflineEvaluatorNode::write_map_and_route_markers_to_bag(const rclcpp::Time & reference_time)
 {
-  rosbag2_storage::StorageFilter filter;
-  filter.topics.emplace_back(TOPIC::TF);
-  filter.topics.emplace_back(TOPIC::ODOMETRY);
-  filter.topics.emplace_back(TOPIC::ACCELERATION);
-  filter.topics.emplace_back(TOPIC::OBJECTS);
-  filter.topics.emplace_back(TOPIC::STEERING);
-  filter.topics.emplace_back(TOPIC::TRAJECTORY);
-  reader_.set_filter(filter);
+  if (!evaluation_bag_writer_) {
+    return;
+  }
 
-  bag_data->update(dt * 1e9);
+  // Create and write map markers from lanelet map
+  if (map_marker_) {
+    // Create a copy and update timestamps to match the evaluation bag timeline
+    visualization_msgs::msg::MarkerArray time_corrected_markers = *map_marker_;
 
-  while (reader_.has_next()) {
-    const auto next_data = reader_.read_next();
-    rclcpp::SerializedMessage serialized_msg(*next_data->serialized_data);
-
-    if (bag_data->ready()) {
-      break;
+    // Update all marker timestamps to the reference time
+    // This ensures markers are synchronized with the TF data in the evaluation bag
+    for (auto & marker : time_corrected_markers.markers) {
+      marker.header.stamp = reference_time;
     }
 
-    if (next_data->topic_name == TOPIC::TF) {
-      rclcpp::Serialization<TFMessage> serializer;
-      const auto deserialized_message = std::make_shared<TFMessage>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<TFMessage>>(bag_data->buffers.at(TOPIC::TF))
-        ->append(*deserialized_message);
-    }
+    evaluation_bag_writer_->write(time_corrected_markers, "/map_markers", reference_time);
+  }
 
-    if (next_data->topic_name == TOPIC::ODOMETRY) {
-      rclcpp::Serialization<Odometry> serializer;
-      const auto deserialized_message = std::make_shared<Odometry>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Odometry>>(bag_data->buffers.at(TOPIC::ODOMETRY))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::ACCELERATION) {
-      rclcpp::Serialization<AccelWithCovarianceStamped> serializer;
-      const auto deserialized_message = std::make_shared<AccelWithCovarianceStamped>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<AccelWithCovarianceStamped>>(
-        bag_data->buffers.at(TOPIC::ACCELERATION))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::OBJECTS) {
-      rclcpp::Serialization<PredictedObjects> serializer;
-      const auto deserialized_message = std::make_shared<PredictedObjects>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<PredictedObjects>>(bag_data->buffers.at(TOPIC::OBJECTS))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::STEERING) {
-      rclcpp::Serialization<SteeringReport> serializer;
-      const auto deserialized_message = std::make_shared<SteeringReport>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<SteeringReport>>(bag_data->buffers.at(TOPIC::STEERING))
-        ->append(*deserialized_message);
-    }
-
-    if (next_data->topic_name == TOPIC::TRAJECTORY) {
-      rclcpp::Serialization<Trajectory> serializer;
-      const auto deserialized_message = std::make_shared<Trajectory>();
-      serializer.deserialize_message(&serialized_msg, deserialized_message.get());
-      std::dynamic_pointer_cast<Buffer<Trajectory>>(bag_data->buffers.at(TOPIC::TRAJECTORY))
-        ->append(*deserialized_message);
+  // Set route for route handler if available
+  if (route_handler_ && route_handler_->isHandlerReady()) {
+    // Create and save route markers
+    visualization_msgs::msg::MarkerArray route_markers;
+    create_route_markers(route_markers);
+    if (!route_markers.markers.empty()) {
+      evaluation_bag_writer_->write(route_markers, "/route_markers", reference_time);
     }
   }
 }
 
-void OfflineEvaluatorNode::play(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
+void OfflineEvaluatorNode::create_route_markers(
+  visualization_msgs::msg::MarkerArray & marker_array) const
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  const auto bag_data = std::make_shared<BagData>(
-    duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
-
-  const auto time_step = get_or_declare_parameter<double>(*this, "play.time_step");
-
-  RCLCPP_INFO(get_logger(), "rosbag play now...");
-
-  std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-
-  const auto bag_evaluator =
-    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
-
-  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
-  for (size_t i = 0; i < metrics.size(); i++) {
-    bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
+  if (!route_handler_ || !route_handler_->isHandlerReady()) {
+    return;
   }
 
-  const auto parameters = evaluator_parameters();
-
-  while (reader_.has_next() && rclcpp::ok()) {
-    update(bag_data, time_step);
-
-    bag_evaluator->setup(bag_data, previous_points);
-
-    const auto best_data = bag_evaluator->best(parameters);
-
-    previous_points = best_data == nullptr ? nullptr : best_data->points();
-
-    pub_tf_->publish(*bag_evaluator->tf());
-
-    pub_objects_->publish(*bag_evaluator->objects());
-
-    pub_marker_->publish(*bag_evaluator->marker());
-
-    bag_evaluator->show();
-
-    bag_evaluator->clear();
+  const auto preferred_lanes = route_handler_->getPreferredLanelets();
+  if (preferred_lanes.empty()) {
+    return;
   }
-
-  res->success = true;
-
-  RCLCPP_INFO(get_logger(), "finish.");
-}
-
-void OfflineEvaluatorNode::rewind(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
-{
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  reader_.seek(0);
-
-  res->success = true;
-
-  RCLCPP_INFO(get_logger(), "rewind rosbag.");
-}
-
-void OfflineEvaluatorNode::next_route(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
-{
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  route_handler_->setRoute(*get_route());
-
-  MarkerArray msg;
 
   autoware_utils::append_marker_array(
     lanelet::visualization::laneletsAsTriangleMarkerArray(
-      "preferred_lanes", route_handler_->getPreferredLanelets(),
-      create_marker_color(0.16, 1.0, 0.69, 0.2)),
-    &msg);
-
-  pub_marker_->publish(msg);
-
-  res->success = true;
-
-  RCLCPP_INFO(get_logger(), "update route.");
-}
-
-void OfflineEvaluatorNode::weight(
-  [[maybe_unused]] const Trigger::Request::SharedPtr req, Trigger::Response::SharedPtr res)
-{
-  std::lock_guard<std::mutex> lock(mutex_);
-  RCLCPP_INFO(get_logger(), "start weight grid seach.");
-
-  autoware_utils::StopWatch<std::chrono::milliseconds> stop_watch;
-
-  stop_watch.tic("total_time");
-
-  reader_.seek(0);
-  const auto bag_data = std::make_shared<BagData>(
-    duration_cast<nanoseconds>(reader_.get_metadata().starting_time.time_since_epoch()).count());
-
-  std::vector<Result> weight_grid;
-
-  const auto resolution =
-    autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.grid_step");
-  const auto min = autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.min");
-  const auto max = autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.max");
-  for (double w0 = min; w0 < max + 0.1 * resolution; w0 += resolution) {
-    for (double w1 = min; w1 < max + 0.1 * resolution; w1 += resolution) {
-      for (double w2 = min; w2 < max + 0.1 * resolution; w2 += resolution) {
-        for (double w3 = min; w3 < max + 0.1 * resolution; w3 += resolution) {
-          for (double w4 = min; w4 < max + 0.1 * resolution; w4 += resolution) {
-            for (double w5 = min; w5 < max + 0.1 * resolution; w5 += resolution) {
-              weight_grid.emplace_back(w0, w1, w2, w3, w4, w5);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const auto show_best_result = [this, &weight_grid]() {
-    auto sort_by_loss = weight_grid;
-    std::sort(sort_by_loss.begin(), sort_by_loss.end(), [](const auto & a, const auto & b) {
-      return a.loss < b.loss;
-    });
-
-    const auto best = sort_by_loss.front();
-
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(4);
-    for (size_t i = 0; i < best.weight.size(); i++) {
-      ss << " [w" << i << "]:" << best.weight.at(i);
-    }
-    ss << " [loss]:" << best.loss << std::endl;
-    RCLCPP_INFO_STREAM(get_logger(), ss.str());
-  };
-
-  const auto time_step =
-    autoware_utils::get_or_declare_parameter<double>(*this, "grid_seach.time_step");
-
-  const auto bag_evaluator =
-    std::make_shared<BagEvaluator>(route_handler_, vehicle_info_, data_augument_parameters());
-
-  const auto metrics = get_or_declare_parameter<std::vector<std::string>>(*this, "metrics");
-  for (size_t i = 0; i < metrics.size(); i++) {
-    bag_evaluator->load_metric(metrics.at(i), i, data_augument_parameters()->resolution);
-  }
-
-  // start grid search
-  while (reader_.has_next() && rclcpp::ok()) {
-    stop_watch.tic("one_step");
-    update(bag_data, time_step);
-
-    if (!bag_data->ready()) break;
-
-    std::mutex g_mutex;
-    std::mutex e_mutex;
-
-    const auto update = [&bag_data, &bag_evaluator, &metrics, &weight_grid, &g_mutex,
-                         &e_mutex](const auto idx) {
-      // TODO(satoshi-ota): remove hard code param
-      const auto selector_parameters = std::make_shared<EvaluatorParameters>(6, 20);
-
-      double loss = 0.0;
-
-      std::shared_ptr<TrajectoryPoints> previous_points;
-      {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (idx + 1 > weight_grid.size()) return;
-        selector_parameters->score_weight = weight_grid.at(idx).weight;
-        selector_parameters->time_decay_weight = std::vector<std::vector<double>>(
-          metrics.size(), {1.0, 0.8, 0.64, 0.51, 0.41, 0.33, 0.26, 0.21, 0.17, 0.13});
-        previous_points = weight_grid.at(idx).previous_points;
-      }
-
-      std::shared_ptr<TrajectoryPoints> selected_points;
-      {
-        std::lock_guard<std::mutex> lock(e_mutex);
-        bag_evaluator->setup(bag_data, previous_points);
-        std::tie(loss, selected_points) = bag_evaluator->loss(selector_parameters);
-        bag_evaluator->clear();
-      }
-
-      {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (idx < weight_grid.size()) {
-          weight_grid.at(idx).loss += loss;
-          weight_grid.at(idx).previous_points = selected_points;
-        }
-      }
-    };
-
-    // TODO(satoshi-ota): use multithread
-    // size_t i = 0;
-    // while (rclcpp::ok()) {
-    //   std::vector<std::thread> threads;
-    //   for (size_t thread_id = 0; thread_id < thread_num; thread_id++) {
-    //     threads.emplace_back(update, i + thread_id);
-    //   }
-    //   for (auto & t : threads) t.join();
-    //   if (i + 1 >= weight_grid.size()) break;
-    //   i += thread_num;
-    // }
-
-    for (size_t i = 0; i < weight_grid.size(); i++) {
-      update(i);
-    }
-
-    show_best_result();
-
-    RCLCPP_INFO_STREAM(
-      get_logger(), "it took " << stop_watch.toc("one_step") << "[ms] to search grid for "
-                               << time_step << "[s] bag.");
-  }
-
-  res->success = true;
-
-  RCLCPP_INFO_STREAM(
-    get_logger(),
-    "finish weight grid search. processing time:" << stop_watch.toc("total_time") << "[ms]");
+      "preferred_lane", preferred_lanes, create_marker_color(0.16, 1.0, 0.69, 0.2)),
+    &marker_array);
 }
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 

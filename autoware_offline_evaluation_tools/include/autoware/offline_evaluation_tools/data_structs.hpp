@@ -23,37 +23,13 @@
 
 namespace autoware::trajectory_selector::offline_evaluation_tools
 {
-struct TargetStateParameters
-{
-  std::vector<double> lat_positions{};
-  std::vector<double> lat_velocities{};
-  std::vector<double> lat_accelerations{};
-  std::vector<double> lon_positions{};
-  std::vector<double> lon_velocities{};
-  std::vector<double> lon_accelerations{};
-};
-
+// DataAugmentParameters is kept for backward compatibility but only sample_num and resolution are used
 struct DataAugmentParameters
 {
   size_t sample_num{20};
-
   double resolution{0.5};
-
-  TargetStateParameters target_state{};
 };
 
-struct Result
-{
-  Result(
-    const double w0, const double w1, const double w2, const double w3, const double w4,
-    const double w5)
-  : weight{w0, w1, w2, w3, w4, w5}
-  {
-  }
-  std::shared_ptr<TrajectoryPoints> previous_points{nullptr};
-  std::vector<double> weight;
-  double loss{0.0};
-};
 }  // namespace autoware::trajectory_selector::offline_evaluation_tools
 
 #endif  // AUTOWARE__OFFLINE_EVALUATION_TOOLS__DATA_STRUCTS_HPP_
