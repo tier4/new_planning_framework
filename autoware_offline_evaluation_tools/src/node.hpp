@@ -52,7 +52,7 @@ public:
   ~OfflineEvaluatorNode() override;
 
 private:
-  enum class EvaluationMode { OPEN_LOOP, CLOSED_LOOP };
+  enum class EvaluationMode { OPEN_LOOP, CLOSED_LOOP, OR_SCENE };
 
   void setup_evaluation_bag_writer();
   void run_evaluation();

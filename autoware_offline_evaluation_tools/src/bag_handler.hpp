@@ -246,6 +246,17 @@ struct BagData
     }
     if (traj_buffer) {
       synchronized_data->trajectory = traj_buffer->get_closest(target_time, tolerance_ms);
+
+      // CRITICAL: Resync all data to trajectory's actual timestamp for accurate GT
+      if (synchronized_data->trajectory) {
+        const auto traj_stamp_ns = rclcpp::Time(synchronized_data->trajectory->header.stamp).nanoseconds();
+        synchronized_data->timestamp = rclcpp::Time(synchronized_data->trajectory->header.stamp);
+
+        // Resync kinematic_state to trajectory timestamp (not sampling time!)
+        if (odom_buffer) {
+          synchronized_data->kinematic_state = odom_buffer->get_closest(traj_stamp_ns, tolerance_ms);
+        }
+      }
     }
 
     // Get acceleration
@@ -257,7 +268,10 @@ struct BagData
         break;
       }
     }
-    if (accel_buffer) {
+    if (accel_buffer && synchronized_data->trajectory) {
+      const auto traj_stamp_ns = rclcpp::Time(synchronized_data->trajectory->header.stamp).nanoseconds();
+      synchronized_data->acceleration = accel_buffer->get_closest(traj_stamp_ns, tolerance_ms);
+    } else if (accel_buffer) {
       synchronized_data->acceleration = accel_buffer->get_closest(target_time, tolerance_ms);
     }
 
@@ -270,7 +284,10 @@ struct BagData
         break;
       }
     }
-    if (steer_buffer) {
+    if (steer_buffer && synchronized_data->trajectory) {
+      const auto traj_stamp_ns = rclcpp::Time(synchronized_data->trajectory->header.stamp).nanoseconds();
+      synchronized_data->steering_status = steer_buffer->get_closest(traj_stamp_ns, tolerance_ms);
+    } else if (steer_buffer) {
       synchronized_data->steering_status = steer_buffer->get_closest(target_time, tolerance_ms);
     }
 
@@ -283,7 +300,10 @@ struct BagData
         break;
       }
     }
-    if (obj_buffer) {
+    if (obj_buffer && synchronized_data->trajectory) {
+      const auto traj_stamp_ns = rclcpp::Time(synchronized_data->trajectory->header.stamp).nanoseconds();
+      synchronized_data->objects = obj_buffer->get_closest(traj_stamp_ns, tolerance_ms);
+    } else if (obj_buffer) {
       synchronized_data->objects = obj_buffer->get_closest(target_time, tolerance_ms);
     }
 

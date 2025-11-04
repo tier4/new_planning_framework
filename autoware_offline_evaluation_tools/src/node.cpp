@@ -16,6 +16,7 @@
 
 #include "closed_loop_evaluator.hpp"
 #include "open_loop_evaluator.hpp"
+#include "or_scene_evaluator.hpp"
 
 #include <autoware_lanelet2_extension/visualization/visualization.hpp>
 #include <autoware_utils/ros/marker_helper.hpp>
@@ -100,6 +101,8 @@ OfflineEvaluatorNode::OfflineEvaluatorNode(const rclcpp::NodeOptions & node_opti
     evaluation_mode_ = EvaluationMode::OPEN_LOOP;
   } else if (mode_str == "closed_loop") {
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
+  } else if (mode_str == "or_scene") {
+    evaluation_mode_ = EvaluationMode::OR_SCENE;
   } else {
     RCLCPP_ERROR(get_logger(), "Invalid evaluation mode: %s. Using CLOSED_LOOP.", mode_str.c_str());
     evaluation_mode_ = EvaluationMode::CLOSED_LOOP;
@@ -220,11 +223,17 @@ void OfflineEvaluatorNode::run_evaluation()
     }
   }
 
-  if (!last_route_msg) {
+  // Route is optional for OR scene evaluation (doesn't use lane-based metrics)
+  if (!last_route_msg && evaluation_mode_ != EvaluationMode::OR_SCENE) {
     RCLCPP_WARN(get_logger(), "No route message found in bag. Evaluation aborted.");
     return;
   }
-  route_handler_->setRoute(*last_route_msg);
+
+  if (last_route_msg) {
+    route_handler_->setRoute(*last_route_msg);
+  } else {
+    RCLCPP_INFO(get_logger(), "No route found in bag (OK for OR scene evaluation)");
+  }
 
   // Seek back to the beginning of the bag for mode-specific evaluation
   bag_reader_.seek(0);
@@ -254,6 +263,56 @@ void OfflineEvaluatorNode::run_evaluation()
     }
     case EvaluationMode::CLOSED_LOOP: {
       ClosedLoopEvaluator evaluator(get_logger(), route_handler_);
+      auto times =
+        evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
+      start_time = times.first;
+      end_time = times.second;
+      break;
+    }
+    case EvaluationMode::OR_SCENE: {
+      // Read OR scene specific parameters
+      const double time_window_sec =
+        get_parameter_or_default<double>(*this, "or_scene_evaluation.time_window_sec", 0.5);
+      const bool enable_debug_viz =
+        get_parameter_or_default<bool>(*this, "or_scene_evaluation.enable_debug_visualization", false);
+
+      // Read success criteria
+      ORSuccessCriteria success_criteria;
+      success_criteria.enabled =
+        get_parameter_or_default<bool>(*this, "or_scene_evaluation.success_criteria.enabled", false);
+      success_criteria.max_ade =
+        get_parameter_or_default<double>(*this, "or_scene_evaluation.success_criteria.max_ade", 1.0);
+      success_criteria.max_fde =
+        get_parameter_or_default<double>(*this, "or_scene_evaluation.success_criteria.max_fde", 1.5);
+      success_criteria.max_lateral_deviation =
+        get_parameter_or_default<double>(*this, "or_scene_evaluation.success_criteria.max_lateral_deviation", 0.5);
+      success_criteria.min_ttc =
+        get_parameter_or_default<double>(*this, "or_scene_evaluation.success_criteria.min_ttc", 3.0);
+
+      const auto debug_output_dir =
+        get_parameter_or_default<std::string>(*this, "or_scene_evaluation.debug_output_dir", "~/or_scene_debug_images");
+
+      ORSceneEvaluator evaluator(get_logger(), route_handler_, time_window_sec, success_criteria,
+        enable_debug_viz, debug_output_dir);
+
+      // Set OR events JSON paths if provided
+      const auto or_events_input_path =
+        get_parameter_or_default<std::string>(*this, "or_scene_evaluation.or_events_input_path", "");
+      const auto or_events_output_path =
+        get_parameter_or_default<std::string>(*this, "or_scene_evaluation.or_events_output_path", "");
+      const auto input_bag_path =
+        get_parameter_or_default<std::string>(*this, "or_scene_evaluation.input_bag_path", "");
+
+      if (!or_events_input_path.empty()) {
+        evaluator.set_or_events_json_path(or_events_input_path);
+      }
+      if (!or_events_output_path.empty()) {
+        evaluator.set_or_events_output_path(or_events_output_path);
+      }
+      if (!input_bag_path.empty()) {
+        evaluator.set_input_bag_path(input_bag_path);
+      }
+
       auto times =
         evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
       start_time = times.first;

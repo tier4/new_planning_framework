@@ -161,36 +161,89 @@ std::vector<OpenLoopEvaluator::EvaluationData> OpenLoopEvaluator::prepare_evalua
   return result;
 }
 
-std::optional<autoware_planning_msgs::msg::Trajectory> 
+std::optional<autoware_planning_msgs::msg::Trajectory>
 OpenLoopEvaluator::generate_ground_truth_trajectory(
   const std::shared_ptr<SynchronizedData> & trajectory_data,
   const std::vector<std::shared_ptr<SynchronizedData>> & all_data)
 {
   const auto & trajectory = *(trajectory_data->trajectory);
-  
+
   autoware_planning_msgs::msg::Trajectory ground_truth_trajectory;
   ground_truth_trajectory.header = trajectory.header;
   ground_truth_trajectory.points.reserve(trajectory.points.size());
-  
-  // Generate ground truth for each trajectory point
-  for (const auto & traj_point : trajectory.points) {
-    const auto point_time = trajectory_data->timestamp + 
-      rclcpp::Duration(traj_point.time_from_start);
-    
-    // Interpolate ground truth pose at this time
-    auto gt_pose_opt = interpolate_ground_truth(point_time, all_data);
-    
-    if (!gt_pose_opt.has_value()) {
-      // Ground truth not available for this time point - fail entire trajectory
-      RCLCPP_DEBUG(logger_, "Ground truth interpolation failed at time %f",
-        point_time.seconds());
-      return std::nullopt;
+
+  // Check if trajectory has proper time_from_start values
+  bool has_valid_timing = false;
+  if (trajectory.points.size() >= 2) {
+    const double last_time = rclcpp::Duration(trajectory.points.back().time_from_start).seconds();
+    has_valid_timing = (last_time > 0.1);  // At least 100ms total duration
+  }
+
+  if (!has_valid_timing && !trajectory.points.empty()) {
+    // Workaround: Trajectory has invalid time_from_start (all zeros from DLR)
+    // Use synchronized data index matching instead
+    RCLCPP_WARN_ONCE(logger_, "Trajectory has invalid time_from_start values (all zeros). Using index-based GT matching.");
+
+    // Find GT data closest to trajectory start
+    const size_t traj_start_idx = [&]() {
+      for (size_t i = 0; i < all_data.size(); ++i) {
+        if (all_data[i]->timestamp.nanoseconds() == trajectory_data->timestamp.nanoseconds()) {
+          return i;
+        }
+      }
+      return size_t(0);
+    }();
+
+    // Match GT by index
+    for (size_t idx = 0; idx < trajectory.points.size(); ++idx) {
+      const size_t gt_idx = std::min(traj_start_idx + idx, all_data.size() - 1);
+
+      if (gt_idx >= all_data.size() || !all_data[gt_idx]->kinematic_state) {
+        return std::nullopt;
+      }
+
+      autoware_planning_msgs::msg::TrajectoryPoint gt_point;
+      gt_point.pose = all_data[gt_idx]->kinematic_state->pose.pose;
+      gt_point.time_from_start = trajectory.points[idx].time_from_start;
+      gt_point.longitudinal_velocity_mps = trajectory.points[idx].longitudinal_velocity_mps;
+      gt_point.lateral_velocity_mps = trajectory.points[idx].lateral_velocity_mps;
+      gt_point.heading_rate_rps = trajectory.points[idx].heading_rate_rps;
+
+      ground_truth_trajectory.points.push_back(gt_point);
     }
-    
-    // Create ground truth trajectory point
+
+    return ground_truth_trajectory;
+  }
+
+  // Original time-based interpolation
+  for (size_t idx = 0; idx < trajectory.points.size(); ++idx) {
+    const auto & traj_point = trajectory.points[idx];
+
     autoware_planning_msgs::msg::TrajectoryPoint gt_point;
-    gt_point.pose = gt_pose_opt.value();
-    gt_point.time_from_start = traj_point.time_from_start;
+
+    // For first point (time_from_start=0), use synchronized kinematic_state directly
+    // This ensures predicted first point matches current vehicle pose
+    if (idx == 0 && trajectory_data->kinematic_state) {
+      gt_point.pose = trajectory_data->kinematic_state->pose.pose;
+      gt_point.time_from_start = traj_point.time_from_start;
+    } else {
+      // For subsequent points, interpolate from odometry
+      const auto point_time = trajectory_data->timestamp +
+        rclcpp::Duration(traj_point.time_from_start);
+
+      // Interpolate ground truth pose at this time
+      auto gt_pose_opt = interpolate_ground_truth(point_time, all_data);
+
+      if (!gt_pose_opt.has_value()) {
+        // Ground truth not available for this time point - fail entire trajectory
+        RCLCPP_DEBUG(logger_, "Ground truth interpolation failed at time %f",
+          point_time.seconds());
+        return std::nullopt;
+      }
+
+      gt_point.pose = gt_pose_opt.value();
+      gt_point.time_from_start = traj_point.time_from_start;
+    }
     
     // Copy velocity if available from original trajectory  
     gt_point.longitudinal_velocity_mps = traj_point.longitudinal_velocity_mps;
@@ -199,7 +252,7 @@ OpenLoopEvaluator::generate_ground_truth_trajectory(
     
     ground_truth_trajectory.points.push_back(gt_point);
   }
-  
+
   return ground_truth_trajectory;
 }
 
@@ -323,16 +376,20 @@ std::optional<geometry_msgs::msg::Pose> OpenLoopEvaluator::interpolate_ground_tr
   size_t lower_idx = 0;
   size_t upper_idx = ground_truth_data.size() - 1;
   
-  // Check bounds
-  if (target_time < ground_truth_data.front()->timestamp ||
-      target_time > ground_truth_data.back()->timestamp) {
+  // Check bounds (use nanoseconds to avoid clock type mismatch)
+  const int64_t target_ns = target_time.nanoseconds();
+  const int64_t front_ns = ground_truth_data.front()->timestamp.nanoseconds();
+  const int64_t back_ns = ground_truth_data.back()->timestamp.nanoseconds();
+
+  if (target_ns < front_ns || target_ns > back_ns) {
     return std::nullopt;
   }
-  
-  // Binary search for bracketing indices
+
+  // Binary search for bracketing indices (use nanoseconds)
   while (upper_idx - lower_idx > 1) {
     const size_t mid_idx = (lower_idx + upper_idx) / 2;
-    if (ground_truth_data[mid_idx]->timestamp <= target_time) {
+    const int64_t mid_ns = ground_truth_data[mid_idx]->timestamp.nanoseconds();
+    if (mid_ns <= target_ns) {
       lower_idx = mid_idx;
     } else {
       upper_idx = mid_idx;
@@ -341,12 +398,15 @@ std::optional<geometry_msgs::msg::Pose> OpenLoopEvaluator::interpolate_ground_tr
   
   const auto & lower_data = ground_truth_data[lower_idx];
   const auto & upper_data = ground_truth_data[upper_idx];
-  
-  // Calculate interpolation ratio
-  const double dt_total = (upper_data->timestamp - lower_data->timestamp).seconds();
-  const double dt_target = (target_time - lower_data->timestamp).seconds();
-  const double ratio = dt_target / dt_total;
-  
+
+  // Calculate interpolation ratio (use nanoseconds to avoid clock type mismatch)
+  const int64_t lower_ns = lower_data->timestamp.nanoseconds();
+  const int64_t upper_ns = upper_data->timestamp.nanoseconds();
+
+  const double dt_total = (upper_ns - lower_ns) / 1e9;
+  const double dt_target = (target_ns - lower_ns) / 1e9;
+  const double ratio = (dt_total > 0.0) ? (dt_target / dt_total) : 0.0;
+
   // Interpolate position
   geometry_msgs::msg::Pose interpolated_pose;
   const auto & p1 = lower_data->kinematic_state->pose.pose.position;

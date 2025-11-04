@@ -14,6 +14,8 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/base_evaluator.cpp
   src/closed_loop_evaluator.cpp
   src/open_loop_evaluator.cpp
+  src/or_event_extractor.cpp
+  src/or_scene_evaluator.cpp
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
@@ -39,4 +41,5 @@ ament_auto_package(
   config
   launch
   rviz
+  scripts
 )

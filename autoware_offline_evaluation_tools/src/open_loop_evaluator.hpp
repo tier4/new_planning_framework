@@ -121,9 +121,9 @@ public:
     rosbag2_cpp::Writer * evaluation_bag_writer,
     const TopicNames & topic_names) override;
 
-private:
   /**
    * @brief Structure to hold synchronized data with its precomputed ground truth trajectory
+   * (Public for use by ORSceneEvaluator)
    */
   struct EvaluationData
   {
@@ -132,15 +132,8 @@ private:
   };
 
   /**
-   * @brief Prepare evaluation data with ground truth trajectories
-   * @param synchronized_data_list List of synchronized data
-   * @return Vector of evaluation data with ground truth (invalid data excluded)
-   */
-  std::vector<EvaluationData> prepare_evaluation_data(
-    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
-
-  /**
    * @brief Generate ground truth trajectory for a single synchronized data point
+   * (Public for use by ORSceneEvaluator)
    * @param trajectory_data Data containing the trajectory
    * @param all_data All synchronized data for interpolation
    * @return Ground truth trajectory or nullopt if generation failed
@@ -151,11 +144,21 @@ private:
 
   /**
    * @brief Evaluate a single trajectory against ground truth
+   * (Public for use by ORSceneEvaluator)
    * @param eval_data Evaluation data containing trajectory and ground truth
    * @return Metrics for this trajectory
    */
   OpenLoopTrajectoryMetrics evaluate_trajectory(
     const EvaluationData & eval_data);
+
+private:
+  /**
+   * @brief Prepare evaluation data with ground truth trajectories
+   * @param synchronized_data_list List of synchronized data
+   * @return Vector of evaluation data with ground truth (invalid data excluded)
+   */
+  std::vector<EvaluationData> prepare_evaluation_data(
+    const std::vector<std::shared_ptr<SynchronizedData>> & synchronized_data_list);
 
 
   /**
