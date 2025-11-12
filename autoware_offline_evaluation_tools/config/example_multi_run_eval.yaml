@@ -1,0 +1,14 @@
+# Example configuration for multi-run evaluation
+# This file specifies which LIVE trajectory topics to evaluate against ground truth
+
+base_trajectory_topic: /planning/trajectory_generator/diffusion_planner_node/output/trajectory
+
+runs:
+  - prefix: model_v1.0_epoch50
+    description: "Diffusion model v1.0 trained for 50 epochs"
+
+  - prefix: model_v2.0_epoch100
+    description: "Diffusion model v2.0 trained for 100 epochs with improved loss"
+
+  - prefix: baseline_pretrained
+    description: "Baseline pretrained model for comparison"

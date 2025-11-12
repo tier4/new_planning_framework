@@ -4,11 +4,67 @@ Generate debug visualization for OR scene trajectory comparison
 """
 import sys
 import json
+import os
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+
+# Import lanelet2 for map visualization
+try:
+    import lanelet2
+    from lanelet2.io import Origin, load
+    try:
+        from autoware_lanelet2_extension_python.projection import MGRSProjector
+    except ImportError:
+        try:
+            from lanelet2.projection import MGRSProjector
+        except ImportError:
+            from lanelet2.projection import UtmProjector as MGRSProjector
+    LANELET2_AVAILABLE = True
+except ImportError:
+    LANELET2_AVAILABLE = False
+    print("Warning: lanelet2 not available, map visualization disabled")
+
+def load_lanelet_map(map_path):
+    """Load lanelet2 map from OSM file"""
+    if not LANELET2_AVAILABLE:
+        return None
+    try:
+        projector = MGRSProjector(Origin(0.0, 0.0))
+        return load(map_path, projector)
+    except Exception as e:
+        print(f"Warning: Failed to load map from {map_path}: {e}")
+        return None
+
+def get_lanelets_in_area(lanelet_map, x_min, x_max, y_min, y_max):
+    """Filter lanelets within visualization bounds"""
+    visible_lanelets = []
+    for lanelet in lanelet_map.laneletLayer:
+        for pt in lanelet.centerline:
+            if x_min <= pt.x <= x_max and y_min <= pt.y <= y_max:
+                visible_lanelets.append(lanelet)
+                break
+    return visible_lanelets
+
+def plot_lanelet_boundaries(ax, lanelets):
+    """Plot lanelet boundaries as background layer"""
+    for lanelet in lanelets:
+        left_x = [p.x for p in lanelet.leftBound]
+        left_y = [p.y for p in lanelet.leftBound]
+        right_x = [p.x for p in lanelet.rightBound]
+        right_y = [p.y for p in lanelet.rightBound]
+
+        ax.plot(left_x, left_y, color='lightgray', linewidth=1.0,
+                alpha=0.6, linestyle='-', zorder=1)
+        ax.plot(right_x, right_y, color='lightgray', linewidth=1.0,
+                alpha=0.6, linestyle='-', zorder=1)
+
+        center_x = [p.x for p in lanelet.centerline]
+        center_y = [p.y for p in lanelet.centerline]
+        ax.plot(center_x, center_y, color='lightgray', linewidth=0.5,
+                alpha=0.4, linestyle='--', zorder=1)
 
 def quat_to_yaw(qx, qy, qz, qw):
     """Convert quaternion to yaw angle"""
@@ -59,12 +115,46 @@ def generate_or_visualization(data_json_path, output_image_path):
     # Create figure
     fig, ax = plt.subplots(figsize=(14, 12))
 
-    # Plot trajectories
+    # Calculate bounds first (needed for map filtering)
     pred_x = [p['x'] for p in pred_poses]
     pred_y = [p['y'] for p in pred_poses]
     gt_x = [p['x'] for p in gt_poses]
     gt_y = [p['y'] for p in gt_poses]
 
+    all_traj_x = pred_x + gt_x
+    all_traj_y = pred_y + gt_y
+
+    if not all_traj_x or not all_traj_y:
+        print("ERROR: No trajectory data to plot!")
+        return
+
+    x_min = min(all_traj_x)
+    x_max = max(all_traj_x)
+    y_min = min(all_traj_y)
+    y_max = max(all_traj_y)
+
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    x_epsilon = max(1.0, x_range * 0.1)
+    y_epsilon = max(1.0, y_range * 0.1)
+
+    # Load and plot map (background layer, zorder=1)
+    map_path = data.get('map_path', None)
+    if map_path and os.path.exists(map_path) and LANELET2_AVAILABLE:
+        try:
+            lanelet_map = load_lanelet_map(map_path)
+            if lanelet_map:
+                visible_lanelets = get_lanelets_in_area(
+                    lanelet_map,
+                    x_min - x_epsilon, x_max + x_epsilon,
+                    y_min - y_epsilon, y_max + y_epsilon
+                )
+                plot_lanelet_boundaries(ax, visible_lanelets)
+                print(f"Plotted {len(visible_lanelets)} lanelets from map")
+        except Exception as e:
+            print(f"Warning: Failed to plot map: {e}")
+
+    # Plot trajectories (already extracted above for bounds calculation)
     # Debug output (optional)
     # print(f"Predicted trajectory: {len(pred_x)} points")
     # print(f"GT trajectory: {len(gt_x)} points")
@@ -94,6 +184,17 @@ def generate_or_visualization(data_json_path, output_image_path):
         7: 'pink',      # PEDESTRIAN
     }
 
+    class_names = {
+        1: 'Car',
+        2: 'Truck',
+        3: 'Bus',
+        6: 'Bicycle',
+        7: 'Pedestrian',
+    }
+
+    # Track which object types are present for legend
+    present_classes = set()
+
     for i, obj in enumerate(objects):
         # Get object pose
         obj_x = obj['x']
@@ -118,15 +219,12 @@ def generate_or_visualization(data_json_path, output_image_path):
             # Get color based on class
             class_label = obj.get('class_label', 0)
             color = class_colors.get(class_label, 'gray')
+            present_classes.add(class_label)
 
             polygon = patches.Polygon(corners, fill=False, edgecolor=color,
                                     linewidth=2.5, linestyle='-', alpha=0.8)
 
         ax.add_patch(polygon)
-
-        # Add label for first object
-        if i == 0:
-            ax.plot([], [], color='gray', linewidth=1.5, label='Objects', alpha=0.7)
 
     # Add metrics text box
     coverage_pct = metrics.get('gt_coverage_ratio', 1.0) * 100
@@ -159,36 +257,21 @@ Objects: {num_objects}"""
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
             family='monospace')
 
-    # Calculate bounds from trajectories ONLY (not objects)
-    # Use start and end points + 10% epsilon as user requested
-    all_traj_x = pred_x + gt_x
-    all_traj_y = pred_y + gt_y
-
-    if not all_traj_x or not all_traj_y:
-        print("ERROR: No trajectory data to plot!")
-        return
-
-    x_min = min(all_traj_x)
-    x_max = max(all_traj_x)
-    y_min = min(all_traj_y)
-    y_max = max(all_traj_y)
-
-    # Add 10% epsilon on each side
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    x_epsilon = max(1.0, x_range * 0.1)  # At least 1 meter
-    y_epsilon = max(1.0, y_range * 0.1)  # At least 1 meter
-
-
-    # Set bounds with epsilon
+    # Set bounds with epsilon (already calculated above for map filtering)
     ax.set_xlim(x_min - x_epsilon, x_max + x_epsilon)
     ax.set_ylim(y_min - y_epsilon, y_max + y_epsilon)
+
+    # Add object type legend entries (only for classes present in scene)
+    for class_id in sorted(present_classes):
+        if class_id in class_colors and class_id in class_names:
+            ax.plot([], [], color=class_colors[class_id], linewidth=2.5,
+                   label=class_names[class_id], alpha=0.8)
 
     # Formatting
     ax.set_xlabel('X (meters)', fontsize=12)
     ax.set_ylabel('Y (meters)', fontsize=12)
     ax.set_title(f'OR Scene Trajectory Comparison\n{event_info["bag_name"]}', fontsize=14)
-    ax.legend(loc='upper right', fontsize=10)
+    ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
     ax.grid(True, alpha=0.3)
 
     # Save

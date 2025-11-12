@@ -101,11 +101,18 @@ public:
    */
   void set_input_bag_path(const std::string & bag_path);
 
+  /**
+   * @brief Set map path for lanelet visualization
+   * @param map_path Path to lanelet2_map.osm file
+   */
+  void set_map_path(const std::string & map_path);
+
 private:
   double time_window_sec_;
   ORSuccessCriteria success_criteria_;
   bool enable_debug_visualization_;
   std::string debug_output_dir_;
+  std::string map_path_;                    // Optional: path to lanelet2_map.osm for visualization
 
   std::string or_events_json_input_path_;   // Optional: pre-extracted OR events
   std::string or_events_json_output_path_;  // Where to save extracted OR events

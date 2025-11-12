@@ -127,6 +127,11 @@ void ORSceneEvaluator::set_input_bag_path(const std::string & bag_path)
   RCLCPP_INFO(logger_, "Will extract OR events from input bag: %s", bag_path.c_str());
 }
 
+void ORSceneEvaluator::set_map_path(const std::string & map_path)
+{
+  map_path_ = map_path;
+}
+
 std::pair<rclcpp::Time, rclcpp::Time> ORSceneEvaluator::run_evaluation_from_bag(
   const std::string & bag_path, rosbag2_cpp::Writer * evaluation_bag_writer,
   const TopicNames & topic_names)
@@ -989,6 +994,11 @@ void ORSceneEvaluator::generate_debug_visualization(
   viz_data["event_info"]["vehicle_y_at_or"] = event.vehicle_y_at_or;
 
   viz_data["event_info"]["bag_name"] = "rosbag";
+
+  // Add map path for lanelet visualization (optional)
+  if (!map_path_.empty()) {
+    viz_data["map_path"] = map_path_;
+  }
 
   // Add objects if available
   if (trajectory_data->objects && !trajectory_data->objects->objects.empty()) {

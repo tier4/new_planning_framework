@@ -313,6 +313,12 @@ void OfflineEvaluatorNode::run_evaluation()
         evaluator.set_input_bag_path(input_bag_path);
       }
 
+      // Set map path for visualization
+      std::string map_path = get_or_declare_parameter<std::string>(*this, "or_scene_evaluation.map_path");
+      if (!map_path.empty()) {
+        evaluator.set_map_path(map_path);
+      }
+
       auto times =
         evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
       start_time = times.first;

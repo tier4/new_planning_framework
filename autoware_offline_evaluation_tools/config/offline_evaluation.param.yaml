@@ -67,6 +67,7 @@
       # Debug visualization
       enable_debug_visualization: false  # Generate debug images showing predicted vs GT trajectories
       debug_output_dir: "~/or_scene_debug_images"  # Directory for debug visualization images
+      map_path: ""  # Optional: path to lanelet2_map.osm for lane visualization
 
     # Evaluation output configuration
     evaluation_output_bag_path: "~/trajectory_evaluation_results.bag"
