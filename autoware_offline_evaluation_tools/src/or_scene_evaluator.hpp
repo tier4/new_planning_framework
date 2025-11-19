@@ -107,12 +107,19 @@ public:
    */
   void set_map_path(const std::string & map_path);
 
+  /**
+   * @brief Set metric topic prefix for multi-run collection
+   * @param prefix Prefix for metric topics (e.g., "model_v1" -> "/model_v1/or_scene/ade")
+   */
+  void set_metric_topic_prefix(const std::string & prefix);
+
 private:
   double time_window_sec_;
   ORSuccessCriteria success_criteria_;
   bool enable_debug_visualization_;
   std::string debug_output_dir_;
   std::string map_path_;                    // Optional: path to lanelet2_map.osm for visualization
+  std::string metric_topic_prefix_;        // Optional: prefix for metric topics (multi-run support)
 
   std::string or_events_json_input_path_;   // Optional: pre-extracted OR events
   std::string or_events_json_output_path_;  // Where to save extracted OR events
