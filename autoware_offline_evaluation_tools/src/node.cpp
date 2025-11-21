@@ -44,6 +44,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -319,6 +320,28 @@ void OfflineEvaluatorNode::run_evaluation()
         evaluator.set_map_path(map_path);
       }
 
+      // Extract metric topic prefix from trajectory topic for multi-run support
+      // Topics like /model_v1/planning/.../trajectory → prefix "model_v1"
+      // Standard topics like /planning/.../trajectory → no prefix
+      std::string trajectory_topic = topic_names.trajectory_topic;
+      if (!trajectory_topic.empty() && trajectory_topic[0] == '/') {
+        // Find second slash (end of first component)
+        size_t second_slash = trajectory_topic.find('/', 1);
+        if (second_slash != std::string::npos) {
+          std::string first_component = trajectory_topic.substr(1, second_slash - 1);
+
+          // Check if first component is NOT a standard Autoware namespace
+          const std::set<std::string> standard_namespaces =
+            {"planning", "control", "localization", "perception", "sensing", "map", "system", "vehicle"};
+
+          if (standard_namespaces.find(first_component) == standard_namespaces.end()) {
+            // This is a custom prefix for multi-run collection
+            evaluator.set_metric_topic_prefix(first_component);
+            RCLCPP_INFO(get_logger(), "Using metric topic prefix: %s", first_component.c_str());
+          }
+        }
+      }
+
       auto times =
         evaluator.run_evaluation_from_bag(bag_path_, evaluation_bag_writer_.get(), topic_names);
       start_time = times.first;
@@ -331,20 +354,20 @@ void OfflineEvaluatorNode::run_evaluation()
   if (
     !tf_static_msg.transforms.empty() && evaluation_bag_writer_ && start_time.seconds() > 0 &&
     end_time.seconds() > 0) {
-    // Use normalized timestamp (start from 0) for consistent bag duration
-    rclcpp::Time tf_time(0, 0, RCL_ROS_TIME);
+    // Use start_time so timestamps align with rest of bag (not 0 which breaks Lichtblick)
+    rclcpp::Time tf_time = start_time;
 
-    // Also normalize timestamps in the transforms
-    tf2_msgs::msg::TFMessage normalized_tf_static = tf_static_msg;
-    for (auto & transform : normalized_tf_static.transforms) {
+    // Set timestamps in the transforms to start_time
+    tf2_msgs::msg::TFMessage timestamped_tf_static = tf_static_msg;
+    for (auto & transform : timestamped_tf_static.transforms) {
       transform.header.stamp = tf_time;
     }
 
-    evaluation_bag_writer_->write(normalized_tf_static, "/tf_static", tf_time);
+    evaluation_bag_writer_->write(timestamped_tf_static, "/tf_static", tf_time);
   }
 
-  // Write map and route markers with normalized timestamps
-  write_map_and_route_markers_to_bag(rclcpp::Time(0, 0, RCL_ROS_TIME));
+  // Write map and route markers with start_time (not 0)
+  write_map_and_route_markers_to_bag(start_time);
 
   RCLCPP_INFO(get_logger(), "Evaluation complete");
   rclcpp::shutdown();

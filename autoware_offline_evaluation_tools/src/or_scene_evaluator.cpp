@@ -132,6 +132,11 @@ void ORSceneEvaluator::set_map_path(const std::string & map_path)
   map_path_ = map_path;
 }
 
+void ORSceneEvaluator::set_metric_topic_prefix(const std::string & prefix)
+{
+  metric_topic_prefix_ = prefix;
+}
+
 std::pair<rclcpp::Time, rclcpp::Time> ORSceneEvaluator::run_evaluation_from_bag(
   const std::string & bag_path, rosbag2_cpp::Writer * evaluation_bag_writer,
   const TopicNames & topic_names)
@@ -840,15 +845,16 @@ nlohmann::json ORSceneEvaluator::get_detailed_results_as_json() const
 
 std::vector<std::pair<std::string, std::string>> ORSceneEvaluator::get_result_topics() const
 {
+  std::string prefix = metric_topic_prefix_.empty() ? "" : "/" + metric_topic_prefix_;
   return {
-    {"/or_scene/event_markers", "visualization_msgs/msg/MarkerArray"},
-    {"/or_scene/ade", "std_msgs/msg/Float64"},
-    {"/or_scene/fde", "std_msgs/msg/Float64"},
-    {"/or_scene/lateral_deviation", "std_msgs/msg/Float64"},
-    {"/or_scene/ttc", "std_msgs/msg/Float64"},
-    {"/or_scene/prediction_success", "std_msgs/msg/Bool"},
-    {"/or_scene/predicted_trajectory", "autoware_planning_msgs/msg/Trajectory"},
-    {"/or_scene/ground_truth_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {prefix + "/or_scene/event_markers", "visualization_msgs/msg/MarkerArray"},
+    {prefix + "/or_scene/ade", "std_msgs/msg/Float64"},
+    {prefix + "/or_scene/fde", "std_msgs/msg/Float64"},
+    {prefix + "/or_scene/lateral_deviation", "std_msgs/msg/Float64"},
+    {prefix + "/or_scene/ttc", "std_msgs/msg/Float64"},
+    {prefix + "/or_scene/prediction_success", "std_msgs/msg/Bool"},
+    {prefix + "/or_scene/predicted_trajectory", "autoware_planning_msgs/msg/Trajectory"},
+    {prefix + "/or_scene/ground_truth_trajectory", "autoware_planning_msgs/msg/Trajectory"},
     {"/tf", "tf2_msgs/msg/TFMessage"},
     {"/tf_static", "tf2_msgs/msg/TFMessage"}};
 }
@@ -856,10 +862,12 @@ std::vector<std::pair<std::string, std::string>> ORSceneEvaluator::get_result_to
 void ORSceneEvaluator::save_event_metrics_to_bag(
   const OREventMetrics & event_metrics, const OREvent & event, rosbag2_cpp::Writer & bag_writer)
 {
+  std::string prefix = metric_topic_prefix_.empty() ? "" : "/" + metric_topic_prefix_;
+
   // Create markers for OR event
   auto markers = create_or_event_markers(event, event_metrics);
   const rclcpp::Time marker_time = event.timestamp;
-  bag_writer.write(markers, "/or_scene/event_markers", marker_time);
+  bag_writer.write(markers, prefix + "/or_scene/event_markers", marker_time);
 
   // Write per-trajectory metrics
   for (const auto & traj_metrics : event_metrics.trajectory_metrics) {
@@ -868,28 +876,28 @@ void ORSceneEvaluator::save_event_metrics_to_bag(
     // ADE
     std_msgs::msg::Float64 ade_msg;
     ade_msg.data = traj_metrics.ade;
-    bag_writer.write(ade_msg, "/or_scene/ade", traj_time);
+    bag_writer.write(ade_msg, prefix + "/or_scene/ade", traj_time);
 
     // FDE
     std_msgs::msg::Float64 fde_msg;
     fde_msg.data = traj_metrics.fde;
-    bag_writer.write(fde_msg, "/or_scene/fde", traj_time);
+    bag_writer.write(fde_msg, prefix + "/or_scene/fde", traj_time);
 
     // Lateral deviation
     std_msgs::msg::Float64 lateral_msg;
     lateral_msg.data = traj_metrics.mean_lateral_deviation;
-    bag_writer.write(lateral_msg, "/or_scene/lateral_deviation", traj_time);
+    bag_writer.write(lateral_msg, prefix + "/or_scene/lateral_deviation", traj_time);
 
     // TTC
     std_msgs::msg::Float64 ttc_msg;
     ttc_msg.data = traj_metrics.min_ttc;
-    bag_writer.write(ttc_msg, "/or_scene/ttc", traj_time);
+    bag_writer.write(ttc_msg, prefix + "/or_scene/ttc", traj_time);
 
     // Success flag (if criteria enabled)
     if (success_criteria_.enabled) {
       std_msgs::msg::Bool success_msg;
       success_msg.data = traj_metrics.meets_success_criteria;
-      bag_writer.write(success_msg, "/or_scene/prediction_success", traj_time);
+      bag_writer.write(success_msg, prefix + "/or_scene/prediction_success", traj_time);
     }
   }
 }
