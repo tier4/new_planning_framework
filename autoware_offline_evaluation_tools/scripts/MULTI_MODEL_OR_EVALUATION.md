@@ -11,6 +11,32 @@ The workflow evaluates multiple diffusion planner model versions (v2.0, v2.1, et
 4. Merging model outputs into combined bags with prefixed topics
 5. Evaluating all models simultaneously and injecting metrics back into bags
 
+## Prerequisites
+
+### Required Software
+- ROS 2 Humble
+- Autoware built and sourced
+- Python 3 with rosbag2_py, rclpy
+
+### Required Repository Branches
+
+**CRITICAL: driving_log_replayer_v2 must be on the correct branch:**
+```bash
+cd ~/pilot-auto/src/simulator/driving_log_replayer_v2
+git checkout feat/open_loop_evalution-or-degradation-check
+```
+
+This branch includes:
+- Turn indicators topic remapping fix (required for diffusion planner to generate trajectories)
+- `/perception/object_recognition/tracking/objects` in publish profile
+
+Without this branch, LIVE trajectories will NOT be generated (Count: 0 in result bags).
+
+### Required Model Files
+- Model weight directories (e.g., `~/autoware_data/diffusion_planner/v2.0`)
+- Each must contain: `diffusion_planner.onnx` and `diffusion_planner.param.json`
+- Config file: `autoware_diffusion_planner/config/diffusion_planner.param.yaml`
+
 ## Directory Structure
 
 ```
