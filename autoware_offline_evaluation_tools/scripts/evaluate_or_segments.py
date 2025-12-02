@@ -30,9 +30,8 @@ def find_or_segment_bags(output_dir: str):
 
 def evaluate_all_segments(
     output_dir: str,
-    input_bag: str,
     map_path: str,
-    time_window: float = 0.5
+    time_window: float = 5.0
 ):
     """Evaluate all OR segment bags found in output directory."""
 
@@ -90,7 +89,6 @@ def main():
         description='Auto-discover and evaluate all OR segment bags'
     )
     parser.add_argument('--output-dir', required=True, help='Directory containing or_event_* bags')
-    parser.add_argument('--input-bag', required=True, help='Original input bag for OR extraction')
     parser.add_argument('--map-path', required=True, help='Path to lanelet2 map file')
     parser.add_argument('--time-window', type=float, default=5.0, help='Evaluation window on each side of OR in seconds (default: 5.0)')
 
@@ -100,15 +98,11 @@ def main():
         print(f"ERROR: Output directory not found: {args.output_dir}")
         sys.exit(1)
 
-    if not Path(args.input_bag).exists():
-        print(f"ERROR: Input bag not found: {args.input_bag}")
-        sys.exit(1)
-
     if not Path(args.map_path).exists():
         print(f"ERROR: Map not found: {args.map_path}")
         sys.exit(1)
 
-    evaluate_all_segments(args.output_dir, args.input_bag, args.map_path, args.time_window)
+    evaluate_all_segments(args.output_dir, args.map_path, args.time_window)
 
 if __name__ == "__main__":
     main()
