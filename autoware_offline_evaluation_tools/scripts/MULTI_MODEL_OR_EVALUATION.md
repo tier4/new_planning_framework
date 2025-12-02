@@ -62,10 +62,17 @@ This automatically:
 python3 autoware_offline_evaluation_tools/scripts/evaluate_or_segments.py \
   --output-dir /path/to/output \
   --input-bag /path/to/dataset/input_bag \
-  --map-path /path/to/dataset/map/lanelet2_map.osm
+  --map-path /path/to/dataset/map/lanelet2_map.osm \
+  --time-window 5.0  # Optional: evaluation window on each side of OR event (default: 5.0s)
 ```
 
 This generates `or_event_*_WITH_METRICS` bags with embedded evaluation results.
+
+**Time Window Parameter:**
+- `--time-window`: Evaluation window duration on each side of the Override Regression event (in seconds)
+- Default: 5.0 seconds (evaluates from OR-5s to OR+5s)
+- Example: `--time-window 10.0` creates a ±10 second window around each OR event
+- Larger windows capture more trajectory predictions but may include less relevant data
 
 ## Directory Structure
 

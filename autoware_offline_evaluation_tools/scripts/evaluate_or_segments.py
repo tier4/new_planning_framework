@@ -92,7 +92,7 @@ def main():
     parser.add_argument('--output-dir', required=True, help='Directory containing or_event_* bags')
     parser.add_argument('--input-bag', required=True, help='Original input bag for OR extraction')
     parser.add_argument('--map-path', required=True, help='Path to lanelet2 map file')
-    parser.add_argument('--time-window', type=float, default=0.5, help='Evaluation window on each side of OR in seconds (default: 0.5)')
+    parser.add_argument('--time-window', type=float, default=5.0, help='Evaluation window on each side of OR in seconds (default: 5.0)')
 
     args = parser.parse_args()
 

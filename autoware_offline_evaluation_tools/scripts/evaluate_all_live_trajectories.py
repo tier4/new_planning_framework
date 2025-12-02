@@ -231,7 +231,7 @@ def main():
     parser.add_argument('--map-path', required=True, help='Path to lanelet2 map file')
     parser.add_argument('--output-bag', required=True, help='Output bag with metrics')
     parser.add_argument('--json-output', help='Combined JSON output file')
-    parser.add_argument('--time-window', type=float, default=0.5, help='Evaluation window on each side of OR (default: 0.5s)')
+    parser.add_argument('--time-window', type=float, default=5.0, help='Evaluation window on each side of OR (default: 5.0s)')
 
     args = parser.parse_args()
 
