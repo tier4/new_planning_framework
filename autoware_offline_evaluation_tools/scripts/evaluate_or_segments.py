@@ -7,14 +7,14 @@ import sys
 import subprocess
 from pathlib import Path
 
-def find_or_segment_bags(output_dir: str):
-    """Find all or_event_* bags in output directory."""
+def find_or_segment_bags(input_dir: str):
+    """Find all or_event_* bags in input directory."""
 
     bags = []
-    output_path = Path(output_dir)
+    input_path = Path(input_dir)
 
     # Look for or_event_N directories (N = 0, 1, 2, ...)
-    for item in sorted(output_path.iterdir()):
+    for item in sorted(input_path.iterdir()):
         if item.is_dir() and item.name.startswith('or_event_') and item.name[9:].isdigit():
             # Check if it has MCAP files
             mcap_files = list(item.glob('*.mcap'))
@@ -29,15 +29,15 @@ def find_or_segment_bags(output_dir: str):
     return sorted(bags, key=lambda x: x['segment_id'])
 
 def evaluate_all_segments(
-    output_dir: str,
+    input_dir: str,
     map_path: str,
     time_window: float = 5.0
 ):
-    """Evaluate all OR segment bags found in output directory."""
+    """Evaluate all OR segment bags found in input directory."""
 
-    print(f"Searching for OR segment bags in: {output_dir}")
+    print(f"Searching for OR segment bags in: {input_dir}")
 
-    segment_bags = find_or_segment_bags(output_dir)
+    segment_bags = find_or_segment_bags(input_dir)
 
     if len(segment_bags) == 0:
         print("ERROR: No OR segment bags found!")
@@ -55,8 +55,8 @@ def evaluate_all_segments(
         segment_id = bag['segment_id']
         bag_path = bag['path']
 
-        output_bag = f"{output_dir}/or_event_{segment_id}_WITH_METRICS"
-        json_output = f"{output_dir}/or_event_{segment_id}_results.json"
+        output_bag = f"{input_dir}/or_event_{segment_id}_WITH_METRICS"
+        json_output = f"{input_dir}/or_event_{segment_id}_results.json"
 
         print(f"=== Evaluating Segment {segment_id} ===")
 
@@ -88,21 +88,21 @@ def main():
     parser = argparse.ArgumentParser(
         description='Auto-discover and evaluate all OR segment bags'
     )
-    parser.add_argument('--output-dir', required=True, help='Directory containing or_event_* bags')
+    parser.add_argument('--input-dir', required=True, help='Directory containing or_event_* bags')
     parser.add_argument('--map-path', required=True, help='Path to lanelet2 map file')
     parser.add_argument('--time-window', type=float, default=5.0, help='Evaluation window on each side of OR in seconds (default: 5.0)')
 
     args = parser.parse_args()
 
-    if not Path(args.output_dir).exists():
-        print(f"ERROR: Output directory not found: {args.output_dir}")
+    if not Path(args.input_dir).exists():
+        print(f"ERROR: Input directory not found: {args.input_dir}")
         sys.exit(1)
 
     if not Path(args.map_path).exists():
         print(f"ERROR: Map not found: {args.map_path}")
         sys.exit(1)
 
-    evaluate_all_segments(args.output_dir, args.map_path, args.time_window)
+    evaluate_all_segments(args.input_dir, args.map_path, args.time_window)
 
 if __name__ == "__main__":
     main()

@@ -60,15 +60,15 @@ This automatically:
 
 ```bash
 python3 autoware_offline_evaluation_tools/scripts/evaluate_or_segments.py \
-  --output-dir /path/to/output \
+  --input-dir /path/to/output \
   --map-path /path/to/dataset/map/lanelet2_map.osm \
   --time-window 5.0  # Optional: evaluation window on each side of OR event (default: 5.0s)
 ```
 
-This auto-discovers all `or_event_*` bags in the output directory and generates `or_event_*_WITH_METRICS` bags with embedded evaluation results.
+This auto-discovers all `or_event_*` bags in the input directory and generates `or_event_*_WITH_METRICS` bags with embedded evaluation results in the same directory.
 
 **Parameters:**
-- `--output-dir`: Directory created by multi_model_or_segments.sh (contains or_event_0, or_event_1, etc.)
+- `--input-dir`: Directory created by multi_model_or_segments.sh (contains or_event_0, or_event_1, etc.)
 - `--map-path`: Path to lanelet2 map file (used for route handling)
 - `--time-window`: Evaluation window duration on each side of the Override Regression event (in seconds)
   - Default: 5.0 seconds (evaluates from OR-5s to OR+5s)
@@ -168,7 +168,7 @@ Evaluates all segments with metrics injection.
 **Usage:**
 ```bash
 python3 ~/pilot-auto/scripts/evaluate_or_segments.py \
-  --output-dir /path/to/multi_model_output \
+  --input-dir /path/to/multi_model_output \
   --map-path /path/to/lanelet2_map.osm \
   --time-window 5.0
 ```
@@ -231,7 +231,7 @@ bash ~/pilot-auto/scripts/multi_model_or_segments.sh
 ```bash
 # Evaluate all segments and inject metrics
 python3 ~/pilot-auto/scripts/evaluate_or_segments.py \
-  --output-dir $OUTPUT \
+  --input-dir $OUTPUT \
   --map-path $MAP \
   --time-window 5.0
 ```
