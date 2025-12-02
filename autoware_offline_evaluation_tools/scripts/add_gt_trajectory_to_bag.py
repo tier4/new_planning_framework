@@ -130,18 +130,10 @@ def add_gt_trajectories(input_bag, output_bag, horizon_sec=8.0, resolution_sec=0
     print(f"  Resolution: {resolution_sec}s")
     print("")
 
-    # Auto-detect storage type
-    input_path = Path(input_bag)
-    if input_path.is_file() and input_path.suffix == '.mcap':
-        storage_id = 'mcap'
-    elif input_path.is_dir():
-        storage_id = 'sqlite3'
-    else:
-        raise ValueError(f"Invalid input bag path: {input_bag}")
-
     # Step 1: Load all kinematic states
+    # Use empty storage_id to let rosbag2 auto-detect format
     print("Step 1: Loading all kinematic states...")
-    storage_options_read = StorageOptions(uri=str(input_bag), storage_id=storage_id)
+    storage_options_read = StorageOptions(uri=str(input_bag), storage_id='')
     converter_options = ConverterOptions(
         input_serialization_format='cdr',
         output_serialization_format='cdr'
