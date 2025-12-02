@@ -37,6 +37,36 @@ Without this branch, LIVE trajectories will NOT be generated (Count: 0 in result
 - Each must contain: `diffusion_planner.onnx` and `diffusion_planner.param.json`
 - Config file: `autoware_diffusion_planner/config/diffusion_planner.param.yaml`
 
+## Quick Start
+
+**Run the complete workflow in one command:**
+
+```bash
+bash autoware_offline_evaluation_tools/scripts/multi_model_or_segments.sh \
+  --models /home/danielsanchez/autoware_data/diffusion_planner/v2.0 /home/danielsanchez/autoware_data/diffusion_planner/v2.1 \
+  --config /home/danielsanchez/pilot-auto/src/autoware/universe/planning/autoware_diffusion_planner/config/diffusion_planner.param.yaml \
+  --dataset /path/to/t4_dataset \
+  --output /path/to/output
+```
+
+This automatically:
+1. Detects OR events
+2. Cuts segments
+3. Adds ground truth
+4. Runs DLR for v2.0 and v2.1 on all segments
+5. Merges model outputs with prefixed topics
+
+**Then run metrics evaluation:**
+
+```bash
+python3 autoware_offline_evaluation_tools/scripts/evaluate_or_segments.py \
+  --output-dir /path/to/output \
+  --input-bag /path/to/dataset/input_bag \
+  --map-path /path/to/dataset/map/lanelet2_map.osm
+```
+
+This generates `or_event_*_WITH_METRICS` bags with embedded evaluation results.
+
 ## Directory Structure
 
 ```
