@@ -178,7 +178,6 @@ info "  ✓ Config file found"
 [[ -f "$DATASET/scenario.yaml" ]] || die "Missing: $DATASET/scenario.yaml"
 [[ -d "$DATASET/map" ]] || die "Missing: $DATASET/map/"
 [[ -f "$DATASET/map/lanelet2_map.osm" ]] || die "Missing: $DATASET/map/lanelet2_map.osm"
-[[ -f "$DATASET/map/pointcloud_map.pcd" ]] || die "Missing: $DATASET/map/pointcloud_map.pcd"
 
 # Find input bag
 if [[ -d "$DATASET/input_bag" ]]; then
