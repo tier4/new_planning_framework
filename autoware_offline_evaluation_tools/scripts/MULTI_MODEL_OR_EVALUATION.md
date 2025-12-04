@@ -15,8 +15,12 @@ The workflow evaluates multiple diffusion planner model versions (v2.0, v2.1, et
 
 ### Required Software
 - ROS 2 Humble
-- Autoware built and sourced
+- Autoware built and sourced (`~/pilot-auto/install/setup.bash`)
 - Python 3 with rosbag2_py, rclpy
+- **ros2bag_extensions** (for multi-bag datasets)
+  - Required when T4 dataset contains multiple rosbag files
+  - Install at `~/ros2_ws/` and source `~/ros2_ws/install/setup.bash`
+  - Provides `ros2 bag merge` command for automatic rosbag merging
 
 ### Required Repository Branches
 
@@ -74,6 +78,35 @@ This auto-discovers all `or_event_*` bags in the input directory and generates `
   - Default: 5.0 seconds (evaluates from OR-5s to OR+5s)
   - Example: `--time-window 10.0` creates a ±10 second window around each OR event
   - Larger windows capture more trajectory predictions but may include less relevant data
+
+## Multi-Rosbag Handling
+
+The script automatically handles datasets with multiple rosbag files:
+
+**Three Dataset Formats Supported:**
+1. **Single bag file**: `input_bag/` contains .mcap or .db3 files directly
+2. **Single bag directory**: `input_bag/` contains one subdirectory with bag files
+3. **Multiple bag directories**: `input_bag/` contains multiple subdirectories (each with bag files)
+
+**Automatic Merging:**
+- When multiple bags detected, script automatically merges them
+- Uses `ros2 bag merge` from ros2bag_extensions (requires `~/ros2_ws/install/setup.bash`)
+- Merged bag saved to `$OUTPUT/merged_input_bag/`
+- Merged bag used for all subsequent processing
+
+**Example Multi-Bag Dataset:**
+```
+dataset/
+├── input_bag/
+│   ├── segment_1/  (bag files)
+│   ├── segment_2/  (bag files)
+│   └── segment_3/  (bag files)
+├── map/
+│   └── lanelet2_map.osm
+└── scenario.yaml
+```
+
+Script will merge segment_1, segment_2, segment_3 into one bag before OR detection.
 
 ## Directory Structure
 
