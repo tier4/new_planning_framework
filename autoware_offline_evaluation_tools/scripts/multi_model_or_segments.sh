@@ -181,13 +181,47 @@ info "  ✓ Config file found"
 
 # Find input bag
 if [[ -d "$DATASET/input_bag" ]]; then
-    INPUT_BAG="$DATASET/input_bag"
+    # Count rosbag directories (each bag is a subdirectory with .db3 or .mcap files)
+    bag_count=$(find "$DATASET/input_bag" -mindepth 1 -maxdepth 1 -type d | wc -l)
+
+    if [[ $bag_count -eq 0 ]]; then
+        # No subdirectories, input_bag itself is the bag
+        INPUT_BAG="$DATASET/input_bag"
+        info "  ✓ Single rosbag found"
+    elif [[ $bag_count -eq 1 ]]; then
+        # One subdirectory, use it
+        INPUT_BAG=$(find "$DATASET/input_bag" -mindepth 1 -maxdepth 1 -type d | head -1)
+        info "  ✓ Single rosbag found"
+    else
+        # Multiple bags, need to merge
+        info "  Found $bag_count rosbags, merging..."
+
+        # Create output directory first (needed for merged bag)
+        mkdir -p "$OUTPUT"
+        MERGED_BAG="$OUTPUT/merged_input_bag"
+
+        # Source ros2bag_extensions
+        source ~/ros2_ws/install/setup.bash
+
+        # Get all bag directories
+        bag_dirs=$(find "$DATASET/input_bag" -mindepth 1 -maxdepth 1 -type d | sort)
+
+        # Merge bags
+        rm -rf "$MERGED_BAG"
+        ros2 bag merge -o "$MERGED_BAG" $bag_dirs || die "Failed to merge rosbags"
+
+        INPUT_BAG="$MERGED_BAG"
+        info "  ✓ Rosbags merged into: $MERGED_BAG"
+
+        # Re-source pilot-auto (was overridden by ros2_ws)
+        source ~/pilot-auto/install/setup.bash
+    fi
 else
     die "Input bag not found in $DATASET/input_bag"
 fi
 info "  ✓ Dataset validated"
 
-# Create output directory
+# Create output directory (if not already created during merge)
 mkdir -p "$OUTPUT"
 info "  ✓ Output directory: $OUTPUT"
 
