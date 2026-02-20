@@ -23,14 +23,15 @@ except ImportError:
     sys.exit(1)
 
 
-def detect_or_events_and_extract_route(bag_path: str, before_sec: float, after_sec: float):
+def detect_or_events_and_extract_route(bag_path: str, before_sec: float, after_sec: float, min_after_sec: float = 8.0):
     """
     Detect OR events and extract route message.
 
     Args:
         bag_path: Input bag directory or file
         before_sec: Seconds before OR to include in segment
-        after_sec: Seconds after OR to include in segment
+        after_sec: Seconds after OR to include in segment (preferred)
+        min_after_sec: Minimum seconds after OR required (default: 8.0)
 
     Returns:
         dict with 'or_events' list and 'route_info' dict
@@ -70,32 +71,44 @@ def detect_or_events_and_extract_route(bag_path: str, before_sec: float, after_s
                 msg = deserialize_message(data, ControlModeReport)
                 # AUTONOMOUS (1) → MANUAL (4) = Override
                 if prev_mode == 1 and msg.mode == 4:
-                    or_count += 1
+                    # Check if there's enough data after OR
+                    time_after_or_sec = (bag_end_ns - timestamp) / 1e9
 
-                    # Calculate segment boundaries
-                    seg_start_ns = max(timestamp - int(before_sec * 1e9), bag_start_ns)
-                    seg_end_ns = min(timestamp + int(after_sec * 1e9), bag_end_ns)
+                    if time_after_or_sec < min_after_sec:
+                        print(
+                            f"⚠ Skipping OR at t={timestamp / 1e9:.3f}s - only {time_after_or_sec:.2f}s "
+                            f"of data remaining (need at least {min_after_sec:.1f}s)"
+                        )
+                    else:
+                        or_count += 1
 
-                    or_events.append(
-                        {
-                            "event_id": or_count - 1,
-                            "or_timestamp_ns": timestamp,
-                            "or_timestamp_sec": timestamp / 1e9,
-                            "segment_start_ns": seg_start_ns,
-                            "segment_end_ns": seg_end_ns,
-                            "segment_start_sec": seg_start_ns / 1e9,
-                            "segment_end_sec": seg_end_ns / 1e9,
-                            "segment_duration_sec": (seg_end_ns - seg_start_ns) / 1e9,
-                        }
-                    )
+                        # Calculate segment boundaries
+                        seg_start_ns = max(timestamp - int(before_sec * 1e9), bag_start_ns)
+                        seg_end_ns = min(timestamp + int(after_sec * 1e9), bag_end_ns)
+                        actual_after_sec = (seg_end_ns - timestamp) / 1e9
 
-                    print(
-                        f"OR Event #{or_count} detected at t={timestamp / 1e9:.3f}s"
-                    )
-                    print(
-                        f"  Segment: [{seg_start_ns / 1e9:.3f}s, {seg_end_ns / 1e9:.3f}s] "
-                        f"(duration: {(seg_end_ns - seg_start_ns) / 1e9:.2f}s)"
-                    )
+                        or_events.append(
+                            {
+                                "event_id": or_count - 1,
+                                "or_timestamp_ns": timestamp,
+                                "or_timestamp_sec": timestamp / 1e9,
+                                "segment_start_ns": seg_start_ns,
+                                "segment_end_ns": seg_end_ns,
+                                "segment_start_sec": seg_start_ns / 1e9,
+                                "segment_end_sec": seg_end_ns / 1e9,
+                                "segment_duration_sec": (seg_end_ns - seg_start_ns) / 1e9,
+                                "actual_after_sec": actual_after_sec,
+                            }
+                        )
+
+                        print(
+                            f"OR Event #{or_count} detected at t={timestamp / 1e9:.3f}s"
+                        )
+                        print(
+                            f"  Segment: [{seg_start_ns / 1e9:.3f}s, {seg_end_ns / 1e9:.3f}s] "
+                            f"(duration: {(seg_end_ns - seg_start_ns) / 1e9:.2f}s, "
+                            f"{actual_after_sec:.2f}s after OR)"
+                        )
 
                 prev_mode = msg.mode
             except Exception as e:
@@ -159,6 +172,12 @@ def main():
         default=10.0,
         help="Seconds after OR to include (default: 10.0)",
     )
+    parser.add_argument(
+        "--min-after",
+        type=float,
+        default=8.0,
+        help="Minimum seconds after OR required to accept event (default: 8.0)",
+    )
 
     args = parser.parse_args()
 
@@ -168,7 +187,7 @@ def main():
         sys.exit(1)
 
     # Detect OR events and extract route
-    result = detect_or_events_and_extract_route(args.input, args.before, args.after)
+    result = detect_or_events_and_extract_route(args.input, args.before, args.after, args.min_after)
 
     # Save OR events JSON (without binary route data)
     output_json = {
